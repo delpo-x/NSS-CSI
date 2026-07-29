@@ -173,7 +173,7 @@
     </div>
     <div class="card">
       <div class="label">Ruolo</div>
-      <select id="inpRole">
+      <select id="inpRole" onchange="renderAllocator()">
         <option value="Portiere">Portiere</option>
         <option value="Difensore">Difensore</option>
         <option value="Regista">Regista (play basso)</option>
@@ -255,12 +255,6 @@
       </div>
     </div>
 
-    <div class="card">
-      <div class="label">Lavoro</div>
-      <div class="subtle" id="lavoroInfo" style="margin-bottom:8px;">—</div>
-      <div class="btn-stack" id="lavoroOptions"></div>
-    </div>
-
     <div id="statusBanner"></div>
 
     <div class="card">
@@ -278,6 +272,12 @@
 
     <div class="btn-stack" id="coppaHubBtn" style="display:none; margin-top:10px;">
       <button class="btn ghost" onclick="showScreen('coppa')">Coppa Leonessa</button>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="label">Lavoro</div>
+      <div class="subtle" id="lavoroInfo" style="margin-bottom:8px;">—</div>
+      <div class="btn-stack" id="lavoroOptions"></div>
     </div>
 
     <div class="btn-stack" style="margin-top:16px;">
@@ -368,6 +368,14 @@
     <div class="card"><div class="label">Statistiche di carriera</div><div class="attr-grid" id="carStats"></div></div>
     <div class="card"><div class="label">Finanze &amp; relazioni</div><div class="attr-grid" id="carFinRel"></div></div>
     <div class="card"><div class="label">Traguardi</div><div id="carAchievements"></div></div>
+    <div class="card">
+      <div class="label">Registro partite</div>
+      <div style="max-height:260px; overflow-y:auto;">
+        <table style="width:100%;"><thead><tr>
+          <th>S/G</th><th>Avversario</th><th class="center">Risultato</th><th class="center">Gol</th><th class="center">Assist</th><th class="center">Voto</th>
+        </tr></thead><tbody id="carRegistro"></tbody></table>
+      </div>
+    </div>
     <div class="card"><div class="label">Diario di carriera</div><div id="carDiario" style="max-height:220px; overflow-y:auto;"></div></div>
     <div class="btn-stack"><button class="btn ghost" onclick="showScreen('hub')">Torna alla carriera</button></div>
   </div>
@@ -390,8 +398,8 @@
 
     <div class="card">
       <div class="attr-grid">
-        <div class="attr"><div class="attr-name">Gol stagione</div><div class="attr-val" id="seGoals">0</div></div>
-        <div class="attr"><div class="attr-name">Assist stagione</div><div class="attr-val" id="seAssists">0</div></div>
+        <div class="attr"><div class="attr-name" id="seStat1Label">Gol stagione</div><div class="attr-val" id="seGoals">0</div></div>
+        <div class="attr"><div class="attr-name" id="seStat2Label">Assist stagione</div><div class="attr-val" id="seAssists">0</div></div>
         <div class="attr"><div class="attr-name">Media voto</div><div class="attr-val" id="seRating">6.0</div></div>
         <div class="attr"><div class="attr-name">Lvl raggiunto</div><div class="attr-val" id="seLevel">1</div></div>
       </div>
@@ -434,7 +442,6 @@ const ATTR_KEYS = ['tecnica','fisico','velocita','tiro','passaggio','difesa'];
 const ATTR_LABELS = {tecnica:'Tecnica', fisico:'Fisico', velocita:'Velocità', tiro:'Tiro', passaggio:'Passaggio', difesa:'Difesa'};
 
 const ROLE_BASE = {
-  Portiere:      {tecnica:45, fisico:55, velocita:40, tiro:20, passaggio:45, difesa:70},
   Difensore:     {tecnica:45, fisico:60, velocita:45, tiro:30, passaggio:50, difesa:65},
   Regista:       {tecnica:55, fisico:45, velocita:45, tiro:40, passaggio:65, difesa:50},
   Mezzala:       {tecnica:55, fisico:50, velocita:55, tiro:50, passaggio:55, difesa:45},
@@ -447,28 +454,49 @@ const ROLE_BASE = {
    VALUTAZIONE/MERCATO: un difensore forte in difesa vale piu' di un
    difensore forte solo in tecnica, anche a parita' di media grezza. */
 const ROLE_WEIGHTS = {
-  Portiere:   {tecnica:0.15, fisico:0.25, velocita:0.05, tiro:0.05, passaggio:0.15, difesa:0.35},
   Difensore:  {tecnica:0.15, fisico:0.25, velocita:0.07, tiro:0.03, passaggio:0.15, difesa:0.35},
   Regista:    {tecnica:0.25, fisico:0.10, velocita:0.10, tiro:0.10, passaggio:0.30, difesa:0.15},
   Mezzala:    {tecnica:0.20, fisico:0.20, velocita:0.20, tiro:0.15, passaggio:0.15, difesa:0.10},
   Attaccante: {tecnica:0.20, fisico:0.15, velocita:0.25, tiro:0.30, passaggio:0.07, difesa:0.03},
 };
+
+/* --- Skill dedicate al Portiere: sostituiscono i 6 attributi generici (tiro/velocità/dribbling
+   non raccontano nulla di chi gioca in porta). Stesso trattamento di ATTR_KEYS/ROLE_BASE/
+   ROLE_WEIGHTS ma in un set separato, selezionato via attrKeysFor(role) ovunque serva. */
+const GK_ATTR_KEYS = ['presa','anticipo','riflessi','unoControUno','distribuzione','comunicazione','posizionamento'];
+const GK_ATTR_LABELS = {presa:'Presa', anticipo:'Anticipo', riflessi:'Riflessi', unoControUno:'Uno contro uno', distribuzione:'Distribuzione', comunicazione:'Comunicazione', posizionamento:'Posizionamento'};
+const GK_ROLE_BASE = {presa:60, anticipo:50, riflessi:60, unoControUno:50, distribuzione:45, comunicazione:50, posizionamento:60};
+const GK_ROLE_WEIGHTS = {presa:0.18, anticipo:0.12, riflessi:0.18, unoControUno:0.14, distribuzione:0.10, comunicazione:0.08, posizionamento:0.20};
+function attrKeysFor(role){ return role==='Portiere' ? GK_ATTR_KEYS : ATTR_KEYS; }
+function attrLabelsFor(role){ return role==='Portiere' ? GK_ATTR_LABELS : ATTR_LABELS; }
+function roleBaseFor(role){ return role==='Portiere' ? GK_ROLE_BASE : ROLE_BASE[role]; }
+function roleWeightsFor(role){ return role==='Portiere' ? GK_ROLE_WEIGHTS : ROLE_WEIGHTS[role]; }
+
 function overallPesato(s){
   if(s.overallImportato != null) return Math.round(s.overallImportato);
-  const w = ROLE_WEIGHTS[s.role];
+  const w = roleWeightsFor(s.role);
   let tot = 0;
-  ATTR_KEYS.forEach(k => tot += s.attr[k] * w[k]);
+  attrKeysFor(s.role).forEach(k => tot += s.attr[k] * w[k]);
+  return Math.round(tot);
+}
+const LEGACY_GK_WEIGHTS = {tecnica:0.15, fisico:0.25, velocita:0.05, tiro:0.05, passaggio:0.15, difesa:0.35};
+function overallPesatoLegacyGK(s){
+  // Solo per la migrazione dei salvataggi: calcola l'overall di un Portiere con i VECCHI
+  // attributi generici (tecnica/fisico/...), prima di rigenerarlo sulle nuove skill dedicate.
+  let tot = 0;
+  Object.keys(LEGACY_GK_WEIGHTS).forEach(k => tot += (s.attr[k]||50) * LEGACY_GK_WEIGHTS[k]);
   return Math.round(tot);
 }
 function attributiDaOverall(overall, role){
   overall = Math.round(overall);
-  const shape = ROLE_BASE[role];
-  const w = ROLE_WEIGHTS[role];
+  const shape = roleBaseFor(role);
+  const w = roleWeightsFor(role);
+  const keys = attrKeysFor(role);
   let shapeWeighted = 0;
-  ATTR_KEYS.forEach(k => shapeWeighted += shape[k]*w[k]);
+  keys.forEach(k => shapeWeighted += shape[k]*w[k]);
   const fattore = overall / shapeWeighted;
   const attr = {};
-  ATTR_KEYS.forEach(k=>{
+  keys.forEach(k=>{
     const jitter = rand(-4,4);
     attr[k] = clamp(Math.round(shape[k]*fattore + jitter), 20, 99);
   });
@@ -757,27 +785,46 @@ function showScreen(id){
 
 /* ---------- CREAZIONE ---------- */
 function renderAllocator(){
+  // Il profilo di partenza (ROLE_BASE) già varia per ruolo (es. Attaccante parte con tiro alto e
+  // difesa bassa, Portiere il contrario): prima però l'allocatore mostrava solo i punti "0"
+  // assegnabili, senza far vedere questa base, dando l'impressione che il ruolo non contasse.
+  // Ora si vede il valore di base per il ruolo scelto e il totale (base + punti assegnati).
+  const role = document.getElementById('inpRole').value;
+  const base = roleBaseFor(role);
+  const keys = attrKeysFor(role);
+  const labels = attrLabelsFor(role);
+  // Cambiando ruolo cambia anche il set di attributi (es. Portiere ha skill dedicate): i punti
+  // già assegnati sul set precedente non hanno più senso, quindi si riparte da zero.
+  allocated = {}; keys.forEach(k=> allocated[k]=0); pointsLeft = 10;
+  document.getElementById('pointsLeft').textContent = pointsLeft+' pt';
   const box = document.getElementById('attrAllocator'); box.innerHTML = '';
-  ATTR_KEYS.forEach(k=>{
+  const nota = document.createElement('div'); nota.className='subtle'; nota.style.marginBottom='8px';
+  nota.textContent = 'Il valore fra parentesi è la base di partenza del ruolo scelto; i punti che assegni si sommano a quella base.';
+  box.appendChild(nota);
+  keys.forEach(k=>{
     const row = document.createElement('div'); row.className='row'; row.style.marginBottom='10px';
-    row.innerHTML = `<span class="attr-name" style="width:90px;">${ATTR_LABELS[k]}</span>
+    row.innerHTML = `<span class="attr-name" style="width:90px;">${labels[k]} <span class="subtle">(${base[k]})</span></span>
       <span style="display:flex; align-items:center; gap:10px;">
         <button class="btn ghost" style="width:32px; padding:6px 0;" onclick="allocPoint('${k}',-1)">–</button>
         <span class="attr-val" style="min-width:26px; text-align:center;" id="alloc-${k}">0</span>
         <button class="btn ghost" style="width:32px; padding:6px 0;" onclick="allocPoint('${k}',1)">+</button>
+        <span class="subtle" id="tot-${k}">= ${base[k]}</span>
       </span>`;
     box.appendChild(row);
   });
 }
 let allocated = {tecnica:0,fisico:0,velocita:0,tiro:0,passaggio:0,difesa:0};
 let pointsLeft = 10;
-let selectedStartTeam = LEAGUES.C.startChoices[0];
+let selectedStartTeam = null;
 function allocPoint(key, delta){
   if(delta>0 && pointsLeft<=0) return;
   if(delta<0 && allocated[key]<=0) return;
   allocated[key]+=delta; pointsLeft-=delta;
   document.getElementById('alloc-'+key).textContent = allocated[key];
   document.getElementById('pointsLeft').textContent = pointsLeft+' pt';
+  const role = document.getElementById('inpRole').value;
+  const base = roleBaseFor(role)[key];
+  document.getElementById('tot-'+key).textContent = '= ' + clamp(base+allocated[key]*2, 20, 90);
 }
 function squadreSerieC(){
   return Object.values(DB_SQUADRE).filter(sq=> sq.serie==='C');
@@ -825,7 +872,7 @@ function restartCareer(){
     state = null;
     allocated = {tecnica:0,fisico:0,velocita:0,tiro:0,passaggio:0,difesa:0};
     pointsLeft = 10;
-    selectedStartTeam = LEAGUES.C.startChoices[0];
+    selectedStartTeam = null;
     renderAllocator();
     renderTeamPicker();
     showScreen('create');
@@ -833,10 +880,16 @@ function restartCareer(){
 }
 
 function startCareer(){
+  if(!selectedStartTeam){
+    // Bug: senza questo controllo si poteva procedere senza aver scelto girone/squadra di
+    // partenza, partendo con una squadra di default mai vista/selezionata dal giocatore.
+    alert('Scegli prima un girone e una squadra di partenza.');
+    return;
+  }
   const name = document.getElementById('inpName').value.trim() || 'Giocatore CSI';
   const role = document.getElementById('inpRole').value;
-  const base = {...ROLE_BASE[role]};
-  ATTR_KEYS.forEach(k=> base[k] = clamp(base[k]+allocated[k]*2, 20, 90));
+  const base = {...roleBaseFor(role)};
+  attrKeysFor(role).forEach(k=> base[k] = clamp(base[k]+(allocated[k]||0)*2, 20, 90));
 
   state = {
     name, role,
@@ -848,7 +901,7 @@ function startCareer(){
     lega:'C',
     contratto: {squadra:selectedStartTeam, stipendio:110, stagioniResidue:2},
     carriera: {gol:0, assist:0, partiteVoti:[]},
-    stagioneStats: {gol:0, assist:0, voti:[]},
+    stagioneStats: {gol:0, assist:0, voti:[], golSubiti:0, cleanSheet:0},
     relazioni: {mister:55, procuratore:50, compagni:55},
     finanze: {saldo:300, stipendio:110, statoLavoro:'Nessuno', anzianita:0, budgetClub:buildBudgetClub('C'), marketing:0, compensoSportivo:0},
     reputazione:45,
@@ -856,7 +909,12 @@ function startCareer(){
     cartelliniStagione: 0, streakVittorie: 0,
     recoveredFromGrave: false, promozioniCarriera:0,
     achievements: [], achievementsNuovi: [],
-    diario: [], offerteCorrenti: [],
+    diario: [], offerteCorrenti: [], registroPartite: [],
+    // Contatori minimi, non un sistema a parte: crescono come effetto collaterale di alcune
+    // scelte (eventi di partita, poi eventualmente altri). Nessuna logica di gioco li legge
+    // ancora in modo deterministico.
+    personalita: {individualista:0, trascinatore:0, ragionatore:0},
+    eventiMatchUltimaGiornata: {},
     ultimoEsitoLega:'confermato',
     matchTemp: null,
     allenamentoFatto: false, ultimoAllenamento: null, allenamentoSnapshot: null,
@@ -1075,6 +1133,19 @@ function addDiario(text){
   if(state.diario.length>60) state.diario.pop();
 }
 
+/* Registro statistiche: elenco strutturato di ogni partita giocata dalla squadra (giocata
+   davvero o simulata), con risultato di squadra e apporto personale. Diverso dal diario
+   testuale: qui i dati sono a colonne, per poterli scorrere come uno storico partite/gol/assist. */
+function registraPartita({opp, mieiGol, oppGol, playerGol, playerAssist, voto, contesto}){
+  state.registroPartite.unshift({
+    stagione: state.stagione, giornata: state.giornata, opp, mieiGol, oppGol,
+    playerGol: playerGol||0, playerAssist: playerAssist||0, voto: voto!=null ? voto : null, contesto
+  });
+  if(state.registroPartite.length>300) state.registroPartite.pop();
+  state.stagioneStats.golSubiti += oppGol;
+  if(oppGol===0) state.stagioneStats.cleanSheet++;
+}
+
 /* ---------- HUB ---------- */
 const TRAININGS = [
   {id:'tecnica', label:'Allenamento tecnico', desc:'+Tecnica, +Passaggio · -12 energia', apply:s=>{ s.attr.tecnica=clamp(s.attr.tecnica+1,0,99); s.attr.passaggio=clamp(s.attr.passaggio+1,0,99); s.energia=clamp(s.energia-12,0,100); s.forma=clamp(s.forma+4,0,100); }},
@@ -1239,7 +1310,7 @@ const EVENTS = [
       {label:"Lo rassicuri, resti professionale", applica:s=>{ s.relazioni.procuratore=clamp(s.relazioni.procuratore+4,0,100); s.morale=clamp(s.morale+2,0,100); }, esito:"Il procuratore apprezza il tuo atteggiamento."},
       {label:"Sfoghi la frustrazione con lui", applica:s=>{ s.relazioni.procuratore=clamp(s.relazioni.procuratore-6,0,100); s.morale=clamp(s.morale-2,0,100); }, esito:"La telefonata si chiude su un tono acceso."}]},
   { id:'ruolo_diverso', condizione:s=>s.relazioni.mister>=60, testo:"Il mister vuole provarti in una posizione diversa in allenamento, per aumentare la tua duttilità.", scelte:[
-      {label:"Accetti con entusiasmo", applica:s=>{ const k=ATTR_KEYS[rand(0,ATTR_KEYS.length-1)]; s.attr[k]=clamp(s.attr[k]+1,0,99); s.relazioni.mister=clamp(s.relazioni.mister+5,0,100); }, esito:"Il mister apprezza la tua disponibilità."},
+      {label:"Accetti con entusiasmo", applica:s=>{ const keys=attrKeysFor(s.role); const k=keys[rand(0,keys.length-1)]; s.attr[k]=clamp(s.attr[k]+1,0,99); s.relazioni.mister=clamp(s.relazioni.mister+5,0,100); }, esito:"Il mister apprezza la tua disponibilità."},
       {label:"Preferisci restare nel tuo ruolo", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister-2,0,100); s.forma=clamp(s.forma+2,0,100); }, esito:"Resti fedele al tuo ruolo naturale."}]},
   { id:'evento_sponsor', condizione:s=>s.reputazione>=60, testo:"Il club ti invita a un evento ufficiale con gli sponsor.", scelte:[
       {label:"Partecipi con entusiasmo", applica:s=>{ s.finanze.saldo+=70; s.reputazione=clamp(s.reputazione+5,0,100); s.forma=clamp(s.forma-2,0,100); }, esito:"La serata rafforza la tua immagine, ma torni a casa tardi."},
@@ -1300,9 +1371,13 @@ function showEvent(ev, afterCallback){
 
 /* ---------- SIMULAZIONE SENZA IL GIOCATORE ---------- */
 function simSquadra(forzaA, forzaB){
-  const diff = (forzaA-forzaB)/10;
-  const a = clamp(rand(0,2) + (diff>0?rand(0,1):0), 0, 5);
-  const b = clamp(rand(0,2) + (diff<0?rand(0,1):0), 0, 5);
+  // Prima usava una scala più "morbida" (rand 0-2, diff/10) di quella usata per simulare le
+  // partite fra le ALTRE squadre del girone (rand 0-3, diff/8): il modello del giocatore
+  // pareggiava/otteneva punti troppo spesso rispetto ai rivali, rendendo la lega troppo facile
+  // da scalare anche solo simulando. Ora la scala è identica per tutti.
+  const diff = (forzaA-forzaB)/8;
+  const a = clamp(rand(0,3) + (diff>0?rand(0,1):0), 0, 6);
+  const b = clamp(rand(0,3) + (diff<0?rand(0,1):0), 0, 6);
   return {mieiGol:a, oppGol:b};
 }
 function applyResultToClassifica(oppName, myGoals, oppGoals){
@@ -1325,9 +1400,10 @@ function applyResultToClassifica(oppName, myGoals, oppGoals){
 function skipGiornata(motivo){
   if(state.coppa && state.coppa.prossimi.length){
     const opp = state.coppa.prossimi[0];
-    const r = simSquadra(58, opp.forza);
+    const r = simSquadra(getForzaSquadra(teamName())||58, opp.forza);
     addDiario(`Coppa Leonessa: ${teamName()} ${r.mieiGol}-${r.oppGol} ${opp.nome} (tu assente, ${motivo}).`);
     applyResultToCoppaGirone(opp.nome, r.mieiGol, r.oppGol);
+    registraPartita({opp: opp.nome, mieiGol: r.mieiGol, oppGol: r.oppGol, contesto:'coppa'});
     if(motivo==='infortunio' && state.infortunio){
       state.infortunio.giornateRestanti--;
       if(state.infortunio.giornateRestanti<=0){ if(state.infortunio.tipo==='grave') state.recoveredFromGrave = true; state.infortunio = null; }
@@ -1337,8 +1413,9 @@ function skipGiornata(motivo){
     return;
   }
   const opp = state.calendario[state.giornata-1];
-  const r = simSquadra(58, opp.forza);
+  const r = simSquadra(getForzaSquadra(teamName())||58, opp.forza);
   applyResultToClassifica(opp.nome, r.mieiGol, r.oppGol);
+  registraPartita({opp: opp.nome, mieiGol: r.mieiGol, oppGol: r.oppGol, contesto:'campionato'});
   addDiario(`G${state.giornata}: ${teamName()} ${r.mieiGol}-${r.oppGol} ${opp.nome} (tu assente, ${motivo}).`);
   if(motivo==='infortunio' && state.infortunio){
     state.infortunio.giornateRestanti--;
@@ -1358,15 +1435,17 @@ function simulaPartita(){
   state.energia = clamp(state.energia-10, 0, 100);
   if(state.coppa && state.coppa.prossimi.length){
     const opp = state.coppa.prossimi[0];
-    const r = simSquadra(58, opp.forza);
+    const r = simSquadra(getForzaSquadra(teamName())||58, opp.forza);
     addDiario(`Coppa Leonessa: ${teamName()} ${r.mieiGol}-${r.oppGol} ${opp.nome} (partita simulata, in panchina per scelta tecnica).`);
     applyResultToCoppaGirone(opp.nome, r.mieiGol, r.oppGol);
+    registraPartita({opp: opp.nome, mieiGol: r.mieiGol, oppGol: r.oppGol, contesto:'coppa'});
     postCoppaMatch();
     return;
   }
   const opp = state.calendario[state.giornata-1];
-  const r = simSquadra(58, opp.forza);
+  const r = simSquadra(getForzaSquadra(teamName())||58, opp.forza);
   applyResultToClassifica(opp.nome, r.mieiGol, r.oppGol);
+  registraPartita({opp: opp.nome, mieiGol: r.mieiGol, oppGol: r.oppGol, contesto:'campionato'});
   addDiario(`G${state.giornata}: ${teamName()} ${r.mieiGol}-${r.oppGol} ${opp.nome} (partita simulata, in panchina per scelta tecnica).`);
   state.giornata++;
   postGiornataFlow({risultato:null});
@@ -1381,7 +1460,7 @@ function beginMatch(){
         {label:"Protesta apertamente", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister-6,0,100); s.reputazione=clamp(s.reputazione-3,0,100); }, esito:"La protesta non migliora il rapporto con il mister."}]};
     showEvent(eventoPanchina, ()=>{
       const opp = state.calendario[state.giornata-1];
-      const r = simSquadra(58, opp.forza);
+      const r = simSquadra(getForzaSquadra(teamName())||58, opp.forza);
       applyResultToClassifica(opp.nome, r.mieiGol, r.oppGol);
       addDiario(`G${state.giornata}: ${teamName()} ${r.mieiGol}-${r.oppGol} ${opp.nome} (in panchina).`);
       state.giornata++;
@@ -1392,7 +1471,11 @@ function beginMatch(){
   const opp = coppaAttiva ? state.coppa.prossimi[0] : state.calendario[state.giornata-1];
   state.matchTemp = { opp, contesto: coppaAttiva ? 'coppa' : 'campionato', minute:0, myGoals:0, oppGoals:0, myPlayerGoals:0, myPlayerAssists:0,
     momentumIdx:0, successes:0, attempts:0, highRiskFails:0, preMatchEnergia: state.energia,
-    infortunioEsito:null, cartellinoRosso:false, compagni: sceglieCompagni(teamName()) };
+    infortunioEsito:null, cartellinoRosso:false, cartellinoEventoUsato:false, consecutiveFails:0,
+    // Un Portiere pesca 4 momenti a caso dagli 8 archetipi del pool GK, così le partite da
+    // portiere non sono sempre identiche (stessa durata di 4 momenti delle partite da movimento).
+    gkMomenti: state.role==='Portiere' ? shuffle(GK_MOMENTS_POOL).slice(0,4) : null,
+    compagni: sceglieCompagni(teamName()) };
   const etichettaMatch = coppaAttiva
     ? ` · Coppa Leonessa (partita ${state.coppa.giocate.length+1}/${state.coppa.giocate.length+state.coppa.prossimi.length})`
     : ` · Giornata ${state.giornata}/${state.calendario.length}`;
@@ -1401,7 +1484,11 @@ function beginMatch(){
   document.getElementById('commentaryLog').innerHTML = '';
   addLog(`Fischio d'inizio! ${teamName()} ospita ${opp.nome}.`, false);
   state.energia = clamp(state.energia-15,0,100);
-  showScreen('match'); nextMoment();
+  showScreen('match');
+  // Evento di partita opzionale a inizio gara (match_start): non blocca mai il flusso, è solo
+  // un intermezzo prima del primo momento chiave.
+  const evStart = pickMatchEvent(['match_start'], state.matchTemp);
+  if(evStart){ showMatchEvent(evStart, ()=>{ showScreen('match'); nextMoment(); }); } else { nextMoment(); }
 }
 function addLog(text, isEvent){
   const log = document.getElementById('commentaryLog');
@@ -1426,18 +1513,148 @@ const MOMENTS = [
       {label:'Scarico rapido per il compagno libero', attr:'passaggio', risk:'mid', out:'assist'},
       {label:'Gestisci il pallone, tieni il risultato', attr:'tecnica', risk:'safe', out:'possesso'} ]},
 ];
+/* Bug: un Portiere si ritrovava gli stessi 4 momenti chiave pensati per un giocatore di movimento
+   (tiro, dribbling, cross, contrasto in fascia) — scelte senza senso per chi gioca in porta.
+   Stessi "out" (goal/assist/recupero/possesso) del motore esistente, così calcChance/resolveChoice
+   restano invariati: cambia solo il contenuto narrativo, le skill coinvolte (GK_ATTR_KEYS, non
+   più i 6 attributi generici) e il fatto che ogni scelta "seria" combina due skill (attr+attr2).
+   La terza scelta di ogni momento è sempre "cautela": nessun test di abilità (attr:null →
+   calcChance usa una base neutra), rischio basso, nessun bonus particolare.
+   8 archetipi in un pool: a ogni partita se ne estraggono 4 a caso (stessa durata delle partite
+   da movimento), così le partite da portiere non sono sempre identiche. */
+const GK_MOMENTS_POOL = [
+  { testo:()=>`Un cross teso attraversa l'area: il pallone sta arrivando verso il cuore dell'area piccola.`, choices:[
+      {label:'Esci e prendi il pallone', attr:'anticipo', attr2:'presa', risk:'high', out:'recupero'},
+      {label:'Resta in porta e preparati alla deviazione', attr:'posizionamento', attr2:'riflessi', risk:'mid', out:'recupero'},
+      {label:'Non rischiare, lascia gestire i difensori', attr:null, risk:'safe', out:'possesso'} ]},
+  { testo:(opp)=>`L'attaccante di ${opp.nome} è solo davanti a te: hai pochi istanti per decidere.`, choices:[
+      {label:'Esci e chiudi lo specchio', attr:'anticipo', attr2:'unoControUno', risk:'high', out:'recupero'},
+      {label:'Aspetta e reagisci al tiro', attr:'posizionamento', attr2:'riflessi', risk:'mid', out:'recupero'},
+      {label:'Non uscire, resta sulla linea', attr:null, risk:'safe', out:'possesso'} ]},
+  { testo:()=>`Un difensore ti passa il pallone sotto pressione: due avversari stanno arrivando.`, choices:[
+      {label:'Lancio lungo immediato sul tuo attaccante', attr:'distribuzione', attr2:'posizionamento', risk:'mid', out:'assist'},
+      {label:'Passaggio corto e costruzione dal basso', attr:'distribuzione', attr2:'comunicazione', risk:'high', out:'possesso'},
+      {label:'Spazza via il pallone', attr:null, risk:'safe', out:'possesso'} ]},
+  { testo:(opp)=>`Tiro da 25 metri di ${opp.nome}: hai una visuale parzialmente coperta.`, choices:[
+      {label:'Anticipa il tiro leggendo la traiettoria', attr:'posizionamento', attr2:'riflessi', risk:'high', out:'recupero'},
+      {label:'Resta in piedi e prova a bloccarlo', attr:'posizionamento', attr2:'presa', risk:'mid', out:'recupero'},
+      {label:'Respingi in calcio d\'angolo', attr:null, risk:'safe', out:'possesso'} ]},
+  { testo:()=>`Un filtrante supera la linea difensiva: palla in profondità alle spalle dei tuoi.`, choices:[
+      {label:'Esci subito e anticipi', attr:'anticipo', attr2:'posizionamento', risk:'high', out:'recupero'},
+      {label:"Aspetti l'attaccante e affronti il duello", attr:'unoControUno', attr2:'riflessi', risk:'mid', out:'recupero'},
+      {label:'Rimani tra i pali', attr:null, risk:'safe', out:'possesso'} ]},
+  { testo:()=>`L'attaccante arriva sul fondo: può crossare o calciare sul primo palo.`, choices:[
+      {label:'Copri il primo palo', attr:'posizionamento', attr2:'riflessi', risk:'high', out:'recupero'},
+      {label:'Preparati al cross', attr:'anticipo', attr2:'comunicazione', risk:'mid', out:'recupero'},
+      {label:'Rimani centrale, copri la porta', attr:null, risk:'safe', out:'possesso'} ]},
+  { testo:()=>`Tiro deviato: il pallone cambia direzione all'ultimo momento.`, choices:[
+      {label:"Ti butti d'istinto", attr:'riflessi', attr2:'posizionamento', risk:'high', out:'recupero'},
+      {label:'Provi a bloccarlo', attr:'riflessi', attr2:'presa', risk:'mid', out:'recupero'},
+      {label:'Devia in corner', attr:null, risk:'safe', out:'possesso'} ]},
+  { testo:()=>`Un attaccante si inserisce tra due difensori: devi decidere come intervenire.`, choices:[
+      {label:'Urli e guidi la linea a salire', attr:'comunicazione', attr2:'posizionamento', risk:'high', out:'recupero'},
+      {label:'Urli al difensore di marcarlo', attr:'comunicazione', attr2:'anticipo', risk:'mid', out:'recupero'},
+      {label:'Non intervieni, resti concentrato sulla porta', attr:null, risk:'safe', out:'possesso'} ]},
+];
 const RISK_MOD = {safe:10, mid:0, high:-15};
 const RISK_LABEL = {safe:'Sicuro', mid:'Rischioso', high:'Estremo'};
+
+/* ====== EVENTI DINAMICI DI PARTITA (data-driven, riusa il motore EVENTS/showEvent già esistente) ======
+   Schema di ogni evento (stessi campi che showEvent() già si aspetta per testo/scelte, così non
+   serve toccare la UI esistente):
+     id, category, trigger (stringa o array di trigger), conditions(s,ctx)=>bool, weight (0-1,
+     probabilità di comparire quando è eleggibile), cooldown (in giornate), roleRequirement
+     (opzionale, es. 'Portiere'), testo, scelte:[{label, applica(s)=>{}, esito}]
+   Le conseguenze (applica) toccano SOLO stato già esistente (morale, energia, relazioni,
+   reputazione, forma, i tre contatori di personalita) — nessun nuovo sistema parallelo. */
+const MATCH_EVENTS = [
+  { id:'primo_contrasto', category:'GAMEPLAY', trigger:'match_start', weight:0.5, cooldown:3,
+    testo:"Primo pallone conteso a centrocampo: senti subito l'intensità della gara.",
+    scelte:[
+      {label:"Provi la giocata da solo", applica:s=>{ s.personalita.individualista++; s.forma=clamp(s.forma+1,0,100); }, esito:"Ti fai valere subito, il pubblico se ne accorge."},
+      {label:"Urli ai compagni di stringere le linee", applica:s=>{ s.personalita.trascinatore++; s.relazioni.compagni=clamp(s.relazioni.compagni+2,0,100); }, esito:"I compagni rispondono al richiamo."},
+      {label:"Rallenti, cerchi la soluzione più semplice", applica:s=>{ s.personalita.ragionatore++; s.morale=clamp(s.morale+1,0,100); }, esito:"Gestisci con ordine il primo pallone."}
+    ]},
+  { id:'compagno_non_passa', category:'RELATIONSHIP', trigger:'after_missed_chance', weight:0.35, cooldown:4,
+    conditions: s=>s.relazioni.compagni<90,
+    testo:"Un compagno tenta la giocata da solo invece di servirti nello spazio libero.",
+    scelte:[
+      {label:"Lo riprendi a muso duro", applica:s=>{ s.relazioni.compagni=clamp(s.relazioni.compagni-4,0,100); s.personalita.individualista++; }, esito:"La reazione stizzita non migliora il clima."},
+      {label:"Scherzi per sdrammatizzare", applica:s=>{ s.relazioni.compagni=clamp(s.relazioni.compagni+2,0,100); s.personalita.trascinatore++; }, esito:"Il gruppo apprezza la leggerezza."},
+      {label:"Lasci correre, pensi alla prossima azione", applica:s=>{ s.personalita.ragionatore++; }, esito:"Non è il momento delle polemiche."}
+    ]},
+  { id:'errore_arbitrale', category:'ENVIRONMENTAL', trigger:'team_losing', weight:0.25, cooldown:5,
+    testo:"L'arbitro fischia contro di te per un contatto dubbio: la panchina avversaria esulta.",
+    scelte:[
+      {label:"Protesti visibilmente", applica:s=>{ s.reputazione=clamp(s.reputazione-2,0,100); s.relazioni.mister=clamp(s.relazioni.mister-2,0,100); }, esito:"Rischi di innervosirti oltre il dovuto."},
+      {label:"Resti composto", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister+2,0,100); s.personalita.ragionatore++; }, esito:"Il mister apprezza la freddezza."}
+    ]},
+  { id:'crisi_fiducia', category:'PSYCHOLOGICAL', trigger:'after_two_mistakes', weight:0.5, cooldown:3,
+    testo:"Due errori di fila ti fanno sentire il peso della gara: qualche fischio isolato dagli spalti.",
+    scelte:[
+      {label:"Ti chiudi in te stesso", applica:s=>{ s.morale=clamp(s.morale-6,0,100); s.forma=clamp(s.forma-3,0,100); }, esito:"La fiducia scende, si vede nei movimenti."},
+      {label:"Chiedi comunque palla, non hai paura di sbagliare ancora", applica:s=>{ s.personalita.individualista++; s.morale=clamp(s.morale-2,0,100); }, esito:"Provi a scrollarti di dosso la tensione da solo."},
+      {label:"Parli con un compagno per resettare la testa", applica:s=>{ s.personalita.ragionatore++; s.relazioni.compagni=clamp(s.relazioni.compagni+2,0,100); s.morale=clamp(s.morale+1,0,100); }, esito:"Un confronto rapido ti aiuta a ripartire."}
+    ]},
+  { id:'richiamo_allenatore', category:'TEAM', trigger:'after_mistake', weight:0.3, cooldown:4,
+    conditions: s=>s.relazioni.mister<60,
+    testo:"Il mister ti richiama a gran voce dalla panchina dopo l'errore.",
+    scelte:[
+      {label:"Annuisci e applichi le indicazioni", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister+4,0,100); }, esito:"Il mister nota la prontezza."},
+      {label:"Fai un gesto di insofferenza", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister-5,0,100); s.personalita.individualista++; }, esito:"Il rapporto con la panchina si incrina un po'."}
+    ]},
+  // --- Eventi GOALKEEPER: stesso motore, filtrati con roleRequirement (nessun secondo Event Engine) ---
+  { id:'uscita_alta', category:'GOALKEEPER', roleRequirement:'Portiere', trigger:'team_drawing', weight:0.4, cooldown:3,
+    testo:"Cross teso in area: devi decidere se uscire alto o restare sulla linea.",
+    scelte:[
+      {label:"Esci deciso a comandare l'area", applica:s=>{ s.reputazione=clamp(s.reputazione+2,0,100); s.personalita.trascinatore++; }, esito:"Anticipi tutti e allontani il pericolo: comandi l'area."},
+      {label:"Resti sulla linea, ti fidi della difesa", applica:s=>{ s.relazioni.compagni=clamp(s.relazioni.compagni+2,0,100); s.personalita.ragionatore++; }, esito:"La difesa spazza via: hai gestito con prudenza."}
+    ]},
+  { id:'uno_contro_uno', category:'GOALKEEPER', roleRequirement:'Portiere', trigger:'team_losing', weight:0.4, cooldown:4,
+    testo:"Un attaccante avversario ti punta in uno contro uno: tutto lo stadio guarda te.",
+    scelte:[
+      {label:"Ti allunghi d'istinto sul pallone", applica:s=>{ s.morale=clamp(s.morale+4,0,100); s.reputazione=clamp(s.reputazione+2,0,100); }, esito:"Respinta di puro istinto, il pubblico esplode."},
+      {label:"Temporeggi e aspetti la sua mossa", applica:s=>{ s.personalita.ragionatore++; s.morale=clamp(s.morale+1,0,100); }, esito:"Lo attendi con freddezza: l'attaccante spreca l'occasione."}
+    ]},
+  { id:'pressione_psicologica_gk', category:'GOALKEEPER', roleRequirement:'Portiere', trigger:'after_mistake', weight:0.4, cooldown:4,
+    testo:"Un'uscita incerta fa esultare la panchina avversaria: senti la pressione crescere.",
+    scelte:[
+      {label:"Batti i pugni a terra, vuoi rifarti subito", applica:s=>{ s.personalita.individualista++; s.forma=clamp(s.forma+1,0,100); s.morale=clamp(s.morale-2,0,100); }, esito:"La rabbia ti tiene concentrato, ma un po' teso."},
+      {label:"Chiami i difensori a stringersi vicino a te", applica:s=>{ s.personalita.trascinatore++; s.relazioni.compagni=clamp(s.relazioni.compagni+3,0,100); }, esito:"Il reparto arretrato si compatta intorno a te."}
+    ]},
+];
+function pickMatchEvent(triggersAttivi, ctx){
+  const eligible = MATCH_EVENTS.filter(ev=>{
+    const triggerOk = Array.isArray(ev.trigger) ? ev.trigger.some(t=>triggersAttivi.includes(t)) : triggersAttivi.includes(ev.trigger);
+    if(!triggerOk) return false;
+    if(ev.roleRequirement && state.role!==ev.roleRequirement) return false;
+    if(ev.conditions && !ev.conditions(state, ctx)) return false;
+    const ultima = state.eventiMatchUltimaGiornata[ev.id];
+    if(ultima!==undefined && (state.giornata-ultima) < ev.cooldown) return false;
+    return true;
+  });
+  if(!eligible.length) return null;
+  for(const ev of shuffle(eligible)){
+    if(Math.random() < ev.weight) return ev;
+  }
+  return null;
+}
+function showMatchEvent(ev, cb){
+  state.eventiMatchUltimaGiornata[ev.id] = state.giornata;
+  showEvent(ev, cb);
+}
+
 function nextMoment(){
   const m = state.matchTemp;
-  if(m.momentumIdx >= MOMENTS.length){ return finishMatch(); }
+  const momentiAttivi = state.role==='Portiere' ? m.gkMomenti : MOMENTS;
+  if(m.momentumIdx >= momentiAttivi.length){ return finishMatch(); }
   m.minute += rand(9,13);
   document.getElementById('matchMinute').textContent = m.minute+"'";
-  const moment = MOMENTS[m.momentumIdx];
+  const moment = momentiAttivi[m.momentumIdx];
   addLog(moment.testo(m.opp), false);
   const box = document.getElementById('matchAction'); box.innerHTML = '';
   moment.choices.forEach(c=>{
-    const chance = calcChance(c.attr, c.risk, c.out);
+    const chance = calcChance(c.attr, c.risk, c.out, c.attr2);
     const el = document.createElement('div'); el.className = 'choice-card';
     el.onclick = ()=> resolveChoice(c, chance);
     const riskClass = c.risk==='safe'?'risk-safe':(c.risk==='mid'?'risk-mid':'risk-high');
@@ -1445,8 +1662,13 @@ function nextMoment(){
     box.appendChild(el);
   });
 }
-function calcChance(attrKey, risk, out){
-  const base = state.attr[attrKey];
+function calcChance(attrKey, risk, out, attrKey2){
+  // attrKey può essere null ("Cautela": nessun test di abilità, base neutra fissa) oppure
+  // combinare due skill (attrKey2, es. Anticipo + Presa): in quel caso si media fra le due.
+  let base;
+  if(!attrKey){ base = 60; }
+  else if(attrKey2){ base = (state.attr[attrKey] + state.attr[attrKey2]) / 2; }
+  else { base = state.attr[attrKey]; }
   const formaBonus = (state.forma-50)*0.15;
   const chimicaBonus = (state.relazioni.compagni-50)*0.05;
   let compagnoBonus = 0;
@@ -1480,16 +1702,43 @@ function resolveChoice(choice, chance){
       if(!m.cartellinoRosso && Math.random()<0.08){ m.cartellinoRosso = true; addLog(`L'arbitro estrae il cartellino rosso per ${state.name}! Salterà la prossima gara.`, true); }
     } else { addLog(`Scelta non riuscita, ${m.opp.nome} riorganizza la propria difesa.`, false); }
   }
+  if(success) m.consecutiveFails = 0; else m.consecutiveFails = (m.consecutiveFails||0)+1;
   m.momentumIdx++;
   document.getElementById('matchScore').textContent = `${m.myGoals} - ${m.oppGoals}`;
-  document.getElementById('matchAction').innerHTML = '<div class="btn ghost" onclick="nextMoment()" style="text-align:center; cursor:pointer;">Continua ▸</div>';
+
+  // Trigger per gli eventi dinamici di partita, valutati DOPO l'esito della scelta (non alterano
+  // mai myGoals/oppGoals/attempts/successes, già scritti sopra). Al massimo un evento per
+  // momento chiave: se non ne scatta nessuno, il flusso prosegue esattamente come prima.
+  const triggersAttivi = [];
+  if(success && choice.out==='goal') triggersAttivi.push('after_goal');
+  if(!success && (choice.out==='goal' || choice.out==='assist')) triggersAttivi.push('after_missed_chance');
+  if(!success){
+    triggersAttivi.push('after_mistake');
+    if(m.consecutiveFails>=2) triggersAttivi.push('after_two_mistakes');
+  }
+  if(m.cartellinoRosso && !m.cartellinoEventoUsato){ triggersAttivi.push('after_yellow_card'); m.cartellinoEventoUsato = true; }
+  if(m.myGoals>m.oppGoals) triggersAttivi.push('team_winning');
+  else if(m.myGoals<m.oppGoals) triggersAttivi.push('team_losing');
+  else triggersAttivi.push('team_drawing');
+
+  const ev = pickMatchEvent(triggersAttivi, m);
+  if(ev){
+    showMatchEvent(ev, ()=>{ showScreen('match'); nextMoment(); });
+  } else {
+    document.getElementById('matchAction').innerHTML = '<div class="btn ghost" onclick="nextMoment()" style="text-align:center; cursor:pointer;">Continua ▸</div>';
+  }
 }
 function finishMatch(){
   const m = state.matchTemp;
   m.minute = 50;
   document.getElementById('matchMinute').textContent = "50'";
+  // La "difesa" del giocatore incide sui gol impliciti subiti a fine partita: prima non contava
+  // nulla, rendendo poco rilevanti gli attributi difensivi per un portiere/difensore (che in
+  // partita ha comunque poche scelte con attributo "difesa").
+  const difesaMoltiplicatore = state.role==='Portiere' ? 0.9 : 0.45;
+  const difesaBonus = (state.attr.difesa-50)*0.0025*difesaMoltiplicatore;
   const myExtra = Math.random() < clamp(0.35 - (m.opp.forza-70)/300, 0.1, 0.5) ? 1:0;
-  const oppExtra = Math.random() < clamp(0.30 + (m.opp.forza-68)/300, 0.1, 0.55) ? 1:0;
+  const oppExtra = Math.random() < clamp(0.30 + (m.opp.forza-68)/300 - difesaBonus, 0.05, 0.55) ? 1:0;
   m.myGoals += myExtra; m.oppGoals += oppExtra;
   addLog(`Triplice fischio: ${teamName()} ${m.myGoals} - ${m.oppGoals} ${m.opp.nome}.`, true);
   document.getElementById('matchScore').textContent = `${m.myGoals} - ${m.oppGoals}`;
@@ -1530,6 +1779,7 @@ function finishMatch(){
   const prefissoDiario = m.contesto==='coppa' ? 'Coppa Leonessa' : `G${state.giornata}`;
   if(m.contesto==='coppa'){ applyResultToCoppaGirone(m.opp.nome, m.myGoals, m.oppGoals); }
   else { applyResultToClassifica(m.opp.nome, m.myGoals, m.oppGoals); }
+  registraPartita({opp: m.opp.nome, mieiGol: m.myGoals, oppGol: m.oppGoals, playerGol: m.myPlayerGoals, playerAssist: m.myPlayerAssists, voto: rating, contesto: m.contesto});
   addDiario(`${prefissoDiario}: ${teamName()} ${m.myGoals}-${m.oppGoals} ${m.opp.nome}${m.myPlayerGoals?` (tu: ${m.myPlayerGoals} gol)`:''}${m.myPlayerAssists?` (${m.myPlayerAssists} assist)`:''}.`);
   addXP(xpGain); checkAchievements();
 
@@ -1558,10 +1808,12 @@ function addXP(amount){
   while(state.xp >= state.xpNext){
     state.xp -= state.xpNext; state.livello++;
     state.xpNext = Math.round(state.xpNext*1.15);
-    const keys = ATTR_KEYS.filter(k=>state.attr[k]<95);
-    const k = keys[rand(0,keys.length-1)] || ATTR_KEYS[0];
+    const attrKeys = attrKeysFor(state.role);
+    const attrLabels = attrLabelsFor(state.role);
+    const keys = attrKeys.filter(k=>state.attr[k]<95);
+    const k = keys[rand(0,keys.length-1)] || attrKeys[0];
     state.attr[k] = clamp(state.attr[k]+2,0,99);
-    gained.push(`Livello ${state.livello} raggiunto! ${ATTR_LABELS[k]} +2.`);
+    gained.push(`Livello ${state.livello} raggiunto! ${attrLabels[k]} +2.`);
   }
   document.getElementById('levelUpCard').innerHTML = gained.length
     ? `<div class="card" style="border-color:var(--gold);"><div class="label" style="color:var(--gold);">Level up</div>` + gained.map(g=>`<div style="font-size:13px; margin-top:4px;">${g}</div>`).join('') + `</div>` : '';
@@ -1613,7 +1865,7 @@ function renderCarriera(){
   document.getElementById('carName').textContent = state.name;
   document.getElementById('carRole').textContent = state.role + ' · ' + teamName();
   document.getElementById('carLevel').textContent = 'Lv. '+state.livello;
-  document.getElementById('carAttrs').innerHTML = ATTR_KEYS.map(k=>`<div class="attr"><div class="attr-name">${ATTR_LABELS[k]}</div><div class="attr-val">${state.attr[k]}</div></div>`).join('');
+  document.getElementById('carAttrs').innerHTML = attrKeysFor(state.role).map(k=>`<div class="attr"><div class="attr-name">${attrLabelsFor(state.role)[k]}</div><div class="attr-val">${state.attr[k]}</div></div>`).join('');
   const avgVoto = state.carriera.partiteVoti.length ? (state.carriera.partiteVoti.reduce((a,b)=>a+b,0)/state.carriera.partiteVoti.length).toFixed(1) : '—';
   const etaAttuale = calcolaEta(state);
   document.getElementById('carStats').innerHTML = `
@@ -1635,6 +1887,14 @@ function renderCarriera(){
   achBox.innerHTML = unlocked.length ? unlocked.map(a=>`<div class="ach"><div class="ach-icon">${a.icon}</div><div><div class="ach-name">${a.label}</div><div class="ach-desc">${a.desc}</div></div></div>`).join('') : `<div class="subtle">Nessun traguardo ancora sbloccato.</div>`;
   const diarioBox = document.getElementById('carDiario');
   diarioBox.innerHTML = state.diario.length ? state.diario.slice(0,20).map(d=>`<div class="diario-entry"><b>S${d.stagione} G${d.giornata}</b>${d.testo}</div>`).join('') : `<div class="subtle">Il diario si riempirà con l'andare della stagione.</div>`;
+  const registroBody = document.getElementById('carRegistro');
+  registroBody.innerHTML = state.registroPartite.length ? state.registroPartite.slice(0,60).map(p=>{
+    const risultato = p.mieiGol>p.oppGol ? 'V' : (p.mieiGol<p.oppGol ? 'P' : 'N');
+    const badgeClass = risultato==='V' ? 'green' : (risultato==='P' ? 'red' : 'gold');
+    return `<tr><td>S${p.stagione} G${p.giornata}</td><td>${p.opp}${p.contesto==='coppa'?' <span class="subtle">(Coppa)</span>':''}</td>
+      <td class="center"><span class="badge ${badgeClass}" style="padding:2px 8px;">${p.mieiGol}-${p.oppGol}</span></td>
+      <td class="center">${p.playerGol}</td><td class="center">${p.playerAssist}</td><td class="center">${p.voto!=null ? p.voto.toFixed(1) : '—'}</td></tr>`;
+  }).join('') : `<tr><td colspan="6" class="subtle">Nessuna partita ancora registrata.</td></tr>`;
 }
 
 function renderTabellaGirone(girone, mioTeam){
@@ -1764,8 +2024,19 @@ function renderSeasonEnd(){
     coppaBanner.style.display = 'none';
   }
 
-  document.getElementById('seGoals').textContent = state.stagioneStats.gol;
-  document.getElementById('seAssists').textContent = state.stagioneStats.assist;
+  // Per un Portiere gol/assist personali sono quasi sempre 0 e non raccontano la stagione: al
+  // loro posto si mostrano gol subiti e clean sheet (media voto resta invariata per tutti).
+  if(state.role==='Portiere'){
+    document.getElementById('seStat1Label').textContent = 'Gol subiti';
+    document.getElementById('seGoals').textContent = state.stagioneStats.golSubiti;
+    document.getElementById('seStat2Label').textContent = 'Clean sheet';
+    document.getElementById('seAssists').textContent = state.stagioneStats.cleanSheet;
+  } else {
+    document.getElementById('seStat1Label').textContent = 'Gol stagione';
+    document.getElementById('seGoals').textContent = state.stagioneStats.gol;
+    document.getElementById('seStat2Label').textContent = 'Assist stagione';
+    document.getElementById('seAssists').textContent = state.stagioneStats.assist;
+  }
   const avg = state.stagioneStats.voti.length ? (state.stagioneStats.voti.reduce((a,b)=>a+b,0)/state.stagioneStats.voti.length).toFixed(1) : '—';
   document.getElementById('seRating').textContent = avg;
   document.getElementById('seLevel').textContent = state.livello;
@@ -1934,6 +2205,18 @@ function finalizzaMercato(){
     if(state.allenamentoFattoMercato===undefined) state.allenamentoFattoMercato=false;
     if(state.ultimoAllenamentoMercato===undefined) state.ultimoAllenamentoMercato=null;
     if(!state.eventiUltimaGiornata) state.eventiUltimaGiornata={};
+    if(!state.registroPartite) state.registroPartite=[];
+    if(state.stagioneStats.golSubiti===undefined) state.stagioneStats.golSubiti=0;
+    if(state.role==='Portiere' && state.attr.presa===undefined){
+      // Migrazione: salvataggi vecchi avevano un Portiere con i 6 attributi generici
+      // (tecnica/fisico/...) invece delle nuove skill dedicate. Si rigenera l'attr sulla base
+      // dell'overall già maturato, per non azzerare i progressi di livello.
+      const overallPrecedente = overallPesatoLegacyGK(state);
+      state.attr = attributiDaOverall(overallPrecedente, 'Portiere');
+    }
+    if(state.stagioneStats.cleanSheet===undefined) state.stagioneStats.cleanSheet=0;
+    if(!state.personalita) state.personalita={individualista:0, trascinatore:0, ragionatore:0};
+    if(!state.eventiMatchUltimaGiornata) state.eventiMatchUltimaGiornata={};
     if(!state.coppa || !state.coppa.altreSfide) { if(state.coppa) state.coppa.altreSfide = []; }
     renderHub(); renderGironiPicker(); showScreen('hub');
   }
