@@ -8,19 +8,51 @@
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --navy-deep:#050d1a; --navy:#0a1628; --navy-card:#0e1f38;
-    --blue:#1a8fd1; --ice:#00c8ff; --gold:#f5c518; --red:#ff5d5d; --green:#33d17a; --purple:#a97bff;
-    --text:#eaf2fb; --text-dim:#7f93ad; --border:#16324f;
+    --navy-deep:#040b17; --navy:#0a1628; --navy-card:#0e1f38; --navy-card-2:#132746;
+    --blue:#1a8fd1; --ice:#62d9ff; --gold:#f5c518; --gold-soft:#ffd871; --red:#ff5d5d; --green:#33d17a; --purple:#a97bff;
+    --text:#edf5ff; --text-dim:#9bb0cb; --border:#1a3558; --panel-shadow:0 16px 34px rgba(2,8,18,0.42);
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   html,body{height:100%;}
-  body{ font-family:'Inter',sans-serif; background:radial-gradient(ellipse at top, #0d2038 0%, var(--navy-deep) 55%), var(--navy-deep);
+  body{ font-family:'Inter',sans-serif; background:radial-gradient(circle at top, #153961 0%, #0b1831 30%, var(--navy-deep) 68%);
     color:var(--text); min-height:100vh; display:flex; justify-content:center; overflow-x:hidden; }
-  #app{ width:100%; max-width:480px; min-height:100vh; display:flex; flex-direction:column; position:relative; }
+  #app{ width:100%; max-width:480px; min-height:100vh; display:flex; flex-direction:column; position:relative; background:linear-gradient(180deg, rgba(4,11,23,0.78), rgba(4,11,23,0.9));
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,0.03); }
   h1,h2,h3,.display{ font-family:'Oswald',sans-serif; text-transform:uppercase; letter-spacing:0.03em; }
   .screen{ display:none; flex-direction:column; flex:1; padding:20px 18px 90px; animation:fadeIn .35s ease; }
   .screen.active{ display:flex; }
+  @media (max-width: 420px){
+    .screen{ padding:16px 12px 82px; }
+    .topbar{ padding:10px 12px; }
+    .brand-text{ font-size:10px; }
+    .brand-text strong{ font-size:12px; }
+    .topbar-stat{ font-size:9px; }
+    .topbar-stat strong{ font-size:11px; }
+    .card{ padding:14px 12px; border-radius:14px; }
+    .btn{ min-height:46px; padding:12px 14px; font-size:13px; }
+    .btn.small{ min-height:40px; padding:9px 10px; }
+    input, select{ padding:11px 12px; font-size:13px; }
+    .team-pick{ gap:6px; }
+    .team-pick .tp{ padding:10px 8px; font-size:11px; }
+    .score-line{ font-size:32px; }
+    .pitch-header{ padding:14px 10px 10px; }
+  }
+  @media (max-width: 360px){
+    #app{ max-width:100%; }
+    .screen{ padding:12px 10px 76px; }
+    .brand{ gap:8px; }
+    .crest{ width:30px; height:30px; font-size:11px; }
+    .team-pick{ grid-template-columns:1fr; }
+    .btn{ letter-spacing:0.04em; }
+    .topbar-stats{ gap:8px; }
+    .score-line{ font-size:28px; }
+    .attr-grid{ grid-template-columns:1fr; }
+  }
   @keyframes fadeIn{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
+  @keyframes cinematicPulse{ 0%,100%{ transform:scale(1); box-shadow:0 0 0 rgba(98,217,255,0.0);} 50%{ transform:scale(1.01); box-shadow:0 0 28px rgba(98,217,255,0.14);} }
+  @keyframes shimmer{ 0%{ background-position:-200% 0; } 100%{ background-position:200% 0; } }
+  @keyframes floatUp{ 0%{ opacity:0; transform:translateY(10px); } 100%{ opacity:1; transform:translateY(0);} }
+  @keyframes glowGold{ 0%,100%{ box-shadow:0 0 0 rgba(245,197,24,0.0); } 50%{ box-shadow:0 0 26px rgba(245,197,24,0.18); } }
 
   .coppa-banner{ background:linear-gradient(135deg, #3a2a06, #1a1204 60%, var(--navy-card));
     border:1px solid var(--gold); border-radius:14px; padding:18px 16px; text-align:center;
@@ -33,12 +65,12 @@
   @keyframes coppaGlow{ 0%,100%{ box-shadow:0 0 0px rgba(217,175,10,0.0);} 50%{ box-shadow:0 0 22px rgba(217,175,10,0.45);} }
 
   .topbar{ display:flex; align-items:center; justify-content:space-between; padding:12px 18px;
-    border-bottom:1px solid var(--border); background:linear-gradient(90deg, var(--navy) 0%, #0c1c33 100%);
-    position:sticky; top:0; z-index:5; }
-  .crest{ width:34px; height:34px; border-radius:8px;
-    background:conic-gradient(from 210deg, var(--ice), var(--blue), var(--navy-deep), var(--blue));
+    border-bottom:1px solid rgba(108,161,220,0.24); background:linear-gradient(180deg, rgba(12,26,43,0.96), rgba(9,20,35,0.92));
+    position:sticky; top:0; z-index:5; backdrop-filter:blur(10px); box-shadow:0 10px 24px rgba(0,0,0,0.18); }
+  .crest{ width:34px; height:34px; border-radius:10px;
+    background:linear-gradient(135deg, var(--ice), var(--blue) 55%, #103d68);
     display:flex; align-items:center; justify-content:center; font-family:'Oswald'; font-weight:700; font-size:12px; color:#fff;
-    box-shadow:0 0 0 1px rgba(0,200,255,0.4), 0 0 14px rgba(0,200,255,0.25); flex-shrink:0; }
+    box-shadow:0 0 0 1px rgba(98,217,255,0.42), 0 0 18px rgba(98,217,255,0.25); flex-shrink:0; }
   .brand{ display:flex; align-items:center; gap:10px; min-width:0; }
   .brand-text{ font-family:'Oswald'; font-size:11px; letter-spacing:0.08em; color:var(--ice); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .brand-text b{ color:#fff; display:block; font-size:13px; letter-spacing:0.03em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -46,19 +78,31 @@
   .topbar-stat{ text-align:right; font-size:10px; color:var(--text-dim); }
   .topbar-stat b{ color:var(--gold); font-family:'Oswald'; font-size:12px; display:block; }
 
-  .card{ background:var(--navy-card); border:1px solid var(--border); border-radius:14px; padding:16px; margin-bottom:14px; }
-  .card.warn{ border-color:rgba(255,93,93,0.5); background:linear-gradient(135deg, rgba(255,93,93,0.08), var(--navy-card)); }
-  .card.good{ border-color:rgba(51,209,122,0.5); background:linear-gradient(135deg, rgba(51,209,122,0.08), var(--navy-card)); }
-  .label{ font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-dim); margin-bottom:6px; }
+  .card{ background:linear-gradient(180deg, rgba(17,31,52,0.97), rgba(11,20,35,0.96)); border:1px solid rgba(120,168,223,0.22);
+    border-radius:16px; padding:16px; margin-bottom:14px; box-shadow:var(--panel-shadow), inset 0 1px 0 rgba(255,255,255,0.02);
+    position:relative; overflow:hidden; transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; animation:floatUp .35s ease both; }
+  .card::before{ content:''; position:absolute; inset:0 auto auto -20%; width:120%; height:1px; background:linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent); opacity:0.45; }
+  .card:hover{ transform:translateY(-1px); border-color:rgba(122,204,255,0.38); box-shadow:0 18px 32px rgba(2,8,18,0.46), inset 0 1px 0 rgba(255,255,255,0.04); }
+  .card.warn{ border-color:rgba(255,93,93,0.45); background:linear-gradient(135deg, rgba(255,93,93,0.12), rgba(14,31,56,0.97)); }
+  .card.good{ border-color:rgba(51,209,122,0.45); background:linear-gradient(135deg, rgba(51,209,122,0.12), rgba(14,31,56,0.97)); }
+  .label{ font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-dim); margin-bottom:6px; }
+  .form-errors{ min-height:18px; margin:0 0 12px; font-size:12px; font-weight:600; color:var(--red); }
+  .field-group{ display:grid; gap:8px; }
+  .input-invalid{ border-color:rgba(255,93,93,0.9) !important; box-shadow:0 0 0 3px rgba(255,93,93,0.12); }
   .row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
-  .btn{ font-family:'Oswald'; text-transform:uppercase; letter-spacing:0.04em; font-size:14px; font-weight:600; color:#fff;
-    background:linear-gradient(135deg, var(--blue), #1467a3); border:none; border-radius:10px; padding:14px 16px;
-    cursor:pointer; width:100%; text-align:center; box-shadow:0 4px 14px rgba(26,143,209,0.35); transition:transform .12s ease; }
-  .btn:active{ transform:scale(0.97); }
-  .btn.ghost{ background:transparent; border:1px solid var(--border); color:var(--text); box-shadow:none; }
-  .btn.gold{ background:linear-gradient(135deg, var(--gold), #c99a0a); color:#1a1400; box-shadow:0 4px 14px rgba(245,197,24,0.3);}
-  .btn.danger{ background:linear-gradient(135deg, var(--red), #a83232); box-shadow:0 4px 14px rgba(255,93,93,0.3); }
-  .btn.green{ background:linear-gradient(135deg, var(--green), #1e9a5c); box-shadow:0 4px 14px rgba(51,209,122,0.3); }
+  .btn{ font-family:'Oswald'; text-transform:uppercase; letter-spacing:0.05em; font-size:14px; font-weight:600; color:#fff;
+    background:linear-gradient(135deg, #196ea9 0%, var(--blue) 24%, #1297d8 100%); border:1px solid rgba(134,214,255,0.28);
+    border-radius:12px; padding:14px 16px; cursor:pointer; width:100%; text-align:center; box-shadow:0 10px 18px rgba(13,96,162,0.26), inset 0 1px 0 rgba(255,255,255,0.14);
+    transition:transform .12s ease, box-shadow .12s ease, filter .12s ease, border-color .12s ease; position:relative; overflow:hidden; }
+  .btn::before{ content:''; position:absolute; inset:0; background:linear-gradient(120deg, transparent 20%, rgba(255,255,255,0.22) 50%, transparent 80%); transform:translateX(-120%); transition:transform .5s ease; }
+  .btn:hover{ transform:translateY(-1px); filter:brightness(1.04); box-shadow:0 14px 24px rgba(13,96,162,0.30), inset 0 1px 0 rgba(255,255,255,0.2); }
+  .btn:hover::before{ transform:translateX(120%); }
+  .btn:active{ transform:translateY(1px) scale(.99); }
+  .btn.ghost{ background:rgba(7,18,30,0.65); border:1px solid rgba(130,167,219,0.22); color:var(--text); box-shadow:inset 0 1px 0 rgba(255,255,255,0.05); }
+  .btn.gold{ background:linear-gradient(135deg, var(--gold-soft), var(--gold), #d39f12 100%); color:#1b1400; border-color:rgba(255,223,121,0.4);
+    box-shadow:0 12px 24px rgba(245,197,24,.22), inset 0 1px 0 rgba(255,255,255,0.18); animation:glowGold 2.8s ease-in-out infinite; }
+  .btn.danger{ background:linear-gradient(135deg, #ff796b, var(--red) 45%, #b33838); box-shadow:0 10px 22px rgba(255,93,93,0.24); }
+  .btn.green{ background:linear-gradient(135deg, #4de092, var(--green) 42%, #1d995a); box-shadow:0 10px 22px rgba(51,209,122,0.24); }
   .btn.small{ padding:10px 12px; font-size:12px; }
   .btn:disabled{ opacity:0.35; cursor:not-allowed; box-shadow:none; }
   .btn-stack{ display:flex; flex-direction:column; gap:10px; margin-top:auto; padding-top:14px; }
@@ -81,9 +125,10 @@
   input:focus, select:focus{ outline:none; border-color:var(--blue); }
 
   .team-pick{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-  .team-pick .tp{ background:#081426; border:1px solid var(--border); border-radius:10px; padding:12px; text-align:center;
-    font-size:12px; cursor:pointer; }
-  .team-pick .tp.sel{ border-color:var(--ice); background:rgba(0,200,255,0.08); color:var(--ice); }
+  .team-pick .tp{ background:linear-gradient(180deg, rgba(9,19,32,0.95), rgba(14,25,42,0.9)); border:1px solid rgba(130,167,219,0.2); border-radius:12px; padding:12px; text-align:center;
+    font-size:12px; cursor:pointer; transition:border-color .15s ease, transform .12s ease, box-shadow .15s ease, background .15s ease; }
+  .team-pick .tp:hover{ border-color:rgba(98,217,255,0.9); transform:translateY(-1px) scale(1.01); box-shadow:0 8px 18px rgba(12,77,123,0.12); }
+  .team-pick .tp.sel{ border-color:rgba(98,217,255,0.9); background:linear-gradient(180deg, rgba(13,74,108,0.25), rgba(14,25,42,0.95)); color:var(--ice); box-shadow:0 0 0 1px rgba(98,217,255,0.18), 0 10px 20px rgba(39,132,188,0.18); animation:cinematicPulse 2.4s ease-in-out infinite; }
 
   .attr-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .attr{ background:#081426; border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
@@ -94,23 +139,29 @@
   .rel-label{ display:flex; justify-content:space-between; font-size:12px; }
   .rel-label span:last-child{ color:var(--text-dim); font-family:'Oswald'; }
 
-  .pitch-header{ text-align:center; margin-bottom:16px; }
-  .score-line{ font-family:'Oswald'; font-size:38px; font-weight:700; letter-spacing:0.02em; }
+  .pitch-header{ text-align:center; margin-bottom:16px; padding:18px 12px 12px; border-radius:18px; background:linear-gradient(180deg, rgba(14,31,56,0.9), rgba(8,18,31,0.94)); border:1px solid rgba(128,167,219,0.18); box-shadow:inset 0 1px 0 rgba(255,255,255,0.02), 0 20px 22px rgba(3,8,19,0.26); animation:floatUp .35s ease both; }
+  .score-line{ font-family:'Oswald'; font-size:38px; font-weight:700; letter-spacing:0.03em; text-shadow:0 6px 18px rgba(18,151,216,0.12); }
   .minute-tag{ display:inline-flex; align-items:center; gap:6px; background:rgba(255,93,93,0.12); color:var(--red);
     border:1px solid rgba(255,93,93,0.4); padding:4px 12px; border-radius:20px; font-family:'Oswald'; font-size:13px;
-    letter-spacing:0.05em; margin-top:8px; }
+    letter-spacing:0.05em; margin-top:8px; box-shadow:0 8px 18px rgba(255,93,93,0.12); }
+  #screen-match .score-line, #screen-result .score-line{ animation:cinematicPulse 2.8s ease-in-out infinite; }
   .dot-live{ width:6px; height:6px; border-radius:50%; background:var(--red); animation:pulse 1.1s infinite; }
   @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.3;} }
 
-  .commentary{ background:#081426; border-left:3px solid var(--blue); border-radius:0 10px 10px 0; padding:12px 14px;
-    font-size:13px; line-height:1.5; color:var(--text-dim); margin-bottom:8px; animation:fadeIn .3s ease; }
+  .commentary{ background:linear-gradient(135deg, rgba(11,22,40,0.98), rgba(15,27,44,0.94)); border-left:3px solid var(--blue); border-radius:0 12px 12px 0; padding:12px 14px;
+    font-size:13px; line-height:1.5; color:var(--text-dim); margin-bottom:8px; animation:fadeIn .3s ease; box-shadow:inset 0 1px 0 rgba(255,255,255,0.02); }
   .commentary.event{ border-left-color:var(--gold); color:var(--text); }
-  .commentary-log{ display:flex; flex-direction:column-reverse; max-height:260px; overflow-y:auto; margin-bottom:16px; }
+  .commentary-log{ display:flex; flex-direction:column-reverse; max-height:260px; overflow-y:auto; margin-bottom:16px; padding-right:2px; }
+  #screen-result .card{ animation:floatUp .4s ease both; }
+  #screen-result .card:nth-child(2){ animation-delay:.05s; }
+  #screen-result .card:nth-child(3){ animation-delay:.1s; }
 
   .choice-card{ background:linear-gradient(135deg, #0e2038, #0a1628); border:1px solid var(--border); border-radius:12px;
-    padding:14px; margin-bottom:10px; cursor:pointer; transition:border-color .15s ease, transform .1s ease; }
-  .choice-card:hover{ border-color:var(--blue); }
-  .choice-card:active{ transform:scale(0.98); }
+    padding:14px; margin-bottom:10px; cursor:pointer; transition:border-color .15s ease, transform .12s ease, box-shadow .15s ease; position:relative; overflow:hidden; }
+  .choice-card::before{ content:''; position:absolute; inset:0; background:linear-gradient(120deg, transparent 20%, rgba(255,255,255,0.09) 50%, transparent 80%); transform:translateX(-120%); transition:transform .5s ease; }
+  .choice-card:hover{ border-color:var(--blue); box-shadow:0 16px 24px rgba(0,0,0,.18); transform:translateY(-2px); }
+  .choice-card:hover::before{ transform:translateX(120%); }
+  .choice-card:active{ transform:scale(0.985); }
   .choice-title{ font-family:'Oswald'; font-size:15px; letter-spacing:0.02em; margin-bottom:4px; }
   .choice-meta{ font-size:11px; color:var(--text-dim); display:flex; justify-content:space-between; }
   .risk-safe{ color:var(--green); } .risk-mid{ color:var(--gold); } .risk-high{ color:var(--red); }
@@ -177,7 +228,7 @@
 
     <div class="card">
       <div class="label">Girone di partenza</div>
-      <select id="inpGirone" onchange="renderTeamPickerByGirone()">
+      <select id="inpGirone" onchange="renderTeamPickerByGirone(); validateCreateForm();">
         <option value="">— Scegli girone —</option>
       </select>
     </div>
@@ -187,14 +238,16 @@
       <div class="team-pick" id="teamPicker"></div>
     </div>
 
+    <div id="formErrors" class="form-errors" aria-live="polite"></div>
+
     <div id="blockNuovoGiocatore">
       <div class="card">
         <div class="label">Nome giocatore</div>
-        <input type="text" id="inpName" placeholder="Es. Marco Bianchi" maxlength="20">
+        <input type="text" id="inpName" placeholder="Es. Marco Bianchi" maxlength="20" oninput="validateCreateForm()">
       </div>
       <div class="card">
         <div class="label">Ruolo</div>
-        <select id="inpRole" onchange="renderAllocator()">
+        <select id="inpRole" onchange="renderAllocator(); validateCreateForm();">
           <option value="Portiere">Portiere</option>
           <option value="Difensore">Difensore</option>
           <option value="Regista">Regista (play basso)</option>
@@ -204,7 +257,7 @@
       </div>
       <div class="card">
         <div class="label">Data di nascita</div>
-        <input type="date" id="inpDataNascita" value="2000-01-01">
+        <input type="date" id="inpDataNascita" value="2000-01-01" onchange="validateCreateForm()">
       </div>
       <div class="card">
         <div class="row" style="margin-bottom:10px;">
@@ -234,10 +287,14 @@
     <div id="achToast"></div>
 
     <div class="card" style="background:linear-gradient(135deg, var(--navy-card), #0a1a30);">
-      <div class="row" style="margin-bottom:12px;">
+      <div class="row" style="margin-bottom:6px;">
         <div>
           <div style="font-family:'Oswald'; font-size:18px;" id="hubName">—</div>
           <div class="subtle" id="hubRole">—</div>
+        </div>
+        <div style="text-align:center; flex:1;">
+          <div class="subtle" style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:2px;">Reputazione</div>
+          <div style="font-family:'Oswald'; font-size:15px; color:var(--gold);" id="hubReputazione">50%</div>
         </div>
         <div style="text-align:right;">
           <div class="badge blue" id="hubLevel">Lv. 1</div>
@@ -268,12 +325,8 @@
         <div class="mini-bar-wrap"><div class="mini-bar-fill" id="relCompBar" style="width:55%; background:var(--ice);"></div></div></div>
     </div>
 
-    <div class="card">
-      <div class="row">
-        <div><div class="label" style="margin:0;">Contratto</div><div style="font-family:'Oswald'; font-size:15px;" id="finContratto">—</div></div>
-        <div style="text-align:right;"><div class="label" style="margin:0;">Reputazione</div><div style="font-family:'Oswald'; font-size:16px; color:var(--gold);" id="finReputazione">50%</div></div>
-      </div>
-    </div>
+    <div id="finContratto" style="display:none;"></div>
+    <div id="finReputazione" style="display:none;"></div>
 
     <div id="statusBanner"></div>
 
@@ -294,7 +347,7 @@
       <button class="btn ghost" onclick="showScreen('coppa')">Coppa Leonessa</button>
     </div>
 
-    <div class="card" style="margin-top:16px;">
+    <div class="card" id="lavoroCard" style="margin-top:16px; display:none;">
       <div class="label">Lavoro</div>
       <div class="subtle" id="lavoroInfo" style="margin-bottom:8px;">—</div>
       <div class="btn-stack" id="lavoroOptions"></div>
@@ -387,6 +440,7 @@
     <div class="card"><div class="label">Attributi</div><div class="attr-grid" id="carAttrs"></div></div>
     <div class="card"><div class="label">Statistiche di carriera</div><div class="attr-grid" id="carStats"></div></div>
     <div class="card"><div class="label">Finanze &amp; relazioni</div><div class="attr-grid" id="carFinRel"></div></div>
+    <div class="card" id="carLavoroCard"><div class="label">Lavoro extrasportivo</div><div id="carLavoro"></div></div>
     <div class="card"><div class="label">Traguardi</div><div id="carAchievements"></div></div>
     <div class="card">
       <div class="label">Registro partite</div>
@@ -1004,6 +1058,55 @@ renderAllocator();
 renderTeamPicker();
 selezionaModalitaCreazione('nuovo');
 
+function setFormError(message){
+  const box = document.getElementById('formErrors');
+  if (!box) return;
+  box.textContent = message || '';
+}
+
+function validateCreateForm(){
+  const errors = [];
+  const nameInput = document.getElementById('inpName');
+  const birthInput = document.getElementById('inpDataNascita');
+
+  if (!selectedStartTeam) {
+    errors.push('Scegli girone e squadra di partenza.');
+  }
+
+  if (modalitaCreazione === 'nuovo') {
+    const name = (nameInput?.value || '').trim();
+    if (name.length < 2) {
+      errors.push('Il nome deve contenere almeno 2 caratteri.');
+    } else if (name.length > 20) {
+      errors.push('Il nome non può superare i 20 caratteri.');
+    }
+
+    if (!birthInput?.value) {
+      errors.push('Inserisci la data di nascita.');
+    } else {
+      const birthDate = new Date(`${birthInput.value}T00:00:00`);
+      const today = new Date();
+      if (Number.isNaN(birthDate.getTime()) || birthDate > today) {
+        errors.push('La data di nascita non può essere futura.');
+      }
+    }
+
+    if (pointsLeft > 0) {
+      errors.push('Distribuisci tutti i 10 punti attributo.');
+    }
+  }
+
+  if (modalitaCreazione === 'esistente' && !selectedRealPlayer) {
+    errors.push('Scegli un giocatore esistente dalla rosa.');
+  }
+
+  const firstError = errors[0] || '';
+  setFormError(firstError);
+  nameInput?.classList.toggle('input-invalid', modalitaCreazione === 'nuovo' && !!firstError && (nameInput.value || '').trim().length < 2);
+  birthInput?.classList.toggle('input-invalid', modalitaCreazione === 'nuovo' && !!firstError && (!birthInput.value || new Date(`${birthInput.value}T00:00:00`) > new Date()));
+  return errors.length === 0;
+}
+
 function restartCareer(){
   if(confirm('Vuoi davvero ricominciare? La carriera attuale sarà cancellata.')){
     localStorage.removeItem('carriera_csi_save');
@@ -1021,13 +1124,14 @@ function restartCareer(){
 
 function startCareer(){
   if(!selectedStartTeam){
-    // Bug: senza questo controllo si poteva procedere senza aver scelto girone/squadra di
-    // partenza, partendo con una squadra di default mai vista/selezionata dal giocatore.
-    alert('Scegli prima un girone e una squadra di partenza.');
+    setFormError('Scegli prima un girone e una squadra di partenza.');
     return;
   }
   if(modalitaCreazione==='esistente' && !selectedRealPlayer){
-    alert('Scegli un giocatore esistente dalla rosa, oppure torna a "Crea un nuovo giocatore".');
+    setFormError('Scegli un giocatore esistente dalla rosa, oppure torna a "Crea un nuovo giocatore".');
+    return;
+  }
+  if(modalitaCreazione==='nuovo' && !validateCreateForm()){
     return;
   }
   let name, role, base, dataNascita;
@@ -1363,25 +1467,29 @@ function renderHub(){
   setMini('relProcBar','relProcTxt', state.relazioni.procuratore);
   setMini('relCompBar','relCompTxt', state.relazioni.compagni);
 
+  document.getElementById('hubReputazione').textContent = state.reputazione+'%';
+  // kept for backward-compat with any references; elements are now hidden
   document.getElementById('finContratto').textContent = `€${state.contratto.stipendio}/sett. · ${state.contratto.stagioniResidue} stag.`;
   document.getElementById('finReputazione').textContent = state.reputazione+'%';
 
   const lavAnni = Math.floor(state.finanze.anzianita/12);
   const lavStipendio = salarioLavoro(state.finanze.statoLavoro, lavAnni);
   const lavBloccato = !lavoroModificabile();
-  document.getElementById('lavoroInfo').innerHTML = (state.finanze.statoLavoro==='Nessuno'
-    ? 'Nessun lavoro attivo: niente reddito extra, ma niente consumo di energia.'
-    : `${state.finanze.statoLavoro==='PartTime'?'Part-time':'Full-time'} · €${lavStipendio}/mese · -${energiaCostoLavoro(state.finanze.statoLavoro)} energia/settimana · anzianità ${lavAnni} ann${lavAnni===1?'o':'i'}`)
-    + (lavBloccato ? `<div class="subtle" style="margin-top:6px;">La scelta si può cambiare solo a inizio stagione.</div>` : '');
-  const lavBox = document.getElementById('lavoroOptions'); lavBox.innerHTML = '';
-  [['Nessuno','Nessuno'], ['PartTime','Part-time'], ['FullTime','Full-time']].forEach(([val,label])=>{
-    const btn = document.createElement('button');
-    btn.className = 'btn' + (state.finanze.statoLavoro===val ? ' gold' : ' ghost');
-    btn.textContent = label;
-    btn.disabled = lavBloccato;
-    btn.onclick = ()=>impostaLavoro(val);
-    lavBox.appendChild(btn);
-  });
+  // Mostra la card Lavoro nell'hub solo a inizio stagione (scelta libera)
+  document.getElementById('lavoroCard').style.display = lavBloccato ? 'none' : 'block';
+  if (!lavBloccato) {
+    document.getElementById('lavoroInfo').innerHTML = (state.finanze.statoLavoro==='Nessuno'
+      ? 'Nessun lavoro attivo: niente reddito extra, ma niente consumo di energia.'
+      : `${state.finanze.statoLavoro==='PartTime'?'Part-time':'Full-time'} · €${lavStipendio}/mese · -${energiaCostoLavoro(state.finanze.statoLavoro)} energia/settimana · anzianità ${lavAnni} ann${lavAnni===1?'o':'i'}`);
+    const lavBox = document.getElementById('lavoroOptions'); lavBox.innerHTML = '';
+    [['Nessuno','Nessuno'], ['PartTime','Part-time'], ['FullTime','Full-time']].forEach(([val,label])=>{
+      const btn = document.createElement('button');
+      btn.className = 'btn' + (state.finanze.statoLavoro===val ? ' gold' : ' ghost');
+      btn.textContent = label;
+      btn.onclick = ()=>impostaLavoro(val);
+      lavBox.appendChild(btn);
+    });
+  }
 
   document.getElementById('coppaHubBtn').style.display = (state.coppa || state.coppaTorneo) ? 'flex' : 'none';
 
@@ -1395,7 +1503,13 @@ function renderHub(){
   } else {
     document.getElementById('hubGiornata').textContent = `Giornata ${state.giornata}/${state.calendario.length} · ${formattaDataIT(dataGiornata(state.stagione, state.giornata))}`;
     const opp = state.calendario[state.giornata-1];
-    document.getElementById('hubOpponent').textContent = opp ? `vs ${opp.nome}` : '—';
+    if (opp) {
+      const oppPos = state.classifica.findIndex(t=>t.nome===opp.nome);
+      const posLabel = oppPos >= 0 ? ` <span style="font-family:'Inter',sans-serif;font-size:13px;font-weight:400;color:var(--ice);">(${oppPos+1}°)</span>` : '';
+      document.getElementById('hubOpponent').innerHTML = `vs ${opp.nome}${posLabel}`;
+    } else {
+      document.getElementById('hubOpponent').textContent = '—';
+    }
   }
 
   const box = document.getElementById('trainingOptions'); box.innerHTML = '';
@@ -2256,9 +2370,16 @@ function renderCarriera(){
   document.getElementById('carFinRel').innerHTML = `
     <div class="attr"><div class="attr-name">Saldo</div><div class="attr-val">€${state.finanze.saldo}</div></div>
     <div class="attr"><div class="attr-name">Compenso sportivo</div><div class="attr-val">€${state.finanze.compensoSportivo||0}/mese</div></div>
-    <div class="attr"><div class="attr-name">Reputazione</div><div class="attr-val">${state.reputazione}%</div></div>
+    <div class="attr"><div class="attr-name">Contratto</div><div class="attr-val">€${state.contratto.stipendio}/sett. · ${state.contratto.stagioniResidue} stag.</div></div>
+    <div class="attr"><div class="attr-name">Reputazione</div><div class="attr-val" style="color:var(--gold);">${state.reputazione}%</div></div>
     <div class="attr"><div class="attr-name">Rapp. Mister</div><div class="attr-val">${state.relazioni.mister}%</div></div>
     <div class="attr"><div class="attr-name">Rapp. Compagni</div><div class="attr-val">${state.relazioni.compagni}%</div></div>`;
+  const lavAnniCar = Math.floor(state.finanze.anzianita/12);
+  const lavStipendioCar = salarioLavoro(state.finanze.statoLavoro, lavAnniCar);
+  const lavLabelCar = state.finanze.statoLavoro==='PartTime' ? 'Part-time' : state.finanze.statoLavoro==='FullTime' ? 'Full-time' : 'Nessuno';
+  document.getElementById('carLavoro').innerHTML = state.finanze.statoLavoro==='Nessuno'
+    ? `<div class="subtle">Nessun lavoro attivo.</div>`
+    : `<div class="attr-grid"><div class="attr"><div class="attr-name">Tipo</div><div class="attr-val">${lavLabelCar}</div></div><div class="attr"><div class="attr-name">Stipendio</div><div class="attr-val">€${lavStipendioCar}/mese</div></div><div class="attr"><div class="attr-name">Costo energia</div><div class="attr-val">-${energiaCostoLavoro(state.finanze.statoLavoro)}/sett.</div></div><div class="attr"><div class="attr-name">Anzianità</div><div class="attr-val">${lavAnniCar} ann${lavAnniCar===1?'o':'i'}</div></div></div>`;
   const achBox = document.getElementById('carAchievements');
   const unlocked = ACHIEVEMENTS.filter(a=>state.achievements.includes(a.id));
   achBox.innerHTML = unlocked.length ? unlocked.map(a=>`<div class="ach"><div class="ach-icon">${a.icon}</div><div><div class="ach-name">${a.label}</div><div class="ach-desc">${a.desc}</div></div></div>`).join('') : `<div class="subtle">Nessun traguardo ancora sbloccato.</div>`;

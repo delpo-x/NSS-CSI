@@ -1,0 +1,19 @@
+{
+  "Aston 5 Perle": { "nome": "Aston 5 Perle", "serie": "C", "girone": "Girone E" },
+  "Elettrotecnic": { "nome": "Elettrotecnic", "serie": "C", "girone": "Girone E" },
+  "Gso Capriolo": { "nome": "Gso Capriolo", "serie": "C", "girone": "Girone E" },
+  "Softmetal": { "nome": "Softmetal", "serie": "C", "girone": "Girone E" },
+  "Nigoline": { "nome": "Nigoline", "serie": "C", "girone": "Girone E" },
+  "Sangiu United": { "nome": "Sangiu United", "serie": "C", "girone": "Girone E" },
+  "Implast": { "nome": "Implast", "serie": "C", "girone": "Girone E" },
+  "Brescia Passion": { "nome": "Brescia Passion", "serie": "C", "girone": "Girone F" },
+  "Real Benaco": { "nome": "Real Benaco", "serie": "C", "girone": "Girone F" },
+  "A.C. Medole": { "nome": "A.C. Medole", "serie": "C", "girone": "Girone F" },
+  "U.S. Cignano": { "nome": "U.S. Cignano", "serie": "C", "girone": "Girone F" },
+  "Riversoc": { "nome": "Riversoc", "serie": "C", "girone": "Girone F" },
+  "Lions 25": { "nome": "Lions 25", "serie": "C", "girone": "Girone F" },
+  "G.S.O. Brandico": { "nome": "G.S.O. Brandico", "serie": "C", "girone": "Girone F" },
+  "A.C. Muscoline": { "nome": "A.C. Muscoline", "serie": "B", "girone": "Girone A" },
+  "G.S.O. Gazzolo": { "nome": "G.S.O. Gazzolo", "serie": "B", "girone": "Girone A" },
+  "Real Ghedi": { "nome": "Real Ghedi", "serie": "A", "girone": "Girone A" }
+}
