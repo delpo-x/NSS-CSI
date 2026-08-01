@@ -226,14 +226,14 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="blockGironePartenza">
       <div class="label">Girone di partenza</div>
       <select id="inpGirone" onchange="renderTeamPickerByGirone(); validateCreateForm();">
         <option value="">— Scegli girone —</option>
       </select>
     </div>
 
-    <div class="card">
+    <div class="card" id="blockSquadraPartenza">
       <div class="label">Squadra di partenza</div>
       <div class="team-pick" id="teamPicker"></div>
     </div>
@@ -270,8 +270,10 @@
 
     <div id="blockGiocatoreEsistente" style="display:none;">
       <div class="card">
-        <div class="label">Giocatore esistente nella rosa</div>
-        <div class="subtle" style="margin-bottom:8px;">Scegli prima girone e squadra: qui sotto compariranno i giocatori reali della rosa. Continuerai la carriera con le sue statistiche già maturate (ruolo e attributi generati dal suo overall).</div>
+        <div class="label">Squadra e giocatore esistente</div>
+        <div class="subtle" style="margin-bottom:8px;">Scegli una squadra fra tutte quelle del database, poi uno dei suoi giocatori reali. La carriera partirà dalla serie della squadra selezionata.</div>
+        <select id="realTeamSelect" onchange="selezionaSquadraReale(this.value)"></select>
+        <div class="label" style="margin-top:14px;">Giocatore</div>
         <div class="team-pick" id="realPlayerPicker"></div>
       </div>
     </div>
@@ -977,12 +979,49 @@ let selectedStartTeam = null;
 let modalitaCreazione = 'nuovo';
 let selectedRealPlayer = null;
 function selezionaModalitaCreazione(modo){
+  const modalitaCambiata = modalitaCreazione !== modo;
   modalitaCreazione = modo;
+  if(modalitaCambiata){
+    selectedStartTeam = null;
+    selectedRealPlayer = null;
+    if(modo==='nuovo'){
+      document.getElementById('inpGirone').value = '';
+      renderTeamPickerByGirone();
+    }
+  }
+  document.getElementById('blockGironePartenza').style.display = modo==='nuovo' ? 'block' : 'none';
+  document.getElementById('blockSquadraPartenza').style.display = modo==='nuovo' ? 'block' : 'none';
   document.getElementById('blockNuovoGiocatore').style.display = modo==='nuovo' ? 'block' : 'none';
   document.getElementById('blockGiocatoreEsistente').style.display = modo==='esistente' ? 'block' : 'none';
   document.getElementById('btnModoNuovo').classList.toggle('gold', modo==='nuovo');
   document.getElementById('btnModoEsistente').classList.toggle('gold', modo==='esistente');
-  if(modo==='esistente') renderRealPlayerPicker();
+  if(modo==='esistente') renderRealTeamPicker();
+}
+function renderRealTeamPicker(){
+  const select = document.getElementById('realTeamSelect');
+  select.innerHTML = '<option value="">— Scegli squadra —</option>';
+  const squadrePerSerie = {};
+  Object.values(DB_SQUADRE).forEach(sq=>{
+    (squadrePerSerie[sq.serie] = squadrePerSerie[sq.serie] || []).push(sq);
+  });
+  Object.keys(squadrePerSerie).sort().forEach(serie=>{
+    const gruppo = document.createElement('optgroup');
+    gruppo.label = `Serie ${serie}`;
+    squadrePerSerie[serie].sort((a,b)=>a.nome.localeCompare(b.nome)).forEach(sq=>{
+      const opt = document.createElement('option');
+      opt.value = sq.nome; opt.textContent = sq.nome;
+      opt.selected = sq.nome === selectedStartTeam;
+      gruppo.appendChild(opt);
+    });
+    select.appendChild(gruppo);
+  });
+  renderRealPlayerPicker();
+}
+function selezionaSquadraReale(nomeSquadra){
+  selectedStartTeam = nomeSquadra || null;
+  selectedRealPlayer = null;
+  renderRealPlayerPicker();
+  validateCreateForm();
 }
 function renderRealPlayerPicker(){
   const box = document.getElementById('realPlayerPicker'); box.innerHTML = '';
@@ -1165,6 +1204,7 @@ function startCareer(){
     dataNascita = document.getElementById('inpDataNascita').value;
   }
 
+  const legaIniziale = modalitaCreazione==='esistente' ? (Object.values(DB_SQUADRE).find(s=>s.nome===selectedStartTeam)?.serie || 'C') : 'C';
   state = {
     name, role,
     dataNascita,
@@ -1172,12 +1212,12 @@ function startCareer(){
     livello:1, xp:0, xpNext:100,
     energia:100, forma:65, morale:65,
     stagione:1, giornata:1,
-    lega:'C',
+    lega:legaIniziale,
     contratto: {squadra:selectedStartTeam, stipendio:110, stagioniResidue:2},
     carriera: {gol:0, assist:0, partiteVoti:[]},
     stagioneStats: {gol:0, assist:0, voti:[], golSubiti:0, cleanSheet:0},
     relazioni: {mister:55, procuratore:50, compagni:55},
-    finanze: {saldo:300, stipendio:110, statoLavoro:'Nessuno', anzianita:0, budgetClub:buildBudgetClub('C'), marketing:0, compensoSportivo:0},
+    finanze: {saldo:300, stipendio:110, statoLavoro:'Nessuno', anzianita:0, budgetClub:buildBudgetClub(legaIniziale), marketing:0, compensoSportivo:0},
     reputazione:45,
     infortunio: null, squalifica: 0,
     cartelliniStagione: 0, streakVittorie: 0,
@@ -1200,7 +1240,7 @@ function startCareer(){
   };
   const season = buildTierSeason(state.lega, teamName());
   state.calendario = season.calendario; state.classifica = season.classifica;
-  addDiario(`Firmi il primo contratto professionistico con ${teamName()} (${LEAGUES.C.label}).`);
+  addDiario(`Firmi il primo contratto professionistico con ${teamName()} (${LEAGUES[state.lega].label}).`);
   save(); renderHub(); showScreen('hub');
 }
 
