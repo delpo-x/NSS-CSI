@@ -9,10 +9,7 @@
 <style>
   :root{
     --navy-deep:#040b17; --navy:#0a1628; --navy-card:#0e1f38; --navy-card-2:#132746;
-    /* Palette ad alto contrasto: colori distinti anche con protanopia/deuteranopia. */
-    --blue:#198fc5; --ice:#72d5f4; --gold:#f2c94c; --gold-soft:#ffe08a;
-    --red:#f07b24; --green:#16b38a; --purple:#c77dff;
-    --critical:#d94b5f; --critical-soft:#ff8390;
+    --blue:#1a8fd1; --ice:#62d9ff; --gold:#f5c518; --gold-soft:#ffd871; --red:#ff5d5d; --green:#33d17a; --purple:#a97bff;
     --text:#edf5ff; --text-dim:#9bb0cb; --border:#1a3558; --panel-shadow:0 16px 34px rgba(2,8,18,0.42);
   }
   *{box-sizing:border-box; margin:0; padding:0;}
@@ -86,15 +83,12 @@
     position:relative; overflow:hidden; transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; animation:floatUp .35s ease both; }
   .card::before{ content:''; position:absolute; inset:0 auto auto -20%; width:120%; height:1px; background:linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent); opacity:0.45; }
   .card:hover{ transform:translateY(-1px); border-color:rgba(122,204,255,0.38); box-shadow:0 18px 32px rgba(2,8,18,0.46), inset 0 1px 0 rgba(255,255,255,0.04); }
-  .card.warn{ border-color:rgba(240,123,36,0.72); background:linear-gradient(135deg, rgba(240,123,36,0.16), rgba(14,31,56,0.97)); }
-  .card.good{ border-color:rgba(22,179,138,0.72); background:linear-gradient(135deg, rgba(22,179,138,0.16), rgba(14,31,56,0.97)); }
-  .card.warn::after,.card.good::after{ position:absolute; right:12px; top:10px; font-family:'Oswald'; font-size:11px; font-weight:700; letter-spacing:.08em; }
-  .card.warn::after{ content:'X'; color:var(--red); }
-  .card.good::after{ content:'\2713'; color:var(--green); }
+  .card.warn{ border-color:rgba(255,93,93,0.45); background:linear-gradient(135deg, rgba(255,93,93,0.12), rgba(14,31,56,0.97)); }
+  .card.good{ border-color:rgba(51,209,122,0.45); background:linear-gradient(135deg, rgba(51,209,122,0.12), rgba(14,31,56,0.97)); }
   .label{ font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-dim); margin-bottom:6px; }
   .form-errors{ min-height:18px; margin:0 0 12px; font-size:12px; font-weight:600; color:var(--red); }
   .field-group{ display:grid; gap:8px; }
-  .input-invalid{ border-color:rgba(240,123,36,0.95) !important; box-shadow:0 0 0 3px rgba(240,123,36,0.16); }
+  .input-invalid{ border-color:rgba(255,93,93,0.9) !important; box-shadow:0 0 0 3px rgba(255,93,93,0.12); }
   .row{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
   .btn{ font-family:'Oswald'; text-transform:uppercase; letter-spacing:0.05em; font-size:14px; font-weight:600; color:#fff;
     background:linear-gradient(135deg, #196ea9 0%, var(--blue) 24%, #1297d8 100%); border:1px solid rgba(134,214,255,0.28);
@@ -107,9 +101,8 @@
   .btn.ghost{ background:rgba(7,18,30,0.65); border:1px solid rgba(130,167,219,0.22); color:var(--text); box-shadow:inset 0 1px 0 rgba(255,255,255,0.05); }
   .btn.gold{ background:linear-gradient(135deg, var(--gold-soft), var(--gold), #d39f12 100%); color:#1b1400; border-color:rgba(255,223,121,0.4);
     box-shadow:0 12px 24px rgba(245,197,24,.22), inset 0 1px 0 rgba(255,255,255,0.18); animation:glowGold 2.8s ease-in-out infinite; }
-  .btn.warning{ background:linear-gradient(135deg, #ffae53, var(--red) 45%, #b94d12); box-shadow:0 10px 22px rgba(240,123,36,0.28); }
-  .btn.danger{ background:linear-gradient(135deg, var(--critical-soft), var(--critical) 45%, #8f2638); box-shadow:0 10px 22px rgba(217,75,95,0.30); }
-  .btn.green{ background:linear-gradient(135deg, #56d7b2, var(--green) 42%, #087b64); box-shadow:0 10px 22px rgba(22,179,138,0.28); }
+  .btn.danger{ background:linear-gradient(135deg, #ff796b, var(--red) 45%, #b33838); box-shadow:0 10px 22px rgba(255,93,93,0.24); }
+  .btn.green{ background:linear-gradient(135deg, #4de092, var(--green) 42%, #1d995a); box-shadow:0 10px 22px rgba(51,209,122,0.24); }
   .btn.small{ padding:10px 12px; font-size:12px; }
   .btn:disabled{ opacity:0.35; cursor:not-allowed; box-shadow:none; }
   .btn-stack{ display:flex; flex-direction:column; gap:10px; margin-top:auto; padding-top:14px; }
@@ -124,11 +117,8 @@
   .badge{ font-size:10px; padding:3px 8px; border-radius:20px; font-family:'Oswald'; letter-spacing:0.05em; text-transform:uppercase; }
   .badge.blue{ background:rgba(26,143,209,0.18); color:var(--ice); border:1px solid rgba(26,143,209,0.4); }
   .badge.gold{ background:rgba(245,197,24,0.15); color:var(--gold); border:1px solid rgba(245,197,24,0.35); }
-  .badge.red{ background:rgba(240,123,36,0.16); color:#ffae53; border:1px solid rgba(240,123,36,0.68); }
-  .badge.green{ background:rgba(22,179,138,0.16); color:#56d7b2; border:1px solid rgba(22,179,138,0.68); }
-  .badge.gold::before{ content:'= '; font-weight:700; }
-  .badge.red::before{ content:'X '; font-weight:700; }
-  .badge.green::before{ content:'\2713 '; font-weight:700; }
+  .badge.red{ background:rgba(255,93,93,0.15); color:var(--red); border:1px solid rgba(255,93,93,0.4); }
+  .badge.green{ background:rgba(51,209,122,0.15); color:var(--green); border:1px solid rgba(51,209,122,0.4); }
 
   input, select{ width:100%; padding:12px 14px; border-radius:10px; background:#081426; border:1px solid var(--border);
     color:var(--text); font-family:'Inter'; font-size:14px; }
@@ -142,8 +132,6 @@
 
   .attr-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .attr{ background:#081426; border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
-  .attr.overall{ grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; gap:12px; border-color:rgba(242,201,76,0.55); background:linear-gradient(90deg, rgba(242,201,76,0.14), #081426); }
-  .overall-note{ display:block; margin-top:3px; font-size:10px; line-height:1.35; text-transform:none; letter-spacing:0; }
   .attr-name{ font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em; }
   .attr-val{ font-family:'Oswald'; font-size:16px; color:#fff; }
 
@@ -153,9 +141,9 @@
 
   .pitch-header{ text-align:center; margin-bottom:16px; padding:18px 12px 12px; border-radius:18px; background:linear-gradient(180deg, rgba(14,31,56,0.9), rgba(8,18,31,0.94)); border:1px solid rgba(128,167,219,0.18); box-shadow:inset 0 1px 0 rgba(255,255,255,0.02), 0 20px 22px rgba(3,8,19,0.26); animation:floatUp .35s ease both; }
   .score-line{ font-family:'Oswald'; font-size:38px; font-weight:700; letter-spacing:0.03em; text-shadow:0 6px 18px rgba(18,151,216,0.12); }
-  .minute-tag{ display:inline-flex; align-items:center; gap:6px; background:rgba(240,123,36,0.14); color:#ffae53;
-    border:1px solid rgba(240,123,36,0.64); padding:4px 12px; border-radius:20px; font-family:'Oswald'; font-size:13px;
-    letter-spacing:0.05em; margin-top:8px; box-shadow:0 8px 18px rgba(240,123,36,0.16); }
+  .minute-tag{ display:inline-flex; align-items:center; gap:6px; background:rgba(255,93,93,0.12); color:var(--red);
+    border:1px solid rgba(255,93,93,0.4); padding:4px 12px; border-radius:20px; font-family:'Oswald'; font-size:13px;
+    letter-spacing:0.05em; margin-top:8px; box-shadow:0 8px 18px rgba(255,93,93,0.12); }
   #screen-match .score-line, #screen-result .score-line{ animation:cinematicPulse 2.8s ease-in-out infinite; }
   .dot-live{ width:6px; height:6px; border-radius:50%; background:var(--red); animation:pulse 1.1s infinite; }
   @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.3;} }
@@ -176,15 +164,7 @@
   .choice-card:active{ transform:scale(0.985); }
   .choice-title{ font-family:'Oswald'; font-size:15px; letter-spacing:0.02em; margin-bottom:4px; }
   .choice-meta{ font-size:11px; color:var(--text-dim); display:flex; justify-content:space-between; }
-  .risk-safe,.risk-mid,.risk-high{ font-weight:700; }
-  .risk-safe{ color:#56d7b2; } .risk-safe::before{ content:'[S] '; }
-  .risk-mid{ color:var(--gold); } .risk-mid::before{ content:'[M] '; }
-  .risk-high{ color:#ffae53; } .risk-high::before{ content:'[A] '; }
-
-  /* Un focus evidente non basato sul solo cambio di colore. */
-  button:focus-visible, input:focus-visible, select:focus-visible, .choice-card:focus-visible, .team-pick .tp:focus-visible{
-    outline:3px solid var(--gold-soft); outline-offset:3px;
-  }
+  .risk-safe{ color:var(--green); } .risk-mid{ color:var(--gold); } .risk-high{ color:var(--red); }
 
   .event-icon{ width:48px; height:48px; border-radius:50%; background:rgba(169,123,255,0.15); border:1px solid rgba(169,123,255,0.4);
     display:flex; align-items:center; justify-content:center; font-size:22px; margin:0 auto 14px; }
@@ -246,14 +226,14 @@
       </div>
     </div>
 
-    <div class="card" id="blockGironePartenza">
+    <div class="card">
       <div class="label">Girone di partenza</div>
       <select id="inpGirone" onchange="renderTeamPickerByGirone(); validateCreateForm();">
         <option value="">— Scegli girone —</option>
       </select>
     </div>
 
-    <div class="card" id="blockSquadraPartenza">
+    <div class="card">
       <div class="label">Squadra di partenza</div>
       <div class="team-pick" id="teamPicker"></div>
     </div>
@@ -290,10 +270,8 @@
 
     <div id="blockGiocatoreEsistente" style="display:none;">
       <div class="card">
-        <div class="label">Squadra e giocatore esistente</div>
-        <div class="subtle" style="margin-bottom:8px;">Scegli una squadra fra tutte quelle del database, poi uno dei suoi giocatori reali. La carriera partirà dalla serie della squadra selezionata.</div>
-        <select id="realTeamSelect" onchange="selezionaSquadraReale(this.value)"></select>
-        <div class="label" style="margin-top:14px;">Giocatore</div>
+        <div class="label">Giocatore esistente nella rosa</div>
+        <div class="subtle" style="margin-bottom:8px;">Scegli prima girone e squadra: qui sotto compariranno i giocatori reali della rosa. Continuerai la carriera con le sue statistiche già maturate (ruolo e attributi generati dal suo overall).</div>
         <div class="team-pick" id="realPlayerPicker"></div>
       </div>
     </div>
@@ -444,7 +422,7 @@
     <h2 style="font-size:18px; margin-bottom:4px; color:#fff;">Classifica</h2>
     <div class="subtle" style="margin-bottom:14px;" id="classLegaLabel">Serie C</div>
     <div class="card" style="padding:8px 10px;">
-      <table><thead><tr><th>#</th><th>Squadra</th><th class="center">PT</th><th class="center">G</th><th class="center" title="Gol fatti">GF</th><th class="center" title="Gol subiti">GS</th><th class="center" title="Differenza reti">DR</th></tr></thead>
+      <table><thead><tr><th>#</th><th>Squadra</th><th class="center">PT</th><th class="center">G</th></tr></thead>
       <tbody id="classificaBody"></tbody></table>
     </div>
     <div class="btn-stack"><button class="btn ghost" onclick="showScreen('hub')">Torna alla carriera</button></div>
@@ -542,7 +520,7 @@
   <!-- ===================== MERCATO INVERNALE ===================== -->
   <div class="screen" id="screen-marketwinter">
     <h2 style="font-size:18px; margin-bottom:4px; color:#fff;">Sessione di riparazione invernale</h2>
-    <div class="subtle" style="margin-bottom:14px;" id="mwPauseLabel">Pausa invernale: una finestra per allenarti e provare a rinnovare le condizioni col club.</div>
+    <div class="subtle" style="margin-bottom:14px;">Pausa dal 21 dicembre al 24 gennaio: una finestra per allenarti e provare a rinnovare le condizioni col club.</div>
     <div class="card">
       <div class="label">Squadra attuale</div>
       <div style="font-family:'Oswald'; font-size:16px;" id="mwTeam">—</div>
@@ -647,8 +625,8 @@ const ETA_MEDIA_LEGA = {C:26, B:25, A:24};
 function annoCorrente(s){ return ANNO_INIZIO_CARRIERA + (s.stagione - 1); }
 
 /* --- Calendario reale del campionato: ogni stagione parte la prima settimana di settembre e le
-   giornate si giocano a cadenza settimanale. La pausa invernale è delimitata dai sabati delle
-   settimane che contengono il 21 dicembre e il 24 gennaio, quindi cambia data ogni stagione. --- */
+   giornate si giocano a cadenza settimanale, saltando la pausa invernale dal 21 dicembre al 24
+   gennaio compreso (le giornate che vi cadrebbero dentro slittano al 25 gennaio in avanti). --- */
 const MESI_IT = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
 /* Il sabato è il giorno di riferimento fisso di ogni settimana di gioco: la stagione parte sempre
    di sabato (il primo sabato di settembre, non un giorno fisso del mese, perché il 1 settembre non
@@ -656,24 +634,17 @@ const MESI_IT = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio
    non al 25 gennaio fisso — altrimenti la cadenza settimanale (+7 giorni esatti) non ricadrebbe più
    di sabato per il resto della stagione. */
 function primoSabatoDaData(d){ while(d.getUTCDay()!==6) d = new Date(d.getTime()+86400000); return d; }
-function ultimoSabatoEntroData(d){ while(d.getUTCDay()!==6) d = new Date(d.getTime()-86400000); return d; }
 function primoSabatoDiSettembre(anno){ return primoSabatoDaData(new Date(Date.UTC(anno,8,1))); }
-function finestraPausaInvernale(stagione){
-  const annoBase = ANNO_INIZIO_CARRIERA + (stagione - 1);
-  return {
-    inizio: primoSabatoDaData(new Date(Date.UTC(annoBase, 11, 21))),
-    fine: ultimoSabatoEntroData(new Date(Date.UTC(annoBase+1, 0, 24)))
-  };
-}
 function dataGiornata(stagione, giornataNum){
   // Aritmetica in UTC (nessun cambio ora legale): sommare 7*86400000ms in orario locale sfasa
   // la data di un giorno quando l'intervallo attraversa il cambio ora di fine ottobre.
   const annoBase = ANNO_INIZIO_CARRIERA + (stagione - 1);
   let d = primoSabatoDiSettembre(annoBase);
-  const pausa = finestraPausaInvernale(stagione);
   for(let i=1; i<giornataNum; i++){
     d = new Date(d.getTime() + 7*86400000);
-    if(d.getTime() >= pausa.inizio.getTime() && d.getTime() <= pausa.fine.getTime()) d = new Date(pausa.fine.getTime() + 7*86400000);
+    const inizioPausa = Date.UTC(annoBase, 11, 21);
+    const finePausa = Date.UTC(annoBase+1, 0, 24);
+    if(d.getTime() >= inizioPausa && d.getTime() <= finePausa) d = primoSabatoDaData(new Date(Date.UTC(annoBase+1, 0, 25)));
   }
   return d;
 }
@@ -1006,49 +977,12 @@ let selectedStartTeam = null;
 let modalitaCreazione = 'nuovo';
 let selectedRealPlayer = null;
 function selezionaModalitaCreazione(modo){
-  const modalitaCambiata = modalitaCreazione !== modo;
   modalitaCreazione = modo;
-  if(modalitaCambiata){
-    selectedStartTeam = null;
-    selectedRealPlayer = null;
-    if(modo==='nuovo'){
-      document.getElementById('inpGirone').value = '';
-      renderTeamPickerByGirone();
-    }
-  }
-  document.getElementById('blockGironePartenza').style.display = modo==='nuovo' ? 'block' : 'none';
-  document.getElementById('blockSquadraPartenza').style.display = modo==='nuovo' ? 'block' : 'none';
   document.getElementById('blockNuovoGiocatore').style.display = modo==='nuovo' ? 'block' : 'none';
   document.getElementById('blockGiocatoreEsistente').style.display = modo==='esistente' ? 'block' : 'none';
   document.getElementById('btnModoNuovo').classList.toggle('gold', modo==='nuovo');
   document.getElementById('btnModoEsistente').classList.toggle('gold', modo==='esistente');
-  if(modo==='esistente') renderRealTeamPicker();
-}
-function renderRealTeamPicker(){
-  const select = document.getElementById('realTeamSelect');
-  select.innerHTML = '<option value="">— Scegli squadra —</option>';
-  const squadrePerSerie = {};
-  Object.values(DB_SQUADRE).forEach(sq=>{
-    (squadrePerSerie[sq.serie] = squadrePerSerie[sq.serie] || []).push(sq);
-  });
-  Object.keys(squadrePerSerie).sort().forEach(serie=>{
-    const gruppo = document.createElement('optgroup');
-    gruppo.label = `Serie ${serie}`;
-    squadrePerSerie[serie].sort((a,b)=>a.nome.localeCompare(b.nome)).forEach(sq=>{
-      const opt = document.createElement('option');
-      opt.value = sq.nome; opt.textContent = sq.nome;
-      opt.selected = sq.nome === selectedStartTeam;
-      gruppo.appendChild(opt);
-    });
-    select.appendChild(gruppo);
-  });
-  renderRealPlayerPicker();
-}
-function selezionaSquadraReale(nomeSquadra){
-  selectedStartTeam = nomeSquadra || null;
-  selectedRealPlayer = null;
-  renderRealPlayerPicker();
-  validateCreateForm();
+  if(modo==='esistente') renderRealPlayerPicker();
 }
 function renderRealPlayerPicker(){
   const box = document.getElementById('realPlayerPicker'); box.innerHTML = '';
@@ -1231,7 +1165,6 @@ function startCareer(){
     dataNascita = document.getElementById('inpDataNascita').value;
   }
 
-  const legaIniziale = modalitaCreazione==='esistente' ? (Object.values(DB_SQUADRE).find(s=>s.nome===selectedStartTeam)?.serie || 'C') : 'C';
   state = {
     name, role,
     dataNascita,
@@ -1239,12 +1172,12 @@ function startCareer(){
     livello:1, xp:0, xpNext:100,
     energia:100, forma:65, morale:65,
     stagione:1, giornata:1,
-    lega:legaIniziale,
+    lega:'C',
     contratto: {squadra:selectedStartTeam, stipendio:110, stagioniResidue:2},
     carriera: {gol:0, assist:0, partiteVoti:[]},
     stagioneStats: {gol:0, assist:0, voti:[], golSubiti:0, cleanSheet:0},
     relazioni: {mister:55, procuratore:50, compagni:55},
-    finanze: {saldo:300, stipendio:110, statoLavoro:'Nessuno', anzianita:0, budgetClub:buildBudgetClub(legaIniziale), marketing:0, compensoSportivo:0},
+    finanze: {saldo:300, stipendio:110, statoLavoro:'Nessuno', anzianita:0, budgetClub:buildBudgetClub('C'), marketing:0, compensoSportivo:0},
     reputazione:45,
     infortunio: null, squalifica: 0,
     cartelliniStagione: 0, streakVittorie: 0,
@@ -1267,7 +1200,7 @@ function startCareer(){
   };
   const season = buildTierSeason(state.lega, teamName());
   state.calendario = season.calendario; state.classifica = season.classifica;
-  addDiario(`Firmi il primo contratto professionistico con ${teamName()} (${LEAGUES[state.lega].label}).`);
+  addDiario(`Firmi il primo contratto professionistico con ${teamName()} (${LEAGUES.C.label}).`);
   save(); renderHub(); showScreen('hub');
 }
 
@@ -1304,7 +1237,7 @@ function buildTierSeason(tierKey, myTeam){
   const opponentsData = opponentsNames.map(n=>({nome:n, forza:getForzaSquadra(n) || rand(cfg.forzaRange[0],cfg.forzaRange[1])}));
   // Andata e ritorno: ogni avversario si affronta due volte
   const calendario = [...shuffle(opponentsData), ...shuffle(opponentsData)];
-  const classifica = [{nome:myTeam, pt:0, g:0, gf:0, gs:0, me:true}, ...opponentsData.map(o=>({nome:o.nome, pt:0, g:0, gf:0, gs:0, forza:o.forza}))];
+  const classifica = [{nome:myTeam, pt:0, g:0, me:true}, ...opponentsData.map(o=>({nome:o.nome, pt:0, g:0, forza:o.forza}))];
   return {calendario, classifica};
 }
 
@@ -1376,15 +1309,13 @@ function trovaGironeSquadra(gironi, nome){
        così il girone avanza di pari passo con le partite realmente giocate. --- */
 function simulaGironeConGiocatore(girone, myTeamNome){
   const others = girone.filter(sq => sq.nome !== myTeamNome);
-  const prossimi = shuffle(others);
-  // Ogni turno ha la partita della squadra del giocatore e una sola altra sfida: la squadra
-  // esclusa da quella partita è sempre una delle due che si affrontano. Così, dopo N turni,
-  // tutte le squadre del girone hanno esattamente N presenze in classifica.
-  const altreSfide = prossimi.map(opp => {
-    const restanti = others.filter(sq => sq.nome !== opp.nome);
-    return [restanti[0], restanti[1]];
-  });
-  return { prossimi, altreSfide };
+  const altreSfide = [];
+  for(let i = 0; i < others.length; i++){
+    for(let j = i+1; j < others.length; j++){
+      altreSfide.push([others[i], others[j]]);
+    }
+  }
+  return { prossimi: shuffle(others), altreSfide: shuffle(altreSfide) };
 }
 function simulaProssimaSfidaAltrui(){
   if(!state.coppa || !state.coppa.altreSfide.length) return;
@@ -1406,39 +1337,8 @@ function avviaFaseCoppa(tipo, gironi){
   if(!mioGirone) return false;
   const { prossimi, altreSfide } = simulaGironeConGiocatore(mioGirone, myTeam);
   gironi.forEach(g => { if(g !== mioGirone) simulaGironeRoundRobin(g); });
-  state.coppa = { tipo, girone: mioGirone, prossimi, altreSfide, giocate: [], schemaVersion:2 };
+  state.coppa = { tipo, girone: mioGirone, prossimi, altreSfide, giocate: [] };
   return true;
-}
-function riparaGironeCoppaAttivo(){
-  if(!state.coppa || state.coppa.schemaVersion >= 2) return;
-  const coppa = state.coppa;
-  const avversari = [...new Set([...(coppa.giocate||[]).map(g=>g.opp), ...(coppa.prossimi||[]).map(sq=>sq.nome)])];
-  if(avversari.length !== coppa.girone.length-1) return;
-
-  // I vecchi salvataggi non conservavano i risultati delle altre sfide. Si ricostruisce quindi
-  // il girone dai risultati già giocati dal giocatore e si rigenerano solo le altre partite,
-  // mantenendo corretto il numero di gare per ogni squadra in ogni turno.
-  coppa.girone.forEach(sq=>{ sq.g=0; sq.pt=0; sq.gf=0; sq.gs=0; });
-  const turni = avversari.map(nomeOpp => {
-    const restanti = coppa.girone.filter(sq => sq.nome!==teamName() && sq.nome!==nomeOpp);
-    return {nomeOpp, altraSfida:[restanti[0], restanti[1]]};
-  });
-  const assegnaRisultato = (a,b,ga,gb) => {
-    a.g++; b.g++; a.gf+=ga; a.gs+=gb; b.gf+=gb; b.gs+=ga;
-    if(ga>gb) a.pt+=3; else if(gb>ga) b.pt+=3; else { a.pt++; b.pt++; }
-  };
-  const miaSquadra = coppa.girone.find(sq=>sq.nome===teamName());
-  (coppa.giocate||[]).forEach((gara,i)=>{
-    const opp = coppa.girone.find(sq=>sq.nome===gara.opp);
-    assegnaRisultato(miaSquadra, opp, gara.mieiGol, gara.oppGol);
-    const [a,b] = turni[i].altraSfida;
-    const r = simSquadra(a.forza,b.forza);
-    assegnaRisultato(a,b,r.mieiGol,r.oppGol);
-  });
-  const giocate = (coppa.giocate||[]).length;
-  coppa.prossimi = avversari.slice(giocate).map(nome=>coppa.girone.find(sq=>sq.nome===nome));
-  coppa.altreSfide = turni.slice(giocate).map(t=>t.altraSfida);
-  coppa.schemaVersion = 2;
 }
 function iniziaCoppaLeonessa(){
   buildCoppaPreliminary();
@@ -1646,7 +1546,6 @@ function renderHub(){
   } else {
     actions.innerHTML = `<button class="btn" id="btnPlayMatch" onclick="beginMatch()">${coppaAttiva?'Scendi in campo (Coppa)':'Scendi in campo'}</button>
       <button class="btn ghost" id="btnSimMatch" onclick="simulaPartita()">Simula partita</button>
-      <button class="btn warning" onclick="saltaPartitaVolontariamente()" aria-label="Salta partita: penalità alle relazioni">Salta partita</button>
       <button class="btn ghost" onclick="showScreen('classifica')">Classifica</button>
       <button class="btn ghost" onclick="showScreen('carriera')">Scheda giocatore</button>`;
     document.getElementById('btnPlayMatch').disabled = state.energia < 15;
@@ -1783,10 +1682,7 @@ function simSquadra(forzaA, forzaB){
 function applyResultToClassifica(oppName, myGoals, oppGoals){
   const mine = state.classifica.find(t=>t.me);
   const opp = state.classifica.find(t=>t.nome===oppName);
-  state.classifica.forEach(t=>{ if(t.gf===undefined) t.gf=0; if(t.gs===undefined) t.gs=0; });
   mine.g++; opp.g++;
-  mine.gf += myGoals; mine.gs += oppGoals;
-  opp.gf += oppGoals; opp.gs += myGoals;
   if(myGoals>oppGoals){ mine.pt+=3; } else if(myGoals<oppGoals){ opp.pt+=3; } else { mine.pt+=1; opp.pt+=1; }
   const others = state.classifica.filter(t=>!t.me && t.nome!==oppName);
   shuffle(others);
@@ -1796,10 +1692,9 @@ function applyResultToClassifica(oppName, myGoals, oppGoals){
     const ga = clamp(rand(0,3) + Math.round(diff>0?rand(0,1):0),0,6);
     const gb = clamp(rand(0,3) + Math.round(diff<0?rand(0,1):0),0,6);
     a.g++; b.g++;
-    a.gf += ga; a.gs += gb; b.gf += gb; b.gs += ga;
     if(ga>gb) a.pt+=3; else if(gb>ga) b.pt+=3; else { a.pt+=1; b.pt+=1; }
   }
-  state.classifica.sort((x,y)=> (y.pt-x.pt) || ((y.gf-y.gs)-(x.gf-x.gs)) || (y.gf-x.gf));
+  state.classifica.sort((x,y)=> y.pt-x.pt);
 }
 function skipGiornata(motivo){
   if(state.coppa && state.coppa.prossimi.length){
@@ -1829,17 +1724,6 @@ function skipGiornata(motivo){
   state.giornata++;
   postGiornataFlow({risultato:null});
 }
-function saltaPartitaVolontariamente(){
-  // L'assenza è una scelta del giocatore: recupera molto, ma il gruppo la percepisce
-  // negativamente. Il riposo settimanale applicato nel flusso successivo completa il recupero.
-  state.relazioni.mister = clamp(state.relazioni.mister-9, 0, 100);
-  state.relazioni.procuratore = clamp(state.relazioni.procuratore-6, 0, 100);
-  state.relazioni.compagni = clamp(state.relazioni.compagni-11, 0, 100);
-  state.energia = clamp(state.energia+35, 0, 100);
-  state.morale = clamp(state.morale+14, 0, 100);
-  addDiario(`Salti volontariamente la partita: energia e morale recuperano, ma mister, procuratore e compagni perdono fiducia.`);
-  skipGiornata('assenza volontaria');
-}
 function simulaPartita(){
   if(state.energia < 15){
     // L'energia troppo bassa rende il giocatore non schierabile anche in modalità "Simula partita":
@@ -1847,63 +1731,23 @@ function simulaPartita(){
     skipGiornata('energia bassa');
     return;
   }
-  const coppaAttiva = !!(state.coppa && state.coppa.prossimi.length);
-  const opp = coppaAttiva ? state.coppa.prossimi[0] : state.calendario[state.giornata-1];
-  const contesto = coppaAttiva ? 'coppa' : 'campionato';
-  const r = simSquadra(getForzaSquadra(teamName())||58, opp.forza);
-  const overall = overallPesato(state);
-  const condizione = (state.forma-50)*0.22 + (state.energia-50)*0.12 + (state.morale-50)*0.08;
-  const qualita = overall + condizione;
-  const esito = r.mieiGol>r.oppGol ? 'W' : (r.mieiGol===r.oppGol ? 'D' : 'L');
-  let playerGol = 0, playerAssist = 0;
-
-  // I contributi personali sono vincolati ai gol della squadra: una simulazione non può
-  // assegnare al giocatore più gol/assist di quelli realmente segnati dalla sua squadra.
-  if(state.role !== 'Portiere'){
-    const propensioneGol = {Difensore:0.10, Regista:0.16, Ala:0.24, Attaccante:0.34}[state.role] || 0.18;
-    const propensioneAssist = {Difensore:0.08, Regista:0.27, Ala:0.25, Attaccante:0.13}[state.role] || 0.18;
-    const vantaggio = (qualita - opp.forza) / 100;
-    const chanceGol = clamp(propensioneGol + vantaggio*0.18, 0.04, 0.58);
-    const chanceAssist = clamp(propensioneAssist + vantaggio*0.16, 0.04, 0.55);
-    for(let i=0; i<r.mieiGol; i++) if(Math.random() < chanceGol) playerGol++;
-    for(let i=playerGol; i<r.mieiGol; i++) if(Math.random() < chanceAssist) playerAssist++;
+  state.energia = clamp(state.energia-10, 0, 100);
+  if(state.coppa && state.coppa.prossimi.length){
+    const opp = state.coppa.prossimi[0];
+    const r = simSquadra(getForzaSquadra(teamName())||58, opp.forza);
+    addDiario(`Coppa Leonessa: ${teamName()} ${r.mieiGol}-${r.oppGol} ${opp.nome} (partita simulata, in panchina per scelta tecnica).`);
+    applyResultToCoppaGirone(opp.nome, r.mieiGol, r.oppGol);
+    registraPartita({opp: opp.nome, mieiGol: r.mieiGol, oppGol: r.oppGol, contesto:'coppa'});
+    postCoppaMatch();
+    return;
   }
-
-  let rating = 5.15 + (qualita-opp.forza)/34 + (esito==='W'?0.45:(esito==='D'?0:-0.55));
-  rating += playerGol*0.85 + playerAssist*0.55;
-  if(state.role==='Portiere') rating += r.oppGol===0 ? 0.9 : -r.oppGol*0.22;
-  rating = clamp(rating, 3.5, 10);
-  const xpGain = Math.round(16 + Math.max(0, rating-5)*6 + playerGol*12 + playerAssist*9);
-
-  state.energia = clamp(state.energia-15, 0, 100);
-  state.forma = clamp(state.forma + (esito==='W'?6:(esito==='D'?1:-5)), 10, 100);
-  state.morale = clamp(state.morale + (esito==='W'?7:(esito==='D'?0:-6)) + Math.round((rating-6)*2), 5, 100);
-  state.reputazione = clamp(state.reputazione + (esito==='W'?2:(esito==='L'?-2:0)) + Math.round((rating-6)*1.5), 0, 100);
-  state.streakVittorie = esito==='W' ? state.streakVittorie+1 : 0;
-  state.carriera.gol += playerGol; state.carriera.assist += playerAssist; state.carriera.partiteVoti.push(rating);
-  state.stagioneStats.gol += playerGol; state.stagioneStats.assist += playerAssist; state.stagioneStats.voti.push(rating);
-
-  if(coppaAttiva) applyResultToCoppaGirone(opp.nome, r.mieiGol, r.oppGol);
-  else applyResultToClassifica(opp.nome, r.mieiGol, r.oppGol);
-  registraPartita({opp: opp.nome, mieiGol:r.mieiGol, oppGol:r.oppGol, playerGol, playerAssist, voto:rating, contesto});
-  const prefisso = coppaAttiva ? 'Coppa Leonessa' : `G${state.giornata}`;
-  addDiario(`${prefisso}: ${teamName()} ${r.mieiGol}-${r.oppGol} ${opp.nome} (simulata: tu ${playerGol} gol, ${playerAssist} assist, voto ${rating.toFixed(1)}).`);
-  addXP(xpGain); checkAchievements();
-
-  // Si usa la stessa schermata di una partita giocata: la giornata prosegue solo al click
-  // su "Continua", anziché saltare subito alla successiva.
-  state.matchTemp = {contesto, esitoFinale:esito};
-  document.getElementById('resScore').textContent = `${r.mieiGol} - ${r.oppGol}`;
-  document.getElementById('resTeams').textContent = `${teamName()} vs ${opp.nome}${coppaAttiva?' · Coppa Leonessa':''}`;
-  document.getElementById('resRating').textContent = rating.toFixed(1);
-  document.getElementById('resGoals').textContent = playerGol;
-  document.getElementById('resAssists').textContent = playerAssist;
-  document.getElementById('resXP').textContent = '+'+xpGain;
-  document.getElementById('resEvents').textContent = playerGol || playerAssist
-    ? `Simulazione completata: ${state.name} contribuisce con ${playerGol} gol e ${playerAssist} assist. Voto: ${rating.toFixed(1)}.`
-    : `Simulazione completata: ${state.name} gioca la partita senza bonus personali. Voto: ${rating.toFixed(1)}.`;
-  document.getElementById('resInjuryCard').innerHTML = '';
-  save(); showScreen('result');
+  const opp = state.calendario[state.giornata-1];
+  const r = simSquadra(getForzaSquadra(teamName())||58, opp.forza);
+  applyResultToClassifica(opp.nome, r.mieiGol, r.oppGol);
+  registraPartita({opp: opp.nome, mieiGol: r.mieiGol, oppGol: r.oppGol, contesto:'campionato'});
+  addDiario(`G${state.giornata}: ${teamName()} ${r.mieiGol}-${r.oppGol} ${opp.nome} (partita simulata, in panchina per scelta tecnica).`);
+  state.giornata++;
+  postGiornataFlow({risultato:null});
 }
 
 /* ---------- HUB → PARTITA ---------- */
@@ -2449,8 +2293,6 @@ function apriMercatoInvernale(){
   showScreen('marketwinter');
 }
 function renderMercatoInvernale(){
-  const pausa = finestraPausaInvernale(state.stagione);
-  document.getElementById('mwPauseLabel').textContent = `Pausa dal ${formattaDataIT(pausa.inizio)} al ${formattaDataIT(pausa.fine)}: una finestra per allenarti e provare a rinnovare le condizioni col club.`;
   document.getElementById('mwTeam').textContent = teamName();
   document.getElementById('mwContratto').textContent = `${LEAGUES[state.lega].label} · €${state.contratto.stipendio}/sett. · ${state.contratto.stagioniResidue} stagion${state.contratto.stagioniResidue>1?'i':'e'} residue`;
   document.getElementById('btnRinnovoInvernale').disabled = state.rinnovoInvernaleFatto === true;
@@ -2506,9 +2348,7 @@ function renderClassifica(){
   const body = document.getElementById('classificaBody'); body.innerHTML = '';
   state.classifica.forEach((t,i)=>{
     const tr = document.createElement('tr'); if(t.me) tr.className='me';
-    const gf = t.gf||0, gs = t.gs||0, diff = gf-gs;
-    const diffLabel = diff>0 ? `+${diff}` : diff;
-    tr.innerHTML = `<td>${i+1}</td><td>${t.nome}</td><td class="center">${t.pt}</td><td class="center">${t.g}</td><td class="center">${gf}</td><td class="center">${gs}</td><td class="center">${diffLabel}</td>`;
+    tr.innerHTML = `<td>${i+1}</td><td>${t.nome}${t.me?' (tu)':''}</td><td class="center">${t.pt}</td><td class="center">${t.g}</td>`;
     body.appendChild(tr);
   });
 }
@@ -2516,9 +2356,7 @@ function renderCarriera(){
   document.getElementById('carName').textContent = state.name;
   document.getElementById('carRole').textContent = state.role + ' · ' + teamName();
   document.getElementById('carLevel').textContent = 'Lv. '+state.livello;
-  document.getElementById('carAttrs').innerHTML = `
-    <div class="attr overall"><div><div class="attr-name">Overall<span class="overall-note">Valutazione combinata degli attributi, ponderata per il ruolo.</span></div></div><div class="attr-val" style="color:var(--gold);">${overallPesato(state)}</div></div>
-    ${attrKeysFor(state.role).map(k=>`<div class="attr"><div class="attr-name">${attrLabelsFor(state.role)[k]}</div><div class="attr-val">${state.attr[k]}</div></div>`).join('')}`;
+  document.getElementById('carAttrs').innerHTML = attrKeysFor(state.role).map(k=>`<div class="attr"><div class="attr-name">${attrLabelsFor(state.role)[k]}</div><div class="attr-val">${state.attr[k]}</div></div>`).join('');
   const avgVoto = state.carriera.partiteVoti.length ? (state.carriera.partiteVoti.reduce((a,b)=>a+b,0)/state.carriera.partiteVoti.length).toFixed(1) : '—';
   const etaAttuale = calcolaEta(state);
   document.getElementById('carStats').innerHTML = `
@@ -2526,6 +2364,7 @@ function renderCarriera(){
     <div class="attr"><div class="attr-name">Assist carriera</div><div class="attr-val">${state.carriera.assist}</div></div>
     <div class="attr"><div class="attr-name">Media voto</div><div class="attr-val">${avgVoto}</div></div>
     <div class="attr"><div class="attr-name">Partite</div><div class="attr-val">${state.carriera.partiteVoti.length}</div></div>
+    <div class="attr"><div class="attr-name">Overall pesato</div><div class="attr-val">${overallPesato(state)}</div></div>
     <div class="attr"><div class="attr-name">Valore di mercato</div><div class="attr-val">€${valoreMercato(state).toLocaleString('it-IT')}</div></div>
     ${etaAttuale!=null ? `<div class="attr"><div class="attr-name">Età</div><div class="attr-val">${etaAttuale}</div></div>` : ''}`;
   document.getElementById('carFinRel').innerHTML = `
@@ -2558,8 +2397,8 @@ function renderCarriera(){
 
 function renderTabellaGirone(girone, mioTeam){
   if(!girone) return '';
-  return `<table style="width:100%; margin-top:6px;"><thead><tr><th>#</th><th>Squadra</th><th class="center">PT</th><th class="center">G</th><th class="center">DR</th></tr></thead><tbody>` +
-    girone.map((sq,i)=>`<tr${sq.nome===mioTeam?' class="me"':''}><td>${i+1}</td><td>${sq.nome}</td><td class="center">${sq.pt}</td><td class="center">${sq.g}</td><td class="center">${sq.gf-sq.gs}</td></tr>`).join('') +
+  return `<table style="width:100%; margin-top:6px;"><thead><tr><th>#</th><th>Squadra</th><th class="center">PT</th><th class="center">DR</th></tr></thead><tbody>` +
+    girone.map((sq,i)=>`<tr${sq.nome===mioTeam?' class="me"':''}><td>${i+1}</td><td>${sq.nome}${sq.nome===mioTeam?' (tu)':''}</td><td class="center">${sq.pt}</td><td class="center">${sq.gf-sq.gs}</td></tr>`).join('') +
     `</tbody></table>`;
 }
 function renderCoppa(){
@@ -2938,15 +2777,14 @@ function avviaNuovaStagione(){
     if(!state.personalita) state.personalita={individualista:0, trascinatore:0, ragionatore:0};
     if(!state.eventiMatchUltimaGiornata) state.eventiMatchUltimaGiornata={};
     if(!state.coppa || !state.coppa.altreSfide) { if(state.coppa) state.coppa.altreSfide = []; }
-    riparaGironeCoppaAttivo();
     // Migrazione: il ruolo "Mezzala" è stato rinominato in "Ala" (stessi attributi/pesi, solo
     // etichetta diversa) — i salvataggi vecchi vanno rinominati per restare coerenti con select,
     // ROLE_BASE/ROLE_WEIGHTS/ROLE_VALUE_MULT e ruoloDBtoInterno, che ora usano solo "Ala".
     if(state.role==='Mezzala') state.role='Ala';
     if(state.mercatoInvernaleFatto===undefined){
       // Migrazione: la sessione di mercato invernale è nuova. Se il salvataggio è già oltre la
-      // pausa nella stagione corrente, non la si fa comparire retroattivamente.
-      const finePausaCorrente = finestraPausaInvernale(state.stagione).fine;
+      // pausa (21 dic - 24 gen) nella stagione corrente, non la si fa comparire retroattivamente.
+      const finePausaCorrente = new Date(Date.UTC(ANNO_INIZIO_CARRIERA + state.stagione, 0, 24));
       state.mercatoInvernaleFatto = dataGiornata(state.stagione, state.giornata) > finePausaCorrente;
     }
     if(state.allenamentoFattoInvernale===undefined) state.allenamentoFattoInvernale=false;
