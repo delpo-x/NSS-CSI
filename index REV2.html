@@ -808,6 +808,12 @@ function aggiungiSettimana(d){ return new Date(d.getTime() + 7*86400000); }
    avanza settimana per settimana con avanzaSettimanaFuoriStagione(), non più a "sessioni" fisse.
    Il mercato estivo è aperto dal 1 luglio al 31 agosto (mesi 7-8), non un numero fisso di settimane. */
 function inFinestraMercatoEstivo(d){ const m = d.getUTCMonth()+1; return m===7 || m===8; }
+// Deadline Day (Fase E): l'ultima settimana utile di mercato, quella dopo la quale la settimana
+// successiva uscirebbe dalla finestra 1 luglio-31 agosto (o farebbe scattare la nuova stagione).
+function isDeadlineDayMercato(d){
+  const prossima = aggiungiSettimana(d);
+  return !inFinestraMercatoEstivo(prossima) || prossima.getTime() >= primoSabatoDiSettembre(prossima.getUTCFullYear()).getTime();
+}
 
 function generaDataNascita(annoRiferimento, etaMedia, spread){
   const eta = clamp(Math.round(etaMedia + rand(-spread, spread)), 16, 42);
@@ -1435,6 +1441,7 @@ function startCareer(){
   addDiario(`Firmi il primo contratto professionistico con ${teamName()} (${LEAGUES[state.lega].label}).`);
   registraPersona('MISTER', { nome:'Il mister', ruolo:'mister' });
   registraPersona('PROCURATORE', { nome:'Il procuratore', ruolo:'procuratore' });
+  registraPersona('FAMIGLIA', { nome:'La tua famiglia', ruolo:'famiglia' });
   save(); renderHub(); showScreen('hub');
 }
 
@@ -2609,8 +2616,8 @@ const EVENTS = [
       {label:"Investi 300€", applica:s=>{ s.finanze.saldo-=300; if(Math.random()<0.5){ s.finanze.saldo+=600; } s.personalita.individualista++; }, esito:"Il risultato dell'investimento è ormai noto: controlla il saldo."},
       {label:"Non ti fidi, rifiuti", applica:s=>{ s.reputazione=clamp(s.reputazione+1,0,100); s.personalita.ragionatore++; }, esito:"Meglio prudenti: i risparmi restano al sicuro."}]},
   { id:'famiglia', testo:"Tua madre ti chiede di passare la domenica in famiglia, ma coincide con una seduta di recupero facoltativa.", scelte:[
-      {label:"Vai in famiglia", applica:s=>{ s.morale=clamp(s.morale+6,0,100); s.forma=clamp(s.forma-1,0,100); }, esito:"Una giornata serena ti ricarica le pile."},
-      {label:"Vai comunque ad allenarti", applica:s=>{ s.forma=clamp(s.forma+4,0,100); s.morale=clamp(s.morale-3,0,100); }, esito:"Ti alleni extra, ma la distanza da casa un po' si sente."}]},
+      {label:"Vai in famiglia", applica:s=>{ s.morale=clamp(s.morale+6,0,100); s.forma=clamp(s.forma-1,0,100); registraEventoPersona('FAMIGLIA',{tipo:'presenza', testo:'Passi la domenica con la famiglia invece di allenarti.', impatto:4}); }, esito:"Una giornata serena ti ricarica le pile."},
+      {label:"Vai comunque ad allenarti", applica:s=>{ s.forma=clamp(s.forma+4,0,100); s.morale=clamp(s.morale-3,0,100); registraEventoPersona('FAMIGLIA',{tipo:'assenza', testo:'Scegli l\'allenamento invece della domenica in famiglia.', impatto:-3}); }, esito:"Ti alleni extra, ma la distanza da casa un po' si sente."}]},
   { id:'proc_preoccupato', condizione:s=>!!s.infortunio || s.squalifica>0, testo:"Il tuo procuratore è preoccupato per il tuo periodo lontano dal campo e insiste per parlare.", scelte:[
       {label:"Lo rassicuri, resti professionale", applica:s=>{ s.relazioni.procuratore=clamp(s.relazioni.procuratore+4,0,100); s.morale=clamp(s.morale+2,0,100); registraEventoPersona('PROCURATORE',{tipo:'supporto', testo:'Lo rassicuri durante un periodo difficile lontano dal campo.', impatto:2}); }, esito:"Il procuratore apprezza il tuo atteggiamento."},
       {label:"Sfoghi la frustrazione con lui", applica:s=>{ s.relazioni.procuratore=clamp(s.relazioni.procuratore-6,0,100); s.morale=clamp(s.morale-2,0,100); registraEventoPersona('PROCURATORE',{tipo:'litigio', testo:'Sfoghi la frustrazione con lui per il periodo lontano dal campo.', impatto:-3}); }, esito:"La telefonata si chiude su un tono acceso."}]},
@@ -2683,6 +2690,25 @@ const EVENTS = [
     scelte:[
       {label:"Vi allenate a vicenda dopo gli allenamenti ufficiali", applica:s=>{ const r=trovaRivaleInterno(s); registraEventoPersona(r.id,{tipo:'collaborazione', testo:'Vi fermate insieme dopo l\'allenamento per lavorare l\'uno con l\'altro.', impatto:5, tratto:'allenamento_condiviso'}); s.personalita.trascinatore++; }, esito:"La squadra beneficia di questa sana competizione diventata collaborazione."},
       {label:"Restate colleghi cordiali ma distanti", applica:s=>{ s.personalita.ragionatore++; }, esito:"Un rapporto professionale, sereno, senza troppa confidenza."}]},
+  // ---- Vita privata + eventi imprevisti (Fase D): stesso motore EVENTS/pickEvent ----
+  { id:'invasione_privacy', condizione:s=>s.reputazione>=40, testo:"Un fotografo ti immortala fuori da un locale con degli amici: la foto finisce su una pagina social locale con un titolo esagerato.", scelte:[
+      {label:"Chiedi al procuratore di intervenire", applica:s=>{ s.morale=clamp(s.morale-1,0,100); registraEventoPersona('PROCURATORE',{tipo:'gestione_media', testo:'Gestisce con te un piccolo scivolone mediatico.', impatto:2}); s.personalita.ragionatore++; }, esito:"La cosa si sgonfia in fretta, ma la sensazione di essere osservato resta."},
+      {label:"Lasci correre, non è la prima volta", applica:s=>{ s.morale=clamp(s.morale-3,0,100); }, esito:"Impari a conviverci: essere conosciuti in paese ha anche questo prezzo."}]},
+  { id:'crisi_tempo_famiglia', condizione:s=>{ const f=state.persone.FAMIGLIA; return f && f.affinita<45; }, testo:"Un tuo caro ti fa notare, senza rancore ma con franchezza, che fra allenamenti e partite lo/la vedi sempre meno.", scelte:[
+      {label:"Ritagli del tempo vero per loro questa settimana", applica:s=>{ registraEventoPersona('FAMIGLIA',{tipo:'riavvicinamento', testo:'Ti ritagli del tempo vero per la famiglia, nonostante gli impegni.', impatto:10}); s.morale=clamp(s.morale+3,0,100); s.personalita.trascinatore++; }, esito:"Un gesto semplice che vale più di mille parole."},
+      {label:"Rimandi ancora, il campo viene prima", applica:s=>{ registraEventoPersona('FAMIGLIA',{tipo:'distacco', testo:'Rimandi di nuovo, il calcio prima di tutto.', impatto:-6}); s.forma=clamp(s.forma+2,0,100); s.personalita.individualista++; }, esito:"La carriera avanza, ma qualcosa in famiglia si allontana un po'."}]},
+  { id:'intervista_tv_locale', condizione:s=>s.reputazione>=55, testo:"Un'emittente televisiva locale vuole intervistarti a casa tua, fra le mura private, per un servizio sulla \"vita vera\" di un calciatore di provincia.", scelte:[
+      {label:"Accetti, apri le porte di casa", applica:s=>{ s.reputazione=clamp(s.reputazione+4,0,100); s.morale=clamp(s.morale-2,0,100); s.personalita.individualista++; }, esito:"Il servizio ti dà visibilità, ma la tua sfera privata è un po' meno privata."},
+      {label:"Proponi un'intervista fuori casa, sul pubblico ma non sul privato", applica:s=>{ s.reputazione=clamp(s.reputazione+1,0,100); s.personalita.ragionatore++; }, esito:"Trovi un compromesso che protegge la tua vita privata."}]},
+  { id:'hater_social', condizione:s=>s.reputazione>=45, testo:"Un profilo social molto seguito ti attacca pesantemente dopo una prestazione opaca, con toni sopra le righe.", scelte:[
+      {label:"Rispondi a tono pubblicamente", applica:s=>{ s.reputazione=clamp(s.reputazione-4,0,100); s.morale=clamp(s.morale-1,0,100); s.personalita.individualista++; }, esito:"Ti sfoghi, ma la polemica si allarga invece di spegnersi."},
+      {label:"Ignori e ti concentri sul campo", applica:s=>{ s.morale=clamp(s.morale+2,0,100); s.personalita.ragionatore++; }, esito:"Non dai peso alle parole di uno sconosciuto: la prossima gara parlerà per te."}]},
+  { id:'imprevisto_auto', condizione:s=>true, testo:"La mattina della gara l'auto non parte: rischi di arrivare tardi al ritrovo con la squadra.", scelte:[
+      {label:"Ti organizzi al volo con un compagno", applica:s=>{ s.forma=clamp(s.forma-1,0,100); s.relazioni.compagni=clamp(s.relazioni.compagni+1,0,100); }, esito:"Arrivi giusto in tempo, un po' scosso ma pronto: un compagno ti ha dato un passaggio."},
+      {label:"Gestisci con calma, avvisi il mister del ritardo", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister-2,0,100); }, esito:"Arrivi in ritardo ma senza drammi: piccoli imprevisti della vita di provincia."}]},
+  { id:'beneficenza_territorio', condizione:s=>s.reputazione>=35, testo:"Un'associazione del territorio ti chiede di partecipare a un evento di beneficenza locale, proprio nel tuo giorno di riposo.", scelte:[
+      {label:"Partecipi con piacere", applica:s=>{ s.reputazione=clamp(s.reputazione+4,0,100); s.energia=clamp(s.energia-8,0,100); s.personalita.trascinatore++; }, esito:"Una mattinata che lascia il segno, ben oltre il campo da gioco."},
+      {label:"Rifiuti, ti serve riposare davvero", applica:s=>{ s.energia=clamp(s.energia+5,0,100); s.reputazione=clamp(s.reputazione-1,0,100); s.personalita.ragionatore++; }, esito:"Ti prendi cura di te stesso: nessuno può biasimarti."}]},
 ];
 const EVENTI_FINANZIARI = new Set(['sponsor_call','evento_sponsor','investimento','prestito_compagno']);
 const COOLDOWN_EVENTO_FINANZIARIO = 6; // giornate minime fra un evento economico e il successivo
@@ -3853,6 +3879,29 @@ function renderSeasonEnd(){
   save();
 }
 
+/* ---------- MERCATO NARRATIVO: VOCI DI CALCIOMERCATO (Fase E) ----------
+   Nessun nuovo motore: le voci finiscono nel diario già esistente (già visibile in Giocatore >
+   Storico), zero nuova UI. "Il mondo che vive da solo" resta volutamente solo narrativo — non si
+   toccano mai forza/rosa reali di DB_SQUADRE (rischio concreto di squilibrare le simulazioni delle
+   altre squadre per il resto della carriera): le voci raccontano un mondo che si muove, senza
+   simulare meccanicamente trasferimenti/esoneri di squadre reali. tipo (vero/falso/manipolato) è
+   tenuto internamente e MAI mostrato al giocatore: è il punto — informazione imperfetta, non
+   verificabile, coerente con quanto richiesto. */
+const RUMOR_MERCATO = [
+  { tipo:'vero', testo:s=>`Si vocifera che il ${teamName()} stia sondando un rinforzo nel tuo ruolo per la prossima stagione: la concorrenza per una maglia da titolare potrebbe aumentare.` },
+  { tipo:'falso', testo:s=>`Un sito di calciomercato locale scrive che sei in trattativa avanzata con una big di categoria superiore: non c'è nulla di vero, ma il telefono inizia a squillare comunque.` },
+  { tipo:'manipolato', testo:s=>`Il tuo procuratore fa trapelare ad arte una voce di interesse dall'estero: serve solo ad alzare la tua valutazione percepita in vista del rinnovo.` },
+  { tipo:'vero', testo:s=>`Si dice che una squadra del girone vicino abbia messo gli occhi su un giocatore nel tuo ruolo — ma il nome sul taccuino non sembra essere il tuo.` },
+  { tipo:'falso', testo:s=>`Gira voce di un possibile esonero del mister: nello spogliatoio se ne parla, ma dalla società non arriva alcuna conferma.` },
+  { tipo:'vero', testo:s=>`Un osservatore è stato visto agli ultimi allenamenti della squadra: non è chiaro chi stia realmente seguendo.` },
+  { tipo:'manipolato', testo:s=>`Un procuratore rivale fa girare voci poco lusinghiere sul tuo conto, nella speranza di allontanare pretendenti prima ancora che si facciano avanti.` },
+  { tipo:'falso', testo:s=>`Un tifoso giura di averti visto firmare per un'altra squadra fuori da un ristorante: la foto, guardata bene, non ritrae nemmeno te.` },
+];
+function generaNotiziaMercato(deadlineDay){
+  const rumor = RUMOR_MERCATO[rand(0, RUMOR_MERCATO.length-1)];
+  const prefisso = deadlineDay ? '📅 Deadline Day — ' : '📰 ';
+  addDiario(prefisso + rumor.testo(state));
+}
 function generateOffers(){
   const avgVoto = state.stagioneStats.voti.length ? state.stagioneStats.voti.reduce((a,b)=>a+b,0)/state.stagioneStats.voti.length : 6;
   const goodSeason = avgVoto>=6.3 || (state.stagioneStats.gol+state.stagioneStats.assist)>=6;
@@ -3917,6 +3966,11 @@ function aggiornaFuoriStagione(){
   if(inFinestraMercatoEstivo(d) && !state.mercatoEstivoConcluso){
     state.mercatoSessione = (state.mercatoSessione||0) + 1;
     generateOffers();
+    const deadlineDay = isDeadlineDayMercato(d);
+    // Voce di mercato: sempre nell'ultima settimana (Deadline Day, il momento più concitato),
+    // altrimenti 45% di probabilità nelle settimane normali — il mondo del calciomercato non
+    // produce rumor ogni singola settimana, altrimenti perderebbero peso.
+    if(deadlineDay || Math.random()<0.45) generaNotiziaMercato(deadlineDay);
     save();
     renderMarket();
     showScreen('market');
@@ -3957,7 +4011,9 @@ function renderFuoriStagioneQuiete(){
   });
 }
 function renderMarket(){
-  document.getElementById('marketSessioneLabel').textContent = `Mercato estivo · ${formattaDataIT(parseDataISO(state.offSeasonData))}`;
+  const dataMercato = parseDataISO(state.offSeasonData);
+  const etichettaDeadline = isDeadlineDayMercato(dataMercato) ? ' · 📅 Deadline Day' : '';
+  document.getElementById('marketSessioneLabel').textContent = `Mercato estivo · ${formattaDataIT(dataMercato)}${etichettaDeadline}`;
   const box = document.getElementById('marketOffers'); box.innerHTML = '';
   if(!state.offerteCorrenti.length){
     box.innerHTML = `<div class="card"><div class="subtle">Nessuna offerta questa settimana. Il tuo procuratore continuerà a lavorare per la prossima.</div></div>`;
@@ -4100,6 +4156,7 @@ function avviaNuovaStagione(){
     if(!state.persone) state.persone={};
     registraPersona('MISTER', { nome:'Il mister', ruolo:'mister' });
     registraPersona('PROCURATORE', { nome:'Il procuratore', ruolo:'procuratore' });
+    registraPersona('FAMIGLIA', { nome:'La tua famiglia', ruolo:'famiglia' });
     if(!state.eventiMatchUltimaGiornata) state.eventiMatchUltimaGiornata={};
     if(!state.coppa || !state.coppa.altreSfide) { if(state.coppa) state.coppa.altreSfide = []; }
     riparaGironeCoppaAttivo();

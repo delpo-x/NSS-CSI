@@ -20,8 +20,13 @@
 > vista di una futura UI PC separata), e l'**estensione del sistema di personalità esistente**
 > (`state.personalita`) a 4 assi — azioni nei momenti chiave di partita, allenamento settimanale, economia
 > extra-campo (shop/formazione/investimenti), dialoghi fuori dal campo — con calcolo del tratto dominante
-> e una card dedicata in Giocatore. Richiesto esplicitamente (vedi nota in fondo e sezioni dedicate più
-> sotto).
+> e una card dedicata in Giocatore, e l'avvio del grande piano **"sistema personaggi" (Fasi A-E di un
+> piano più ampio A-G)**: memoria relazionale per persona con identità stabile e storico narrativo
+> (Fase A), un Telefono come hub eventi con filtro anti-spam (Fase B), rivalità dinamiche interne/esterne
+> con 10 eventi che evolvono in rispetto/odio/amicizia/collaborazione (Fase C), eventi di vita privata e
+> imprevisti "caos controllato" (Fase D), un mercato narrativo con voci vere/false/manipolate e Deadline
+> Day (Fase E) — tutto riusando gli stessi motori già esistenti (EVENTS/pickEvent, diario), mai un
+> secondo sistema parallelo. Richiesto esplicitamente (vedi nota in fondo e sezioni dedicate più sotto).
 
 ## Cos'è
 
@@ -1010,6 +1015,70 @@ secondo stato parallelo, nessuna astrazione mai usata prima nel progetto.
   corretta; salvataggio/caricamento coerente; nessun errore in console; nessuna regressione sui flussi
   esistenti.
 
+## Sistema "personaggi": Fasi A-E di un piano più ampio (A-G)
+
+Richiesto con uno spec molto ampio in stile "sezioni 5-25" (telefono, memoria narrativa, rivalità,
+mondo dinamico/mercato, vita privata, eventi/legacy, ritiro→allenatore). Prima di scrivere codice è
+stata segnalata l'enormità dello scope rispetto a un file HTML singolo di ~4000 righe senza controllo
+versione né test automatici, e proposto un piano a fasi con conferma esplicita prima di ogni fase
+(stesso processo già seguito per il sistema territoriale) — l'utente ha confermato di procedere
+fase per fase. Due conflitti reali con quanto già costruito sono stati risolti PRIMA di iniziare: gli
+"archetipi nascosti" richiesti si sono rivelati alias dei 3 tratti di personalità appena estesi
+(Ribelle=Individualista, Virtuoso=Professionista=Ragionatore, Leader=Trascinatore/Heartbeat) — nessuna
+sostituzione dello schema esistente; e la memoria relazionale è stata data priorità come fondamenta
+(Fase A prima di tutto), perché Telefono, Rivalità e la futura transizione a Allenatore dipendono
+tutte da un'identità stabile per persona.
+
+- **Fase A — Memoria relazionale** (`index.html`): nuovo `state.persone{}`, registro **additivo**
+  (i 3 numeri aggregati in `state.relazioni` restano invariati e continuano a guidare
+  `calcChance`/convocazione come sempre). Ogni persona ha un id stabile, un'affinità propria 0-100
+  (indipendente dall'aggregato) e uno storico eventi (`registraPersona`/`registraEventoPersona`,
+  stesso pattern engine-generico di `TRAININGS`/`EVENTS`). Identità stabili: `MISTER`/`PROCURATORE`/
+  `FAMIGLIA` (fisse, create a inizio carriera), compagni reali (id derivato da nome+squadra da
+  `sceglieCompagni()`, che già pescava sempre lo stesso miglior ATT/DIF della rosa reale — la stessa
+  persona finché si resta in quella squadra), e un "ex allenatore" creato al primo utilizzo del
+  mentor in Formazione, primo esempio concreto di persona che sopravvive a un cambio di squadra.
+  Agganciato a un sottoinsieme rappresentativo di eventi esistenti (non tutti i punti che toccano
+  `relazioni.mister/procuratore`): il resto si arricchisce via via, come documentato nel codice.
+- **Fase B — Telefono del calciatore**: nuova schermata, **puramente presentazione** sopra i dati
+  della Fase A (nessuna nuova logica di gioco). Lista conversazioni (una per persona, ordinata per
+  evento più recente) → thread per persona che riusa `.commentary`/`.commentary-log` già esistenti
+  (stessa opacità decrescente della cronaca di partita). Filtro anti-spam nel motore, non nella UI:
+  `registraEventoPersona()` alza `nonLetti` solo per eventi con `|impatto|>=3`
+  (`NOTIFICA_SOGLIA_IMPATTO`) — i micro-eventi restano nello storico senza generare notifica. Bottone
+  "Telefono" in hub con badge del totale non letti.
+- **Fase C — Rivalità dinamiche**: 10 eventi aggiunti all'array `EVENTS` esistente (stesso motore
+  `pickEvent`, zero nuovo trigger). Rivali interni = il migliore nel tuo ruolo nella TUA rosa reale
+  (concorrente per il posto); rivali esterni = il migliore nel tuo ruolo nella rosa reale della
+  squadra avversaria appena affrontata **in campionato** (dati veri da `DB_SQUADRE`, mai inventati;
+  legato solo al campionato perché Coppa passa da un flusso separato che non tocca `pickEvent`).
+  Nessuno stato "rivalità" nuovo: `statoRivalita()` deriva una delle 4 etichette richieste
+  (rispetto/odio/amicizia/collaborazione) dalla stessa affinità 0-100 già di Fase A. I rivali
+  compaiono già nel Telefono come qualunque altra persona.
+- **Fase D — Vita privata ed eventi imprevisti**: 6 nuovi `EVENTS` (invasione della privacy,
+  tensione col tempo dedicato alla famiglia — agganciato alla persona `FAMIGLIA` —, intervista TV in
+  casa, hater sui social, imprevisto dell'auto la mattina di una gara, richiesta di beneficenza
+  territoriale nel giorno di riposo), stesso motore, stesso pattern di tag `personalita` già usato
+  altrove.
+- **Fase E — Mercato narrativo con rumor e Deadline Day**: `RUMOR_MERCATO`, 8 voci di calciomercato
+  con un tipo interno vero/falso/manipolato **mai mostrato al giocatore** (il punto è l'informazione
+  imperfetta) che finiscono nel diario già esistente — zero nuova UI. Deliberatamente **solo
+  narrativo**: non si toccano mai forza/rosa reali di `DB_SQUADRE` per non rischiare di squilibrare
+  le simulazioni delle altre squadre per il resto della carriera — "il mondo che vive da solo" è
+  raccontato, non simulato meccanicamente, scelta esplicita per restare lean e a zero rischio di
+  regressione. Deadline Day (`isDeadlineDayMercato`, l'ultima settimana della finestra 1 luglio-31
+  agosto) genera sempre una voce ed è segnalato in etichetta sulla schermata di mercato; nelle
+  settimane normali una voce compare col 45% di probabilità.
+- **Piano parziale**: Fasi A-E completate su un piano a 7 (A-G); mancano Rivalità→Mondo dinamico
+  meccanico (per ora solo narrativo, vedi Fase E), Eventi/Legacy (timeline "La tua storia" a fine
+  carriera) e Ritiro→Allenatore (Fasi F-G), non ancora iniziate.
+- Verificato in browser a ogni fase: persona reale creata da `sceglieCompagni`/rosa avversaria con
+  nomi veri, affinità che si muove nella direzione narrativa attesa, badge Telefono che si azzera
+  aprendo una conversazione e si aggiorna anche sul bottone hub, `statoRivalita()` corretto ai 4
+  confini di soglia, eventi di Fase D con condizioni verificate (es. `crisi_tempo_famiglia` legato
+  all'affinità di `FAMIGLIA`), rumor di mercato visibili nel diario esistente con prefisso Deadline
+  Day quando previsto, nessun errore in console, nessuna regressione sui flussi esistenti.
+
 ## Bug noti/limiti accettati
 
 - `GSO CAPRIOLOB` ha ancora `forza: 0.0` nei dati sorgente (piazzamento "riserva" nel file originale) —
@@ -1026,5 +1095,5 @@ secondo stato parallelo, nessuna astrazione mai usata prima nel progetto.
 
 ---
 *Nota di processo: l'utente ha chiesto di aggiornare questo file ogni 5 suoi messaggi. Questo aggiornamento
-(2026-08-02, quarta volta nella stessa sessione) è stato richiesto esplicitamente con "aggiorna riepilogo.md";
-il conteggio del ciclo riparte da qui.*
+(2026-08-02, quinta volta nella stessa sessione) è stato richiesto esplicitamente ("procedi con Fase D ed E,
+altrimenti aggiorna riepilogo.md"); il conteggio del ciclo riparte da qui.*
