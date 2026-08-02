@@ -1,13 +1,20 @@
 # Carriera CSI — Riepilogo progetto
 
-> Ultimo aggiornamento: 2026-07-31, dopo il batch di 12 correzioni, il sistema di eventi dinamici di
-> partita, la revisione completa del ruolo Portiere, i 12 eventi trade-off per giocatori di movimento,
-> la modalità "continua con un giocatore esistente", il rename ruolo "Mezzala"→"Ala" con correzioni dati
-> (IMPLAST, GSO CAPRIOLO/B), l'integrazione delle date di nascita reali, il calendario reale di
-> campionato (inizio stagione, pausa invernale), il mercato invernale, il fix dell'età e dello stipendio,
-> il rifacimento del fuori-stagione ad avanzamento settimanale con mercato estivo 1/7-31/8, e il sabato
-> come giorno fisso di riferimento di ogni settimana di gioco. Richiesto esplicitamente (vedi nota in
-> fondo e sezioni dedicate più sotto).
+> Ultimo aggiornamento: 2026-08-02 (sessione lunga, più aggiornamenti), dopo (in aggiunta a tutto quanto
+> sotto): la formula dei punti attributo in creazione personaggio (ora +1 assoluto per punto), il
+> riordino della card "Lavoro" in hub, una revisione della cronaca di partita (eventi ◆ inline, cronaca
+> con gerarchia visiva, niente più percentuale di riuscita sulle choice-card), la correzione del costo
+> energia del lavoro Full-time, una regola di convocazione basata su reputazione/energia/forma/morale/
+> rapporto col mister (panchina/non convocato, con subentro reale), il recupero energia uniformato a +40
+> per riposo/salta partita/infortunio, una curva bonus/malus per le relazioni (mister/compagni) sia in
+> partita che in simulazione, un riflesso settimanale della reputazione sulle relazioni, la Coppa
+> Leonessa che ora parte dalla seconda settimana di aprile con avanzamento data settimanale partita per
+> partita e una scheda che mostra sempre Preliminare + Fase Principale, e l'avvio (Fasi 2-7 di un piano
+> concordato) di un nuovo **sistema territoriale/shop/formazione** — territorio bresciano con 30 POI
+> reali, esperienze territoriali, shop equipaggiamento (parastinchi/scarpe/ecc.), formazione (libri/
+> corsi/mentor) ed eventi relazionali che generano opportunità di investimento (Fase 8, investimenti
+> veri e propri, non ancora implementata). Richiesto esplicitamente (vedi nota in fondo e sezioni
+> dedicate più sotto).
 
 ## Cos'è
 
@@ -15,6 +22,18 @@
 [`index.html`](index.html) contiene tutto: markup, CSS e logica JS (nessuna build, nessuna dipendenza esterna
 a parte i font Google). Il giocatore crea un calciatore, sceglie girone/squadra di Serie C reale, e scala la
 piramide CSI Brescia (C → B → A) tra partite simulate a scelte, eventi narrativi, mercato ed economia.
+
+## Requisito trasversale: accessibilità (WCAG 2.1 AA)
+
+Vincolo permanente richiesto esplicitamente dall'utente, non legato a una singola modifica: **tutta
+l'interfaccia deve sempre essere conforme alle Web Content Accessibility Guidelines 2.1, livello AA**.
+Vale per ogni schermata esistente e per ogni nuova UI aggiunta d'ora in poi — non solo per le parti
+toccate in una singola richiesta. Da tenere presente in particolare per: contrasto colore testo/sfondo
+(≥4.5:1 per il testo normale, ≥3:1 per il testo grande, criterio 1.4.3), stati interattivi (focus visibile
+su bottoni/scelte/link, criterio 2.4.7), semantica e leggibilità per screen reader (etichette non affidate
+al solo colore, criterio 1.4.1), dimensione target di tocco e navigabilità da tastiera. Non è ancora stato
+fatto un audit sistematico del file esistente rispetto a questo requisito: da verificare/correggere man
+mano che si toccano le varie schermate.
 
 ## Struttura del file
 
@@ -55,7 +74,7 @@ Tutto vive in `index.html`:
   parametro predisposto ma non ancora agganciato a una rilevazione automatica dei derby).
 - **Lavoro giocatore**: `impostaLavoro(tipo)` — tre stati (Nessuno/PartTime/FullTime), scelti da 3 bottoni
   nell'hub. Stipendio mensile a scaglioni di anzianità (0-2/3-5/6-10/11-15/16+ anni) via `salarioLavoro()`.
-  Costo energia settimanale (`energiaCostoLavoro`: -15 PT, -35 FT) applicato ogni giornata via
+  Costo energia settimanale (`energiaCostoLavoro`: -15 PT, -30 FT) applicato ogni giornata via
   `applyLavoroSettimanale()`. Anzianità con carry-over 50% se il lavoro viene interrotto/cambiato.
   **La scelta è modificabile solo a inizio stagione** (`lavoroModificabile()` → `state.giornata===1`); nelle
   altre giornate i 3 bottoni sono disabilitati con avviso in UI.
@@ -679,6 +698,204 @@ uno di questi due punti fissi non fosse stato un sabato.
   2026, 4 set 2027, 2 set 2028, 1 set 2029, 7 set 2030); tutte le settimane fuori stagione (morte e di
   mercato) restano di sabato fino alla stagione successiva.
 
+## Punti attributo in creazione: da bonus flat a +1 assoluto per punto
+
+Richiesta iniziale: far aumentare le qualità dell'1% per punto invece del vecchio flat `+2`, perché
+maxare un solo attributo con `+2` per punto era troppo conveniente (chi metteva tutti i 10 punti su un
+solo attributo otteneva un salto sproporzionato, specie su basi già basse). Passaggi:
+
+1. Prima implementazione: `+1%` del valore di **base** per punto (`base*(1+punti*0.01)`), sia
+   nell'anteprima live dell'allocatore sia nel calcolo effettivo a inizio carriera.
+2. L'utente ha verificato in browser che 10 punti su un attributo con base 55 producevano solo `61`
+   (+10,9%), non l'esito atteso, e ha chiarito cosa intendeva davvero: **+1 punto assoluto per punto
+   assegnato** (base 55 → 56 con 1 punto, 57 con 2, 58 con 3, ecc. — non una percentuale).
+3. Corretto definitivamente a `base + punti` (clampato 20-90), in entrambi i punti (anteprima
+   dell'allocatore e calcolo a `startCareer()`). Verificato in browser: 3 click su "+" portano la
+   Tecnica da 55 a 58, un punto alla volta.
+
+## Card "Lavoro" riposizionata nell'hub
+
+Su richiesta esplicita, la card "Lavoro" (stato lavoro + selezione Part-time/Full-time) è stata spostata
+subito **sopra** il blocco con "Scendi in campo"/"Simula partita" nell'hub, invece che sotto il bottone
+Coppa Leonessa. La card "Lavoro extrasportivo" nella scheda giocatore (riepilogo di sola lettura) era già
+al posto giusto e non è stata toccata.
+
+## Coerenza e leggibilità della cronaca di partita
+
+Serie di richieste sulla presentazione degli eventi ◆ durante la partita (`MATCH_EVENTS`), per renderli
+coerenti con i momenti chiave (`MOMENTS`) invece che un sistema a parte:
+
+1. **Evento "Primo pallone conteso" riportato al motore a verifica di abilità**: `primo_contrasto` usava
+   ancora `applica`/`esito` fissi (bonus garantiti a personalità/morale), diversamente dagli altri eventi
+   GAMEPLAY a inizio partita (`ricezione_spalle_porta`, `pressing`) che sono vere verifiche di abilità via
+   `skillScelta`. Riscritto con 3 `skillScelta` (contrasto fisico rischioso, anticipo tecnico, temporeggio
+   sicuro) ed esclusione del Portiere via `conditions`, come i suoi eventi "fratelli".
+2. **Cronaca con gerarchia visiva**: l'evento più recente nel log (`#commentaryLog`, aggiunto con
+   `log.prepend`) resta a piena opacità con un piccolo rilievo (ombra), i precedenti sfumano
+   progressivamente via CSS `nth-child` (1°=pieno, 2°=0.75, 3°=0.6, oltre=0.45) — così l'occhio va
+   sull'azione appena successa invece di perdersi nello storico. Solo CSS, nessuna logica toccata.
+3. **Eventi ◆ mostrati nella stessa finestra della partita**: prima `showMatchEvent` dirottava su una
+   schermata separata (`screen-event`, icona ◆ statica), interrompendo il flusso della cronaca. Riscritta
+   per aggiungere testo ed esito **nello stesso `commentary-log`** e le scelte come `choice-card` nello
+   stesso `matchAction` usato da `nextMoment()`/`resolveChoice()` — nessun cambio di schermata, stesso
+   bottone "Continua ▸" per proseguire. Le due chiamate che passavano `()=>{ showScreen('match');
+   nextMoment(); }` come callback sono state semplificate a `()=>nextMoment()` (il cambio schermata non
+   serve più). `showEvent()`/`screen-event` restano invariate per gli eventi **fuori** dalla partita (il
+   pool `EVENTS` settimanale in hub, l'evento "resti in panchina" prima che inizi la partita).
+4. **Rischio/percentuale mostrati anche sugli eventi**: le scelte a verifica di abilità (`skillScelta`)
+   ora espongono `attr/attr2/risk/out` sull'oggetto scelta (prima chiusi solo dentro `applica`), così sia
+   `showEvent()` sia la nuova resa inline di `showMatchEvent()` possono calcolare e mostrare rischio (e,
+   in un primo momento, la percentuale) esattamente come `nextMoment()` — stesso `calcChance()`, nessun
+   secondo motore.
+5. **Percentuale di riuscita rimossa ovunque**: su richiesta successiva, la "% riuscita" mostrata sulle
+   choice-card (sia eventi sia momenti chiave) è stata tolta — resta solo l'etichetta di rischio
+   (Sicuro/Rischioso/Estremo). Tolto anche il calcolo di `chance` ormai morto nei punti dove serviva solo
+   per la stringa rimossa (il calcolo resta dove serve ancora, es. per determinare l'esito in
+   `skillScelta`/`resolveChoice`).
+
+Verificato in browser ad ogni passaggio: evento "Pressing" mostrato inline con etichetta di rischio
+corretta e senza percentuale, cronaca con opacità decrescente confermata via `getComputedStyle`, bottone
+"Continua" che avanza correttamente al momento successivo.
+
+## Costo energia lavoro Full-time corretto
+
+`energiaCostoLavoro('FullTime')` restituiva `35`/settimana; corretto a `30` su richiesta esplicita (il
+Part-time resta invariato a `15`).
+
+## Convocazione legata a reputazione/energia/forma/morale (panchina/non convocato)
+
+Su richiesta esplicita, aggiunta una regola di convocazione basata sui 4 valori chiave del giocatore
+(`state.reputazione`, `state.energia`, `state.forma`, `state.morale`), oltre al preesistente controllo
+casuale legato al solo rapporto col mister (`state.relazioni.mister<25`, tenuto come possibilità
+aggiuntiva, non rimosso):
+
+- **1 valore sotto il 40%** → il mister ti lascia in panchina (stesso evento ◆ "resti in panchina" già
+  esistente, testo differenziato in base alla causa).
+- **2 o più valori sotto il 35%** → non vieni nemmeno convocato: niente partita, il campionato prosegue
+  simulato senza di te (`skipGiornata`) e recuperi con la settimana di riposo (nessuna energia consumata
+  per una partita non giocata).
+- Nuovo helper condiviso `contaValoriSottoSoglia(soglia)`, usato in `beginMatch()`, `simulaPartita()` (per
+  non poter aggirare la regola simulando invece di scendere in campo) e in `renderHub()` (banner "Fuori
+  dai convocati" + pulsanti "Scendi in campo"/"Simula partita" disabilitati quando scatta la non
+  convocazione, stesso pattern già in uso per "Energia troppo bassa"). Si applica solo fuori dalla Coppa
+  Leonessa, coerente con il comportamento preesistente del controllo sul mister.
+- **Correzione della richiesta**: la prima implementazione trattava la panchina come un mancato utilizzo
+  completo (stessa simulazione "senza il giocatore" del caso "non convocato"). L'utente ha chiarito che
+  partire dalla panchina **non** vuol dire non giocare affatto: riscritta con `beginMatchAsSub()`, che fa
+  scendere davvero in campo a partita in corso (minuto 65, 2 momenti chiave invece dei 4 normali — pool
+  ridotto passato a `nextMoment()` via `state.matchTemp.momentiOutfieldRidotti`/`gkMomenti`, stesso motore
+  di `beginMatch()` per il resto: `finishMatch`, voto, XP, infortuni, cartellini, tutto invariato), con un
+  costo energia ridotto (-8 invece di -15) coerente con un tempo di gioco più corto.
+- Verificato in browser: 2 valori sotto 35 → banner "Fuori dai convocati" e pulsanti disabilitati; 1
+  valore sotto 40 → evento panchina con testo corretto; scelta "subentro" confermata end-to-end (ingresso
+  al 65', 2 scelte reali, punteggio e voto finali coerenti, arrivo regolare a `screen-result`).
+
+## Correzioni successive alla panchina/subentro (stessa giornata)
+
+- **Recupero energia uniformato a +40**: "Riposo e recupero" (`TRAININGS`), "Salta partita"
+  (`saltaPartitaVolontariamente`) e il recupero per infortunio (`skipGiornata`, sia in Coppa che
+  campionato) erano a valori diversi (30/35) — allineati tutti a +40/settimana su richiesta esplicita.
+- **Curva bonus/malus per le relazioni**: `calcChance()` (partita a scelte) teneva conto solo del
+  rapporto coi compagni; aggiunto lo stesso trattamento (curva centrata su 50, sotto=malus sopra=bonus)
+  per il rapporto col mister. `simulaPartita()` non teneva conto di nessuna relazione: aggiunta la
+  stessa curva per mister e compagni nella `condizione` che pesa sulla qualità simulata.
+- **Riflesso della reputazione sulle relazioni**: nuova `applyRiflessoReputazioneSuRelazioni()`,
+  richiamata ogni giornata in `postGiornataFlow()`: una reputazione sopra 50 tira leggermente verso
+  l'alto mister/procuratore/compagni ogni settimana, sotto 50 verso il basso (effetto piccolo e
+  progressivo, non sostituisce le scelte esplicite negli eventi).
+- **Rapporto col mister incluso nella soglia di convocazione**: `contaValoriSottoSoglia()` ora considera
+  anche `state.relazioni.mister` insieme a reputazione/energia/forma/morale; rimosso il vecchio controllo
+  casuale separato (mister<25 con 30% di chance), ormai ridondante perché un mister basso rientra già
+  deterministicamente nella stessa casistica.
+- **Allenamento invernale reso non vincolante**: durante la pausa invernale (`renderMercatoInvernale`),
+  scegliere un allenamento supplementare lo rendeva definitivo (card bloccate). Ora usa lo stesso pattern
+  a snapshot già usato per l'allenamento settimanale in hub (`scegliAllenamentoInvernale`, nuovo
+  `state.allenamentoSnapshotInvernale`): si può cambiare idea più volte prima di tornare in campo.
+
+## Coppa Leonessa: avvio da aprile, avanzamento settimanale, scheda con entrambe le fasi
+
+Tre richieste collegate sulla Coppa Leonessa, tutte nello stesso motore già esistente (nessun secondo
+sistema di partite):
+
+- **Avvio dalla seconda settimana di aprile**: prima la Coppa partiva sempre subito a fine campionato
+  (`renderSeasonEnd`), che per un girone corto poteva voler dire gennaio/febbraio — troppo presto rispetto
+  ai tempi reali. Nuovo helper `secondaSettimanaAprile(anno)` (primo sabato dall'8 aprile in poi): se il
+  campionato finisce prima di quella data, la Coppa resta "in attesa" (nuovo banner in fine-stagione con
+  la data) finché il fuori-stagione (`aggiornaFuoriStagione()`, stesso ciclo settimanale già usato per
+  mercato estivo/settimane morte) non la raggiunge; se il campionato finisce dopo, parte subito come
+  prima. Nel farlo è stato anche **sistemato un vicolo cieco preesistente**: a torneo Coppa concluso,
+  `finalizzaGironeCoppa()` tornava sempre all'hub, che a campionato già finito non aveva più nulla da
+  proporre (bottone "Scendi in campo" puntava a un avversario inesistente) — ora riprende/inizializza il
+  conto fuori-stagione invece di tornare all'hub.
+- **Ogni partita di Coppa avanza il calendario di una settimana**: prima tutte le partite di uno stesso
+  girone di Coppa avvenivano sulla stessa data (nessun avanzamento). Ora `postCoppaMatch()` (unico punto
+  che tutte le vie di risoluzione di una partita di Coppa attraversano: giocata, simulata, saltata per
+  infortunio/squalifica) fa avanzare `state.offSeasonData` di una settimana a ogni partita — così, se si
+  esce dalla competizione, la data mostrata in "Fuori stagione" riflette davvero quando si è usciti.
+  L'hub mostra ora anche questa data accanto a "Coppa · Fase · Partita N/M".
+- **Scheda Coppa con Preliminare + Fase Principale insieme**: `renderCoppa()` mostrava solo il girone
+  della fase corrente/più recente, nascondendo il preliminare una volta passati alla fase principale. Ora
+  mostra sempre entrambe le tabelle quando disponibili (il preliminare recuperato da
+  `state.coppaPrelim.gironi`, mai svuotato durante la stagione); per una squadra di Serie A (nessun
+  preliminare) la sezione preliminare semplicemente non compare.
+
+## Sistema territoriale, shop, formazione (Fasi 2-7 di 10)
+
+Richiesto con un brief strutturato molto dettagliato (vita da calciatore amatoriale nel territorio
+bresciano, non da professionista: niente jet privati/ville/supercar). Prima di implementare è stata
+fatta un'analisi esplicita dell'architettura esistente (richiesta dall'utente, confermata prima di
+procedere): nessun sistema di POI/territorio/shop/investimenti esisteva già, quindi costruito da zero
+seguendo **lo stesso pattern dati-motore-UI** già in uso per `TRAININGS`/`EVENTS`/`MATCH_EVENTS` (array di
+oggetti con id stabile + funzione generica che li applica a `state` + render dedicato), mai una nuova
+architettura parallela. Procede a fasi con verifica in browser dopo ognuna, come da piano concordato.
+
+- **Fase 2-4, sistema territoriale** (`index.html`): `TERRITORIO_AREE` (6 macroaree: Brescia Città,
+  Franciacorta, Lago d'Iseo, Garda Bresciano, Valle Camonica, Altre Valli) e `DB_POI` — **30 POI iniziali
+  reali e verificabili** (monumenti, parchi, laghi, siti UNESCO come le incisioni rupestri della Val
+  Camonica), non i 50 richiesti: scelto deliberatamente di restare su luoghi pubblici inequivocabilmente
+  reali piuttosto che inventare dati o usare nomi di attività commerciali senza aver verificato i diritti
+  (`real_reference_name`/`display_name`/`generic_name` separati come richiesto, per poter sostituire i
+  nomi senza toccare il gameplay). Motore `vivEsperienza(poiId)`: scala denaro/energia dallo `state`
+  esistente, applica bonus su campi già esistenti (morale/forma/reputazione/xp — nessuna nuova
+  statistica), una esperienza a settimana (stesso schema di `allenamentoFatto`, reset in
+  `postGiornataFlow`). Nuova schermata "Territorio" (aree → POI → esperienza), pulsante in hub.
+- **Fase 5, shop equipaggiamento**: `DB_EQUIPAGGIAMENTO`, 25 oggetti su 7 categorie (Scarpe, Parastinchi
+  in 5 varianti come richiesto — tradizionali/moderni/ultraleggeri/rinforzati/"fortunati" —, Guanti,
+  Abbigliamento tecnico, Accessori, Borsoni, Recupero). I bonus **non toccano mai `state.attr`**: si
+  sommano solo a runtime dentro `calcChance()` (stesso punto già esteso per mister/compagni), così
+  equipaggiare/disequipaggiare resta sempre reversibile senza dover tracciare cosa togliere. Pochi item
+  con effetti su morale/forma/reputazione (parastinchi fortunati, tuta da riscaldamento, alcuni
+  accessori) usano invece un bonus una tantum all'atto di indossarli (`onEquip`, stesso pattern di
+  `TRAININGS.apply`). I RECUPERO sono consumabili (si usano e spariscono dall'inventario). Nessuna usura:
+  il progetto non aveva un sistema di durabilità, quindi il campo `durability` resta solo descrittivo,
+  come da istruzione esplicita di non crearne uno nuovo. Nuova schermata "Shop", pulsante in hub.
+- **Fase 6, formazione**: `DB_FORMAZIONE`, 12 contenuti (5 libri con titoli fittizi come richiesto —
+  "Il gioco senza palla", "La mentalità del gruppo", ecc., autori fittizi —, 3 corsi, 2 mentor/ex
+  allenatori, 2 esperienze formative). "Conoscenza tattica"/"leadership"/"mentalità" richieste dalla spec
+  sono mappate sui contatori `state.personalita` già esistenti (`ragionatore`/`trascinatore`) invece di
+  inventare due nuovi campi paralleli. I corsi danno un bonus **permanente** a un attributo (stesso
+  meccanismo del level-up in `addXP`, diverso dall'equipaggiamento perché è un investimento acquisito,
+  non qualcosa che si toglie). I mentor hanno un esito **probabilistico** legato alle relazioni esistenti
+  (mai un bonus garantito, come richiesto), stesso principio degli eventi di partita a verifica di
+  abilità. Stesso gating "una formazione a settimana" del territorio, più un elenco libri già letti
+  (non rileggibili). Nuova schermata "Formazione", pulsante in hub.
+- **Fase 7, eventi relazionali/opportunità**: `TERRITORIO_EVENTI`, eventi generici per categoria/soglia
+  di visite a un POI (non per singolo POI, così valgono anche per i POI aggiunti in futuro), risolti da
+  `pickTerritorioEvento`/`showTerritorioEvento` che **riusano lo stesso `showEvent()`** già esistente
+  (nessun secondo Event Engine): cambia solo il criterio di attivazione (visite ripetute a un POI). Uno
+  degli eventi ("il gestore ha una proposta da farti") è l'aggancio esplicito alla Fase 8: registra solo
+  un record in `state.opportunitaInvestimento[]`, senza logiche di investimento che non esistono ancora
+  (evita di costruire in anticipo pezzi della fase successiva).
+- **Non ancora fatto**: Fase 8 (investimenti veri, 5 livelli di rischio, che leggeranno
+  `state.opportunitaInvestimento`), Fase 9 (integrazione UI più ampia/coerenza visiva fra le nuove
+  schermate), Fase 10 (test complessivo). Dataset POI fermo a 30 (non 50) per lo stesso motivo di
+  accuratezza spiegato sopra — estendibile in un secondo momento con verifica caso per caso.
+- Verificato in browser a ogni fase: acquisto/equip/vendita con bonus reale su `calcChance` (53%→55%→53%
+  su acquisto/equip/vendita di un item), corso con bonus permanente su un attributo, mentor con esito
+  legato alla relazione, gating settimanale su territorio/formazione, evento territoriale che scatta alla
+  soglia di visite corretta con ritorno alla stessa area invece che alla lista aree (bug trovato e
+  corretto durante il test).
+
 ## Bug noti/limiti accettati
 
 - `GSO CAPRIOLOB` ha ancora `forza: 0.0` nei dati sorgente (piazzamento "riserva" nel file originale) —
@@ -695,5 +912,5 @@ uno di questi due punti fissi non fosse stato un sabato.
 
 ---
 *Nota di processo: l'utente ha chiesto di aggiornare questo file ogni 5 suoi messaggi. Questo aggiornamento
-(2026-07-31) è stato richiesto esplicitamente con "aggiorna RIEPILOGO.md"; il conteggio del ciclo riparte
-da qui.*
+(2026-08-02, seconda volta nella stessa sessione) è stato richiesto esplicitamente con "aggiorniamo il file
+riepilogo.md"; il conteggio del ciclo riparte da qui.*

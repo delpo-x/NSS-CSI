@@ -161,8 +161,16 @@
   @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.3;} }
 
   .commentary{ background:linear-gradient(135deg, rgba(11,22,40,0.98), rgba(15,27,44,0.94)); border-left:3px solid var(--blue); border-radius:0 12px 12px 0; padding:12px 14px;
-    font-size:13px; line-height:1.5; color:var(--text-dim); margin-bottom:8px; animation:fadeIn .3s ease; box-shadow:inset 0 1px 0 rgba(255,255,255,0.02); }
+    font-size:13px; line-height:1.5; color:var(--text-dim); margin-bottom:8px; animation:fadeIn .3s ease; box-shadow:inset 0 1px 0 rgba(255,255,255,0.02);
+    opacity:0.45; filter:saturate(0.7); transform:scale(0.99); transition:opacity .3s ease, filter .3s ease; }
   .commentary.event{ border-left-color:var(--gold); color:var(--text); }
+  /* Il commento più recente viene aggiunto in cima al DOM (log.prepend): lo mettiamo in risalto
+     pieno, gli altri via via più opachi, così l'occhio va subito all'azione appena successa
+     invece di perdersi nello storico della cronaca. */
+  .commentary-log .commentary:first-child{ opacity:1; filter:none; transform:scale(1);
+    box-shadow:0 6px 18px rgba(18,151,216,0.14), inset 0 1px 0 rgba(255,255,255,0.03); }
+  .commentary-log .commentary:nth-child(2){ opacity:0.75; filter:saturate(0.85); }
+  .commentary-log .commentary:nth-child(3){ opacity:0.6; }
   .commentary-log{ display:flex; flex-direction:column-reverse; max-height:260px; overflow-y:auto; margin-bottom:16px; padding-right:2px; }
   #screen-result .card{ animation:floatUp .4s ease both; }
   #screen-result .card:nth-child(2){ animation-delay:.05s; }
@@ -363,16 +371,16 @@
     <div class="label">Preparazione settimanale</div>
     <div class="card" id="trainingOptions"></div>
 
-    <div class="btn-stack" id="hubActions"></div>
-
-    <div class="btn-stack" id="coppaHubBtn" style="display:none; margin-top:10px;">
-      <button class="btn ghost" onclick="showScreen('coppa')">Coppa Leonessa</button>
-    </div>
-
     <div class="card" id="lavoroCard" style="margin-top:16px; display:none;">
       <div class="label">Lavoro</div>
       <div class="subtle" id="lavoroInfo" style="margin-bottom:8px;">—</div>
       <div class="btn-stack" id="lavoroOptions"></div>
+    </div>
+
+    <div class="btn-stack" id="hubActions" style="margin-top:16px;"></div>
+
+    <div class="btn-stack" id="coppaHubBtn" style="display:none; margin-top:10px;">
+      <button class="btn ghost" onclick="showScreen('coppa')">Coppa Leonessa</button>
     </div>
 
     <div class="btn-stack" style="margin-top:16px;">
@@ -435,6 +443,38 @@
       <div id="coppaContent" style="font-size:13px; margin-top:10px;"></div>
     </div>
     <div class="btn-stack">
+      <button class="btn ghost" onclick="showScreen('hub')">Torna all'hub</button>
+    </div>
+  </div>
+
+  <!-- ===================== TERRITORIO ===================== -->
+  <div class="screen" id="screen-territorio">
+    <div class="row" style="margin-bottom:14px;">
+      <button class="btn ghost" id="territorioBack" style="display:none; width:auto; padding:6px 14px;" onclick="territorioTornaAree()">‹ Aree</button>
+      <h2 style="font-size:18px; margin:0;" id="territorioTitle">Territorio bresciano</h2>
+    </div>
+    <div class="form-errors" id="territorioAvviso" aria-live="polite"></div>
+    <div id="territorioContent"></div>
+    <div class="btn-stack" style="margin-top:16px;">
+      <button class="btn ghost" onclick="showScreen('hub')">Torna all'hub</button>
+    </div>
+  </div>
+
+  <!-- ===================== SHOP EQUIPAGGIAMENTO ===================== -->
+  <div class="screen" id="screen-shop">
+    <h2 style="font-size:18px; margin-bottom:14px;">Shop equipaggiamento</h2>
+    <div id="shopContent"></div>
+    <div class="btn-stack" style="margin-top:16px;">
+      <button class="btn ghost" onclick="showScreen('hub')">Torna all'hub</button>
+    </div>
+  </div>
+
+  <!-- ===================== FORMAZIONE ===================== -->
+  <div class="screen" id="screen-formazione">
+    <h2 style="font-size:18px; margin-bottom:14px;">Formazione</h2>
+    <div class="form-errors" id="formazioneAvviso" aria-live="polite"></div>
+    <div id="formazioneContent"></div>
+    <div class="btn-stack" style="margin-top:16px;">
       <button class="btn ghost" onclick="showScreen('hub')">Torna all'hub</button>
     </div>
   </div>
@@ -658,6 +698,11 @@ const MESI_IT = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio
 function primoSabatoDaData(d){ while(d.getUTCDay()!==6) d = new Date(d.getTime()+86400000); return d; }
 function ultimoSabatoEntroData(d){ while(d.getUTCDay()!==6) d = new Date(d.getTime()-86400000); return d; }
 function primoSabatoDiSettembre(anno){ return primoSabatoDaData(new Date(Date.UTC(anno,8,1))); }
+// Coppa Leonessa parte sempre dalla seconda settimana di aprile (8-14 aprile, primo sabato utile
+// in quell'intervallo), indipendentemente da quando finisce il campionato del giocatore: un girone
+// piccolo può chiudere il campionato molto prima (es. gennaio-febbraio) e prima la Coppa sarebbe
+// partita comunque subito, con largo anticipo sui tempi reali.
+function secondaSettimanaAprile(anno){ return primoSabatoDaData(new Date(Date.UTC(anno,3,8))); }
 function finestraPausaInvernale(stagione){
   const annoBase = ANNO_INIZIO_CARRIERA + (stagione - 1);
   return {
@@ -876,7 +921,7 @@ function salarioLavoro(tipoLavoro, anniConsecutivi) {
 }
 function energiaCostoLavoro(tipoLavoro) {
   if (!tipoLavoro || tipoLavoro === 'Nessuno') return 0;
-  return (tipoLavoro === 'PartTime') ? 15 : 35;
+  return (tipoLavoro === 'PartTime') ? 15 : 30;
 }
 
 /* ====== SISTEMA ECONOMICO: COMPENSO SPORTIVO ====== */
@@ -932,6 +977,16 @@ function applyLavoroSettimanale(){
     state.energia = clamp(state.energia - energiaCostoLavoro(f.statoLavoro), 0, 100);
   }
 }
+// Leggero riflesso settimanale della reputazione sulle relazioni: una reputazione alta (sopra 50)
+// tira via via verso l'alto mister/procuratore/compagni, una bassa tira verso il basso — piccolo
+// effetto ambientale (chi è più stimato viene trattato un po' meglio anche senza fare nulla),
+// non pensato per sostituire le scelte esplicite degli eventi che restano il driver principale.
+function applyRiflessoReputazioneSuRelazioni(){
+  const spinta = (state.reputazione-50)*0.04;
+  state.relazioni.mister = clamp(state.relazioni.mister+spinta, 0, 100);
+  state.relazioni.procuratore = clamp(state.relazioni.procuratore+spinta, 0, 100);
+  state.relazioni.compagni = clamp(state.relazioni.compagni+spinta, 0, 100);
+}
 function applyPagamentoMensile(){
   const f = state.finanze;
   if(f.statoLavoro !== 'Nessuno') f.anzianita++;
@@ -960,6 +1015,9 @@ function showScreen(id){
   if(id==='classifica') renderClassifica();
   if(id==='carriera') renderCarriera();
   if(id==='coppa') renderCoppa();
+  if(id==='territorio'){ territorioAreaSel = null; renderTerritorio(); }
+  if(id==='shop') renderShop();
+  if(id==='formazione') renderFormazione();
   // Prima "Torna all'hub" (da Classifica/Scheda giocatore/Coppa) riportava alla hub senza
   // aggiornarla: se nel frattempo era partita la Coppa Leonessa, restava visibile la vecchia
   // "Giornata X/Y" di campionato invece del badge "Coppa · ...".
@@ -1078,7 +1136,7 @@ function allocPoint(key, delta){
   document.getElementById('pointsLeft').textContent = pointsLeft+' pt';
   const role = document.getElementById('inpRole').value;
   const base = roleBaseFor(role)[key];
-  document.getElementById('tot-'+key).textContent = '= ' + clamp(base+allocated[key]*2, 20, 90);
+  document.getElementById('tot-'+key).textContent = '= ' + clamp(base+allocated[key], 20, 90);
 }
 function squadreSerieC(){
   return Object.values(DB_SQUADRE).filter(sq=> sq.serie==='C');
@@ -1227,7 +1285,7 @@ function startCareer(){
     name = document.getElementById('inpName').value.trim() || 'Giocatore CSI';
     role = document.getElementById('inpRole').value;
     base = {...roleBaseFor(role)};
-    attrKeysFor(role).forEach(k=> base[k] = clamp(base[k]+(allocated[k]||0)*2, 20, 90));
+    attrKeysFor(role).forEach(k=> base[k] = clamp(base[k]+(allocated[k]||0), 20, 90));
     dataNascita = document.getElementById('inpDataNascita').value;
   }
 
@@ -1261,9 +1319,24 @@ function startCareer(){
     allenamentoFatto: false, ultimoAllenamento: null, allenamentoSnapshot: null,
     mercatoSessione: 0, allenamentoFattoMercato: false, ultimoAllenamentoMercato: null,
     offSeasonData: null, mercatoEstivoConcluso: false, allenamentoFattoFuoriStagione: false, ultimoAllenamentoFuoriStagione: null,
-    mercatoInvernaleFatto: false, allenamentoFattoInvernale: false, ultimoAllenamentoInvernale: null, rinnovoInvernaleFatto: false,
+    mercatoInvernaleFatto: false, allenamentoFattoInvernale: false, ultimoAllenamentoInvernale: null, allenamentoSnapshotInvernale: null, rinnovoInvernaleFatto: false,
     nuovaStagioneBanner: false,
-    eventiUltimaGiornata: {}
+    eventiUltimaGiornata: {},
+    // Sistema territoriale: quante volte si è vissuta un'esperienza in ogni POI (usato per far
+    // scattare eventi di relazione/opportunità più avanti, es. "sei tornato spesso qui"), più il
+    // gating "una esperienza a settimana" sullo stesso schema di allenamentoFatto/ultimoAllenamento.
+    territorio: { visite: {}, fattaSettimana: false, ultimaEsperienza: null, eventiUltimaVolta: {}, eventiUsati: [] },
+    // Opportunità di investimento segnalate dagli eventi territoriali (Fase 7): la Fase 8
+    // (investimenti) leggerà questo elenco invece di duplicare la logica di generazione qui.
+    opportunitaInvestimento: [],
+    // Shop equipaggiamento: quantità possedute per id, e id equipaggiato per slot (null = niente
+    // equipaggiato in quello slot). I bonus non toccano mai state.attr, vedi commento su
+    // bonusEquipaggiamento().
+    inventarioEquip: {},
+    equipaggiamento: { scarpe:null, parastinchi:null, guanti:null, abbigliamento:null, accessori:null, borsone:null },
+    // Formazione: stesso gating settimanale di territorio/allenamento, più l'elenco dei libri già
+    // letti (non si possono ricomprare/rileggere per lo stesso effetto).
+    formazione: { fattaSettimana: false, ultimaFormazione: null, libriLetti: [] }
   };
   const season = buildTierSeason(state.lega, teamName());
   state.calendario = season.calendario; state.classifica = season.classifica;
@@ -1470,6 +1543,12 @@ function applyResultToCoppaGirone(oppName, myGoals, oppGoals){
   simulaProssimaSfidaAltrui();
 }
 function postCoppaMatch(){
+  // Ogni partita di Coppa Leonessa (giocata, simulata o saltata per infortunio/squalifica: tutte
+  // passano da qui) fa avanzare di una settimana il calendario fuori-stagione, esattamente come
+  // una giornata di campionato avanza dataGiornata(). Così, se si esce dal torneo, la data
+  // mostrata in "Fuori stagione" è davvero quella in cui si è usciti, non quella di inizio Coppa
+  // ripetuta per tutte le partite del torneo.
+  if(state.offSeasonData) state.offSeasonData = formatDataISO(aggiungiSettimana(parseDataISO(state.offSeasonData)));
   save();
   if(state.coppa.prossimi.length > 0){ renderHub(); showScreen('hub'); return; }
   finalizzaGironeCoppa();
@@ -1502,7 +1581,25 @@ function finalizzaGironeCoppa(){
       ? 'La tua squadra ha superato il girone della Fase Principale e accede ai 32esimi di Coppa Leonessa!'
       : 'La tua squadra è stata eliminata nel girone della Fase Principale di Coppa Leonessa.');
   }
-  save(); renderHub(); showScreen('hub');
+  save();
+  if(state.coppa){
+    // procediAFasePrincipale() qui sopra può aver già messo in coda le partite della fase
+    // successiva (qualificato dal preliminare): si continua a giocarle dall'hub, come sempre.
+    renderHub(); showScreen('hub');
+  } else if(state.offSeasonData){
+    // Torneo di Coppa Leonessa concluso del tutto (eliminato, o arrivato ai 32esimi) durante
+    // l'attesa del fuori-stagione (avviata dalla soglia di aprile in aggiornaFuoriStagione, o già
+    // in corso perché il campionato era finito dopo quella soglia): si riprende il conto
+    // settimanale invece di tornare all'hub, che a campionato già concluso non avrebbe più nulla
+    // da proporre come partita.
+    aggiornaFuoriStagione();
+  } else {
+    // Percorso storico: Coppa fatta partire subito a fine stagione, fuori-stagione non ancora
+    // avviato (il giocatore non ha ancora cliccato "Prosegui fuori stagione"). Si inizializza qui
+    // invece di tornare all'hub, che con la giornata già oltre calendario.length sarebbe un
+    // vicolo cieco (nessuna partita di campionato residua da proporre).
+    iniziaFuoriStagione();
+  }
 }
 
 function addDiario(text){
@@ -1528,7 +1625,7 @@ const TRAININGS = [
   {id:'tecnica', label:'Allenamento tecnico', desc:'+Tecnica, +Passaggio · -12 energia', apply:s=>{ s.attr.tecnica=clamp(s.attr.tecnica+1,0,99); s.attr.passaggio=clamp(s.attr.passaggio+1,0,99); s.energia=clamp(s.energia-12,0,100); s.forma=clamp(s.forma+4,0,100); }},
   {id:'fisico', label:'Preparazione atletica', desc:'+Fisico, +Velocità · -18 energia', apply:s=>{ s.attr.fisico=clamp(s.attr.fisico+1,0,99); s.attr.velocita=clamp(s.attr.velocita+1,0,99); s.energia=clamp(s.energia-18,0,100); s.forma=clamp(s.forma+2,0,100); }},
   {id:'tattico', label:'Lavoro tattico di squadra', desc:'+Difesa, +Tiro · -10 energia', apply:s=>{ s.attr.difesa=clamp(s.attr.difesa+1,0,99); s.attr.tiro=clamp(s.attr.tiro+1,0,99); s.energia=clamp(s.energia-10,0,100); s.forma=clamp(s.forma+3,0,100); }},
-  {id:'riposo', label:'Riposo e recupero', desc:'+Energia, +Morale', apply:s=>{ s.energia=clamp(s.energia+30,0,100); s.morale=clamp(s.morale+8,0,100); }},
+  {id:'riposo', label:'Riposo e recupero', desc:'+Energia, +Morale', apply:s=>{ s.energia=clamp(s.energia+40,0,100); s.morale=clamp(s.morale+8,0,100); }},
 ];
 
 /* La scelta di preparazione settimanale resta modificabile finché non si procede (partita/
@@ -1598,7 +1695,8 @@ function renderHub(){
     const faseLabel = state.coppa.tipo==='preliminare' ? 'Preliminare' : 'Fase Principale';
     const numeroPartita = state.coppa.giocate.length + 1;
     const totalePartite = state.coppa.giocate.length + state.coppa.prossimi.length;
-    document.getElementById('hubGiornata').textContent = `Coppa · ${faseLabel} · Partita ${numeroPartita}/${totalePartite}`;
+    const dataCoppa = state.offSeasonData ? ` · ${formattaDataIT(parseDataISO(state.offSeasonData))}` : '';
+    document.getElementById('hubGiornata').textContent = `Coppa · ${faseLabel} · Partita ${numeroPartita}/${totalePartite}${dataCoppa}`;
     document.getElementById('hubOpponent').textContent = `vs ${state.coppa.prossimi[0].nome}`;
   } else {
     document.getElementById('hubGiornata').textContent = `Giornata ${state.giornata}/${state.calendario.length} · ${formattaDataIT(dataGiornata(state.stagione, state.giornata))}`;
@@ -1636,22 +1734,36 @@ function renderHub(){
       <div style="margin-top:8px; font-size:13px;">Sei fuori per ancora <b>${state.infortunio.giornateRestanti}</b> giornata/e.</div></div>`;
     actions.innerHTML = `<button class="btn danger" onclick="skipGiornata('infortunio')">Salta giornata (recupero)</button>
       <button class="btn ghost" onclick="showScreen('classifica')">Classifica</button>
-      <button class="btn ghost" onclick="showScreen('carriera')">Scheda giocatore</button>`;
+      <button class="btn ghost" onclick="showScreen('carriera')">Scheda giocatore</button>
+      <button class="btn ghost" onclick="showScreen('territorio')">Territorio</button>
+      <button class="btn ghost" onclick="showScreen('shop')">Shop</button>
+      <button class="btn ghost" onclick="showScreen('formazione')">Formazione</button>`;
   } else if(state.squalifica>0){
     banner.innerHTML = `<div class="card warn"><div class="badge red">Squalifica</div>
       <div style="margin-top:8px; font-size:13px;">Ancora <b>${state.squalifica}</b> giornata/e di stop.</div></div>`;
     actions.innerHTML = `<button class="btn danger" onclick="skipGiornata('squalifica')">Salta giornata</button>
       <button class="btn ghost" onclick="showScreen('classifica')">Classifica</button>
-      <button class="btn ghost" onclick="showScreen('carriera')">Scheda giocatore</button>`;
+      <button class="btn ghost" onclick="showScreen('carriera')">Scheda giocatore</button>
+      <button class="btn ghost" onclick="showScreen('territorio')">Territorio</button>
+      <button class="btn ghost" onclick="showScreen('shop')">Shop</button>
+      <button class="btn ghost" onclick="showScreen('formazione')">Formazione</button>`;
   } else {
     actions.innerHTML = `<button class="btn" id="btnPlayMatch" onclick="beginMatch()">${coppaAttiva?'Scendi in campo (Coppa)':'Scendi in campo'}</button>
       <button class="btn ghost" id="btnSimMatch" onclick="simulaPartita()">Simula partita</button>
       <button class="btn warning" onclick="saltaPartitaVolontariamente()" aria-label="Salta partita: penalità alle relazioni">Salta partita</button>
       <button class="btn ghost" onclick="showScreen('classifica')">Classifica</button>
-      <button class="btn ghost" onclick="showScreen('carriera')">Scheda giocatore</button>`;
-    document.getElementById('btnPlayMatch').disabled = state.energia < 15;
-    document.getElementById('btnSimMatch').disabled = state.energia < 15;
-    if(state.energia < 15){
+      <button class="btn ghost" onclick="showScreen('carriera')">Scheda giocatore</button>
+      <button class="btn ghost" onclick="showScreen('territorio')">Territorio</button>
+      <button class="btn ghost" onclick="showScreen('shop')">Shop</button>
+      <button class="btn ghost" onclick="showScreen('formazione')">Formazione</button>`;
+    const nonConvocato = !coppaAttiva && contaValoriSottoSoglia(35)>=2;
+    document.getElementById('btnPlayMatch').disabled = state.energia < 15 || nonConvocato;
+    document.getElementById('btnSimMatch').disabled = state.energia < 15 || nonConvocato;
+    if(nonConvocato){
+      banner.innerHTML = `<div class="card warn"><div class="badge red">Fuori dai convocati</div>
+        <div style="margin-top:8px; font-size:13px;">Reputazione, energia, forma, morale o rapporto col mister sono troppo bassi: il mister non ti convoca. Riposa per recuperare.</div></div>`;
+      actions.innerHTML += `<button class="btn danger" onclick="skipGiornata('condizione fisica/mentale bassa')">Riposa (salta giornata)</button>`;
+    } else if(state.energia < 15){
       banner.innerHTML = `<div class="card warn"><div class="badge red">Energia troppo bassa</div>
         <div style="margin-top:8px; font-size:13px;">Con questo livello di energia non sei schierabile: riposa prima di tornare in campo.</div></div>`;
       actions.innerHTML += `<button class="btn danger" onclick="skipGiornata('energia bassa')">Riposa (salta giornata)</button>`;
@@ -1677,6 +1789,407 @@ function dismissAch(){ state.achievementsNuovi = []; save(); renderHub(); }
 function dismissNuovaStagioneBanner(){ state.nuovaStagioneBanner = false; save(); renderHub(); }
 function setBar(barId, txtId, val){ document.getElementById(barId).style.width = val+'%'; document.getElementById(txtId).textContent = Math.round(val)+'%'; }
 function setMini(barId, txtId, val){ document.getElementById(barId).style.width = val+'%'; document.getElementById(txtId).textContent = Math.round(val)+'%'; }
+
+/* ---------- SISTEMA TERRITORIALE (esperienze nel territorio bresciano) ----------
+   Stesso pattern dati-motore-UI già usato da TRAININGS/EVENTS: array di oggetti con id stabile,
+   una funzione generica che li applica a state (denaro/energia/morale/xp/reputazione, tutti campi
+   già esistenti — nessuna nuova statistica), gating settimanale riusando lo stesso schema
+   allenamentoFatto/ultimoAllenamento (qui territorio.fattaSettimana/ultimaEsperienza) invece di
+   inventare un sistema-ore separato: il "tempo" del gioco è già la settimana, non serve altro.
+   display_name è il nome mostrato in UI; real_reference_name è solo riferimento editoriale (può
+   restare uguale a display_name quando il luogo è un monumento/parco pubblico, mai un'attività
+   commerciale con marchio — per quelle serve verifica dei diritti non ancora fatta, vedi nota in
+   fondo al file). 30 POI iniziali reali e verificabili (monumenti, parchi, laghi, siti UNESCO):
+   meno dei 50 richiesti ma tutti su fonti di dominio pubblico, nessun dato inventato. */
+const TERRITORIO_AREE = [
+  { id:'AREA_BS', nome:'Brescia Città', descrizione:'Il capoluogo: centro storico, arte, vita urbana.', tipo:'urbano', stagionalita:'tutto_anno', fascia_economica:'media', livello_viaggio:0 },
+  { id:'AREA_FRAN', nome:'Franciacorta', descrizione:'Colline, vigneti, abbazie e borghi storici.', tipo:'collinare', stagionalita:'primavera_estate_autunno', fascia_economica:'medio_alta', livello_viaggio:1 },
+  { id:'AREA_ISEO', nome:'Lago d\'Iseo', descrizione:'Il Sebino: lago, isole, borghi lacustri.', tipo:'lago', stagionalita:'primavera_estate', fascia_economica:'media', livello_viaggio:1 },
+  { id:'AREA_GARDA', nome:'Garda Bresciano', descrizione:'La sponda bresciana del lago più grande d\'Italia.', tipo:'lago', stagionalita:'primavera_estate', fascia_economica:'medio_alta', livello_viaggio:1 },
+  { id:'AREA_VC', nome:'Valle Camonica', descrizione:'Montagna, natura, incisioni rupestri patrimonio UNESCO.', tipo:'montagna', stagionalita:'tutto_anno', fascia_economica:'bassa', livello_viaggio:2 },
+  { id:'AREA_VALLI', nome:'Altre Valli Bresciane', descrizione:'Valle Sabbia e Valle Trompia: laghi minori, passi, santuari.', tipo:'montagna', stagionalita:'tutto_anno', fascia_economica:'bassa', livello_viaggio:2 },
+];
+const DB_POI = [
+  { id:'POI_BS_001', area_id:'AREA_BS', comune:'Brescia', category:'CULTURA', display_name:'Piazza della Loggia', real_reference_name:'Piazza della Loggia', generic_name:'La piazza storica del centro', description:'La piazza rinascimentale simbolo della città.', cost_min:0, cost_max:0, energy_cost:5, time_cost:1, effetti:{morale:3}, azione_label:'Passeggiata in centro storico' },
+  { id:'POI_BS_002', area_id:'AREA_BS', comune:'Brescia', category:'CULTURA', display_name:'Castello di Brescia', real_reference_name:'Castello di Brescia', generic_name:'Il castello sul colle Cidneo', description:'La fortezza che domina la città dal colle Cidneo.', cost_min:5, cost_max:8, energy_cost:10, time_cost:2, effetti:{morale:4, esperienza:2}, azione_label:'Visita al castello' },
+  { id:'POI_BS_003', area_id:'AREA_BS', comune:'Brescia', category:'CULTURA', display_name:'Duomo Nuovo e Duomo Vecchio', real_reference_name:'Duomo Nuovo e Duomo Vecchio', generic_name:'La piazza dei duomi', description:'I due duomi affiancati in Piazza Paolo VI.', cost_min:0, cost_max:0, energy_cost:5, time_cost:1, effetti:{morale:2, esperienza:1}, azione_label:'Visita culturale' },
+  { id:'POI_BS_004', area_id:'AREA_BS', comune:'Brescia', category:'CULTURA', display_name:'Complesso di Santa Giulia', real_reference_name:'Museo di Santa Giulia', generic_name:'Il museo del monastero', description:'Monastero longobardo, sito UNESCO, oggi museo della città.', cost_min:8, cost_max:10, energy_cost:12, time_cost:3, effetti:{morale:3, esperienza:4, reputazione:1}, azione_label:'Visita al museo' },
+  { id:'POI_BS_005', area_id:'AREA_BS', comune:'Brescia', category:'CULTURA', display_name:'Teatro Grande di Brescia', real_reference_name:'Teatro Grande', generic_name:'Il grande teatro cittadino', description:'Lo storico teatro d\'opera della città.', cost_min:15, cost_max:35, energy_cost:8, time_cost:3, effetti:{morale:6, reputazione:1}, azione_label:'Serata a teatro' },
+  { id:'POI_BS_006', area_id:'AREA_BS', comune:'Brescia', category:'NATURA', display_name:'Parco delle Colline di Brescia', real_reference_name:'Parco delle Colline di Brescia', generic_name:'Il parco collinare cittadino', description:'Il grande parco naturale a ridosso del centro.', cost_min:0, cost_max:0, energy_cost:15, time_cost:2, effetti:{morale:5, forma:1}, azione_label:'Passeggiata/corsa nel parco' },
+  { id:'POI_FRAN_001', area_id:'AREA_FRAN', comune:'Rodengo Saldo', category:'CULTURA', display_name:'Abbazia Olivetana di Rodengo Saldo', real_reference_name:'Abbazia Olivetana di Rodengo Saldo', generic_name:'L\'abbazia tra le colline', description:'Monastero benedettino tra i vigneti della Franciacorta.', cost_min:0, cost_max:5, energy_cost:8, time_cost:2, effetti:{morale:4, esperienza:1}, azione_label:'Visita all\'abbazia' },
+  { id:'POI_FRAN_002', area_id:'AREA_FRAN', comune:'Provaglio d\'Iseo', category:'CULTURA', display_name:'Monastero di San Pietro in Lamosa', real_reference_name:'Monastero di San Pietro in Lamosa', generic_name:'Il monastero sulle torbiere', description:'Antico monastero affacciato sulla riserva delle Torbiere.', cost_min:0, cost_max:0, energy_cost:6, time_cost:2, effetti:{morale:3}, azione_label:'Visita culturale' },
+  { id:'POI_FRAN_003', area_id:'AREA_FRAN', comune:'Provaglio d\'Iseo', category:'NATURA', display_name:'Riserva Naturale Torbiere del Sebino', real_reference_name:'Riserva Naturale Torbiere del Sebino', generic_name:'La riserva naturale delle torbiere', description:'Zona umida protetta tra Franciacorta e lago d\'Iseo.', cost_min:0, cost_max:0, energy_cost:12, time_cost:2, effetti:{morale:5, forma:1}, azione_label:'Escursione nella riserva' },
+  { id:'POI_FRAN_004', area_id:'AREA_FRAN', comune:'Bornato (Cazzago San Martino)', category:'CULTURA', display_name:'Castello di Bornato', real_reference_name:'Castello di Bornato', generic_name:'Il castello medievale tra i vigneti', description:'Castello medievale con giardino all\'italiana.', cost_min:8, cost_max:12, energy_cost:8, time_cost:2, effetti:{morale:4, esperienza:2}, azione_label:'Visita al castello' },
+  { id:'POI_FRAN_005', area_id:'AREA_FRAN', comune:'Borgo San Giacomo', category:'CULTURA', display_name:'Rocca di Padernello', real_reference_name:'Rocca di Padernello', generic_name:'La rocca con il fossato', description:'Castello con fossato ancora colmo d\'acqua, oggi centro culturale.', cost_min:5, cost_max:10, energy_cost:8, time_cost:2, effetti:{morale:4, esperienza:1}, azione_label:'Visita alla rocca' },
+  { id:'POI_FRAN_006', area_id:'AREA_FRAN', comune:'Erbusco', category:'TURISMO', display_name:'Strada del Franciacorta', real_reference_name:'Strada del Franciacorta', generic_name:'Il percorso panoramico tra i vigneti', description:'Il percorso enoturistico che attraversa le colline vitate.', cost_min:0, cost_max:0, energy_cost:10, time_cost:2, effetti:{morale:4}, azione_label:'Passeggiata tra i vigneti' },
+  { id:'POI_ISEO_001', area_id:'AREA_ISEO', comune:'Monte Isola', category:'NATURA', display_name:'Monte Isola', real_reference_name:'Monte Isola', generic_name:'La grande isola del lago', description:'La più grande isola lacustre d\'Europa.', cost_min:5, cost_max:12, energy_cost:15, time_cost:5, effetti:{morale:8, esperienza:2}, azione_label:'Giornata sull\'isola' },
+  { id:'POI_ISEO_002', area_id:'AREA_ISEO', comune:'Iseo', category:'TURISMO', display_name:'Lungolago di Iseo', real_reference_name:'Lungolago di Iseo', generic_name:'La passeggiata sul lungolago', description:'La passeggiata storica affacciata sul lago.', cost_min:0, cost_max:0, energy_cost:6, time_cost:1, effetti:{morale:3}, azione_label:'Passeggiata sul lungolago' },
+  { id:'POI_ISEO_003', area_id:'AREA_ISEO', comune:'Monte Isola', category:'CULTURA', display_name:'Santuario della Madonna della Ceriola', real_reference_name:'Santuario della Madonna della Ceriola', generic_name:'Il santuario sulla cima dell\'isola', description:'Santuario in cima a Monte Isola, punto panoramico sul lago.', cost_min:0, cost_max:0, energy_cost:18, time_cost:3, effetti:{morale:6, forma:1}, azione_label:'Escursione al santuario' },
+  { id:'POI_ISEO_004', area_id:'AREA_ISEO', comune:'Iseo', category:'CULTURA', display_name:'Pieve di Sant\'Andrea', real_reference_name:'Pieve di Sant\'Andrea (Iseo)', generic_name:'La pieve del paese', description:'Antica pieve romanica nel centro di Iseo.', cost_min:0, cost_max:0, energy_cost:5, time_cost:1, effetti:{morale:2, esperienza:1}, azione_label:'Visita culturale' },
+  { id:'POI_ISEO_005', area_id:'AREA_ISEO', comune:'Sarnico', category:'TURISMO', display_name:'Lungolago di Sarnico', real_reference_name:'Lungolago di Sarnico', generic_name:'Il lungolago del borgo liberty', description:'Borgo lacustre noto per l\'architettura liberty.', cost_min:0, cost_max:8, energy_cost:8, time_cost:2, effetti:{morale:4}, azione_label:'Passeggiata e aperitivo sul lago' },
+  { id:'POI_ISEO_006', area_id:'AREA_ISEO', comune:'Iseo', category:'NATURA', display_name:'Isola di Loreto', real_reference_name:'Isola di Loreto', generic_name:'L\'isolotto privato del lago', description:'Isolotto privato visibile dal lungolago, punto panoramico.', cost_min:0, cost_max:0, energy_cost:4, time_cost:1, effetti:{morale:2}, azione_label:'Vista panoramica dal lago' },
+  { id:'POI_GARDA_001', area_id:'AREA_GARDA', comune:'Sirmione', category:'CULTURA', display_name:'Rocca Scaligera di Sirmione', real_reference_name:'Rocca Scaligera', generic_name:'Il castello sul lago', description:'Castello medievale all\'ingresso del borgo di Sirmione.', cost_min:6, cost_max:10, energy_cost:10, time_cost:2, effetti:{morale:5, esperienza:2}, azione_label:'Visita alla rocca' },
+  { id:'POI_GARDA_002', area_id:'AREA_GARDA', comune:'Sirmione', category:'CULTURA', display_name:'Grotte di Catullo', real_reference_name:'Grotte di Catullo', generic_name:'Il sito archeologico sulla penisola', description:'Resti di una villa romana sulla punta della penisola di Sirmione.', cost_min:8, cost_max:10, energy_cost:12, time_cost:3, effetti:{morale:5, esperienza:3}, azione_label:'Visita archeologica' },
+  { id:'POI_GARDA_003', area_id:'AREA_GARDA', comune:'Gardone Riviera', category:'CULTURA', display_name:'Vittoriale degli Italiani', real_reference_name:'Il Vittoriale degli Italiani', generic_name:'La grande villa-museo sul lago', description:'Complesso monumentale e casa-museo affacciata sul Garda.', cost_min:12, cost_max:18, energy_cost:12, time_cost:3, effetti:{morale:6, esperienza:3, reputazione:1}, azione_label:'Visita alla villa-museo' },
+  { id:'POI_GARDA_004', area_id:'AREA_GARDA', comune:'San Felice del Benaco', category:'NATURA', display_name:'Isola del Garda', real_reference_name:'Isola del Garda', generic_name:'L\'isola più grande del lago', description:'La più grande isola del Lago di Garda, visitabile in battello.', cost_min:20, cost_max:30, energy_cost:10, time_cost:4, effetti:{morale:8, esperienza:2, reputazione:1}, azione_label:'Escursione in battello all\'isola' },
+  { id:'POI_GARDA_005', area_id:'AREA_GARDA', comune:'Salò', category:'TURISMO', display_name:'Lungolago di Salò', real_reference_name:'Lungolago di Salò', generic_name:'Il lungolago più lungo del Garda', description:'Uno dei lungolago più ampi e frequentati del Garda bresciano.', cost_min:0, cost_max:10, energy_cost:8, time_cost:2, effetti:{morale:4}, azione_label:'Passeggiata e aperitivo sul lago' },
+  { id:'POI_GARDA_006', area_id:'AREA_GARDA', comune:'Manerba del Garda', category:'NATURA', display_name:'Rocca di Manerba del Garda', real_reference_name:'Rocca di Manerba del Garda', generic_name:'Il parco naturale sulla rocca', description:'Parco naturale su un promontorio a picco sul lago.', cost_min:0, cost_max:0, energy_cost:16, time_cost:3, effetti:{morale:6, forma:1}, azione_label:'Escursione panoramica' },
+  { id:'POI_VC_001', area_id:'AREA_VC', comune:'Capo di Ponte', category:'CULTURA', display_name:'Parco Nazionale delle Incisioni Rupestri', real_reference_name:'Parco Nazionale delle Incisioni Rupestri di Naquane', generic_name:'Il parco delle incisioni rupestri', description:'Primo sito italiano dichiarato patrimonio UNESCO, incisioni preistoriche.', cost_min:6, cost_max:8, energy_cost:14, time_cost:3, effetti:{morale:5, esperienza:4}, azione_label:'Visita al parco archeologico' },
+  { id:'POI_VC_002', area_id:'AREA_VC', comune:'Ceto/Cimbergo/Paspardo', category:'NATURA', display_name:'Riserva di Ceto, Cimbergo e Paspardo', real_reference_name:'Riserva Naturale Incisioni Rupestri di Ceto, Cimbergo e Paspardo', generic_name:'La riserva delle incisioni rupestri', description:'Riserva naturale con altre importanti incisioni rupestri, sito UNESCO.', cost_min:0, cost_max:5, energy_cost:18, time_cost:4, effetti:{morale:6, esperienza:3, forma:1}, azione_label:'Escursione tra le incisioni' },
+  { id:'POI_VC_003', area_id:'AREA_VC', comune:'Capo di Ponte', category:'CULTURA', display_name:'Pieve di San Siro', real_reference_name:'Pieve di San Siro (Capo di Ponte)', generic_name:'L\'antica pieve della valle', description:'Una delle chiese romaniche più antiche della Valle Camonica.', cost_min:0, cost_max:0, energy_cost:6, time_cost:1, effetti:{morale:3, esperienza:1}, azione_label:'Visita culturale' },
+  { id:'POI_VALLI_001', area_id:'AREA_VALLI', comune:'Idro', category:'NATURA', display_name:'Lago d\'Idro', real_reference_name:'Lago d\'Idro', generic_name:'Il piccolo lago di montagna', description:'Lago alpino in Valle Sabbia, meno affollato dei grandi laghi.', cost_min:0, cost_max:8, energy_cost:10, time_cost:2, effetti:{morale:5}, azione_label:'Giornata al lago' },
+  { id:'POI_VALLI_002', area_id:'AREA_VALLI', comune:'Bovegno/Collio', category:'NATURA', display_name:'Passo del Maniva', real_reference_name:'Passo del Maniva', generic_name:'Il passo di montagna della Valle Trompia', description:'Valico di montagna, meta escursionistica e sciistica.', cost_min:0, cost_max:0, energy_cost:20, time_cost:4, effetti:{morale:6, forma:2}, azione_label:'Escursione in montagna' },
+  { id:'POI_VALLI_003', area_id:'AREA_VALLI', comune:'Collio', category:'CULTURA', display_name:'Santuario della Madonna della Corna', real_reference_name:'Santuario della Madonna della Corna', generic_name:'Il santuario di montagna', description:'Santuario incastonato nella roccia in Valle Trompia.', cost_min:0, cost_max:0, energy_cost:14, time_cost:3, effetti:{morale:5, esperienza:1}, azione_label:'Escursione al santuario' },
+];
+function displayNamePoi(poi){ return poi.display_name || poi.fallback_name || poi.generic_name; }
+function vivEsperienza(poiId){
+  if(state.territorio.fattaSettimana) return;
+  const poi = DB_POI.find(p=>p.id===poiId);
+  if(!poi) return;
+  const avviso = document.getElementById('territorioAvviso');
+  const costo = poi.cost_max || poi.cost_min || 0;
+  if(state.finanze.saldo < costo){ avviso.textContent = 'Saldo insufficiente per questa esperienza.'; return; }
+  if(state.energia < poi.energy_cost){ avviso.textContent = 'Energia insufficiente per questa esperienza.'; return; }
+  avviso.textContent = '';
+  state.finanze.saldo -= costo;
+  state.energia = clamp(state.energia - poi.energy_cost, 0, 100);
+  const eff = poi.effetti || {};
+  if(eff.morale) state.morale = clamp(state.morale + eff.morale, 0, 100);
+  if(eff.forma) state.forma = clamp(state.forma + eff.forma, 0, 100);
+  if(eff.reputazione) state.reputazione = clamp(state.reputazione + eff.reputazione, 0, 100);
+  if(eff.esperienza) addXP(eff.esperienza);
+  state.territorio.visite[poiId] = (state.territorio.visite[poiId]||0) + 1;
+  state.territorio.fattaSettimana = true;
+  state.territorio.ultimaEsperienza = poiId;
+  addDiario(`${displayNamePoi(poi)}: ${poi.azione_label}${costo?` (€${costo})`:''}.`);
+  save();
+  const te = pickTerritorioEvento(poi);
+  if(te){ showTerritorioEvento(te, poi); } else { renderTerritorio(); }
+}
+let territorioAreaSel = null;
+function selezionaAreaTerritorio(id){ territorioAreaSel = id; document.getElementById('territorioAvviso').textContent = ''; renderTerritorio(); }
+function territorioTornaAree(){ territorioAreaSel = null; document.getElementById('territorioAvviso').textContent = ''; renderTerritorio(); }
+function renderTerritorio(){
+  const box = document.getElementById('territorioContent');
+  if(!territorioAreaSel){
+    document.getElementById('territorioTitle').textContent = 'Territorio bresciano';
+    document.getElementById('territorioBack').style.display = 'none';
+    box.innerHTML = TERRITORIO_AREE.map(a=>
+      `<div class="choice-card" onclick="selezionaAreaTerritorio('${a.id}')"><div class="choice-title">${a.nome}</div><div class="choice-meta"><span>${a.descrizione}</span></div></div>`
+    ).join('');
+    return;
+  }
+  const area = TERRITORIO_AREE.find(a=>a.id===territorioAreaSel);
+  document.getElementById('territorioTitle').textContent = area.nome;
+  document.getElementById('territorioBack').style.display = 'block';
+  const fatta = state.territorio.fattaSettimana;
+  const pois = DB_POI.filter(p=>p.area_id===area.id);
+  box.innerHTML = (fatta ? `<div class="subtle" style="margin-bottom:8px;">Hai già vissuto un'esperienza territoriale questa settimana: si sblocca di nuovo alla prossima.</div>` : '')
+    + pois.map(p=>{
+        const nome = displayNamePoi(p);
+        const costoLabel = (p.cost_max||p.cost_min) ? `€${p.cost_min}${p.cost_max>p.cost_min?'-'+p.cost_max:''}` : 'Gratis';
+        const visitato = state.territorio.visite[p.id] ? ` · visitato ${state.territorio.visite[p.id]}×` : '';
+        return `<div class="choice-card"${fatta?' style="opacity:0.4; pointer-events:none;"':''} onclick="vivEsperienza('${p.id}')">
+          <div class="choice-title">${nome}</div>
+          <div class="choice-meta"><span>${p.azione_label}</span></div>
+          <div class="subtle" style="margin-top:4px;">${costoLabel} · -${p.energy_cost} energia · ${p.time_cost}h${visitato}</div>
+        </div>`;
+      }).join('');
+}
+
+/* ---------- EVENTI TERRITORIALI (relazioni/opportunità legate ai POI) ----------
+   Estende il territorio riusando showEvent()/il motore applica-esito già esistente: non è un
+   secondo Event Engine, solo un resolver diverso (pickTerritorioEvento) che seleziona in base a
+   "quante volte hai visitato QUESTO POI" invece che ai trigger di partita/settimana. Generici
+   (per categoria, non per singolo POI) così valgono per tutto il dataset e per i POI futuri senza
+   toccare codice. L'evento "opportunità" è l'aggancio esplicito verso la Fase 8 (investimenti,
+   vedi spec sez.16 "gli investimenti nascono dagli eventi"): qui si limita a registrare
+   l'opportunità in state.opportunitaInvestimento, senza logiche di investimento che non esistono
+   ancora — evita di costruire in anticipo pezzi della fase successiva. */
+const TERRITORIO_EVENTI = [
+  { id:'poi_habitue', soglia_visite:2, weight:0.6, cooldown:6,
+    testo:(poi)=>`Tornando spesso a ${displayNamePoi(poi)}, hai iniziato a farti riconoscere.`,
+    scelte:[
+      {label:'Fai due chiacchiere', applica:s=>{ s.reputazione=clamp(s.reputazione+1,0,100); s.morale=clamp(s.morale+2,0,100); }, esito:'Un piccolo legame col territorio, ma fa piacere.'},
+      {label:'Saluti e vai via', applica:s=>{}, esito:'Meglio non perdere tempo, oggi.'}
+    ]},
+  { id:'poi_gruppo_sociale', categoria:'NATURA', soglia_visite:3, weight:0.5, cooldown:8,
+    testo:(poi)=>`A ${displayNamePoi(poi)} incontri altri habitué del posto.`,
+    scelte:[
+      {label:'Ti unisci al gruppo', applica:s=>{ s.relazioni.compagni=clamp(s.relazioni.compagni+3,0,100); s.morale=clamp(s.morale+3,0,100); }, esito:'Nuove conoscenze fuori dal calcio, fa bene.'},
+      {label:'Preferisci restare per conto tuo', applica:s=>{ s.morale=clamp(s.morale+1,0,100); }, esito:'Un momento tutto tuo, va bene così.'}
+    ]},
+  { id:'poi_opportunita', soglia_visite:4, weight:0.35, cooldown:20, unaVolta:true,
+    testo:(poi)=>`A forza di tornare a ${displayNamePoi(poi)}, chi lo gestisce ti conosce ormai bene: ha qualcosa da proporti.`,
+    scelte:[
+      {label:'Ascolta la proposta', applica:(s,poi)=>{
+          s.opportunitaInvestimento.push({ id:'OPP_'+poi.id+'_'+Date.now(), poi_id:poi.id, comune:poi.comune, category:poi.category, testo:`Proposta ricevuta a ${displayNamePoi(poi)}`, vista:false });
+          s.reputazione=clamp(s.reputazione+1,0,100);
+        }, esito:'Ascolti con interesse: potrebbe diventare un\'occasione da valutare più avanti.'},
+      {label:'Non è il momento', applica:s=>{}, esito:'Rimandi la conversazione a un\'altra volta.'}
+    ]},
+];
+function pickTerritorioEvento(poi){
+  const visite = state.territorio.visite[poi.id]||0;
+  const eligible = TERRITORIO_EVENTI.filter(te=>{
+    if(te.categoria && te.categoria!==poi.category) return false;
+    if(visite < te.soglia_visite) return false;
+    if(te.unaVolta && state.territorio.eventiUsati.includes(te.id+'_'+poi.id)) return false;
+    const ultima = state.territorio.eventiUltimaVolta[te.id];
+    if(ultima!==undefined && (state.giornata-ultima) < te.cooldown) return false;
+    return true;
+  });
+  if(!eligible.length) return null;
+  for(const te of shuffle(eligible)){ if(Math.random() < te.weight) return te; }
+  return null;
+}
+function showTerritorioEvento(te, poi){
+  state.territorio.eventiUltimaVolta[te.id] = state.giornata;
+  if(te.unaVolta) state.territorio.eventiUsati.push(te.id+'_'+poi.id);
+  const evRisolto = { testo: te.testo(poi), scelte: te.scelte.map(sc=>({ label:sc.label, applica:s=>sc.applica(s,poi), esito:sc.esito })) };
+  showEvent(evRisolto, ()=>{
+    // Non uso showScreen('territorio') qui: resetterebbe territorioAreaSel e riporterebbe
+    // l'utente alla lista delle aree invece di lasciarlo nell'area/POI che stava guardando.
+    renderTerritorio();
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById('screen-territorio').classList.add('active');
+  });
+}
+
+/* ---------- SHOP EQUIPAGGIAMENTO ----------
+   Stesso pattern dati-motore-UI del territorio: array di oggetti con id stabile, un inventario
+   in state (state.inventarioEquip: itemId -> quantità posseduta) e uno slot equipaggiato per
+   categoria (state.equipaggiamento). I bonus NON toccano mai state.attr (niente da tracciare/
+   annullare quando ci si disequipaggia): sono sommati a runtime solo dentro calcChance(), stesso
+   punto già esteso per il rapporto con mister/compagni. Item senza slot (RECUPERO) sono
+   consumabili: si usano una volta e spariscono dall'inventario, effetto immediato (onUse).
+   Item con bonuses su forma/morale/reputazione userebbero lo stesso problema di tracciamento di
+   state.attr se fossero "persistenti mentre equipaggiati": per questi pochi casi (parastinchi
+   fortunati, tuta da riscaldamento, accessori) l'effetto è invece un bonus una tantum all'atto
+   di indossarli (onEquip), coerente con TRAININGS.apply già esistente, non un nuovo sistema. */
+const SLOT_LABELS = { scarpe:'Scarpe', parastinchi:'Parastinchi', guanti:'Guanti', abbigliamento:'Abbigliamento tecnico', accessori:'Accessori', borsone:'Borsone' };
+const DB_EQUIPAGGIAMENTO = [
+  // SCARPE
+  { id:'SC_ECO', category:'SCARPE', slot:'scarpe', name:'Scarpe economiche', description:'Il minimo indispensabile per scendere in campo.', price:20, durability:'bassa', weight:'medio', bonuses:{tecnica:1}, rarity:'comune', sell_value:8 },
+  { id:'SC_STD', category:'SCARPE', slot:'scarpe', name:'Scarpe standard', description:'Un buon compromesso tra prezzo e prestazioni.', price:45, durability:'media', weight:'medio', bonuses:{tecnica:1, tiro:1}, rarity:'comune', sell_value:18 },
+  { id:'SC_TEC', category:'SCARPE', slot:'scarpe', name:'Scarpe tecniche', description:'Pensate per il controllo palla e la precisione nei passaggi.', price:90, durability:'alta', weight:'medio', bonuses:{tecnica:2, passaggio:1}, rarity:'non_comune', sell_value:40 },
+  { id:'SC_ULL', category:'SCARPE', slot:'scarpe', name:'Scarpe ultraleggere', description:'Pochi grammi in più di velocità, a scapito della protezione.', price:140, durability:'media', weight:'minimo', bonuses:{velocita:3}, maluses:{fisico:1}, rarity:'rara', sell_value:65 },
+  { id:'SC_SPEC', category:'SCARPE', slot:'scarpe', name:'Scarpe da tiro specialistiche', description:'Superficie di contatto studiata per la potenza del tiro.', price:130, durability:'media', weight:'medio', bonuses:{tiro:3}, rarity:'rara', sell_value:60 },
+  // PARASTINCHI (5 varianti)
+  { id:'PS_TRAD', category:'PARASTINCHI', slot:'parastinchi', name:'Parastinchi tradizionali', description:'Protezione robusta, ma pesano.', price:15, durability:'alta', weight:'alto', bonuses:{fisico:3}, maluses:{velocita:1}, rarity:'comune', sell_value:6 },
+  { id:'PS_MOD', category:'PARASTINCHI', slot:'parastinchi', name:'Parastinchi moderni', description:'Effetti equilibrati tra protezione e leggerezza.', price:40, durability:'media', weight:'medio', bonuses:{fisico:2, velocita:1}, rarity:'comune', sell_value:16 },
+  { id:'PS_ULL', category:'PARASTINCHI', slot:'parastinchi', name:'Parastinchi ultraleggeri', description:'Peso minimo, per chi vuole sentirsi scattante.', price:100, durability:'bassa', weight:'minimo', bonuses:{velocita:3, fisico:1}, rarity:'rara', sell_value:45 },
+  { id:'PS_RINF', category:'PARASTINCHI', slot:'parastinchi', name:'Parastinchi rinforzati', description:'Protezione extra senza rinunciare troppo alla mobilità.', price:70, durability:'alta', weight:'medio', bonuses:{fisico:3, velocita:2}, rarity:'non_comune', sell_value:30 },
+  { id:'PS_FORT', category:'PARASTINCHI', slot:'parastinchi', name:'Parastinchi "fortunati"', description:'Non cambiano le prestazioni, ma ti fanno sentire più sicuro.', price:35, durability:'media', weight:'medio', onEquip:s=>{ s.morale=clamp(s.morale+5,0,100); }, rarity:'rara', sell_value:15 },
+  // GUANTI
+  { id:'GU_ALL', category:'GUANTI', slot:'guanti', name:'Guanti da allenamento', description:'Guanti base per portieri.', price:15, durability:'bassa', weight:'medio', bonuses:{presa:1}, rarity:'comune', sell_value:6 },
+  { id:'GU_GARA', category:'GUANTI', slot:'guanti', name:'Guanti da gara', description:'Presa e reattività migliorate per la domenica.', price:40, durability:'media', weight:'medio', bonuses:{presa:2, riflessi:1}, rarity:'comune', sell_value:18 },
+  { id:'GU_PRO', category:'GUANTI', slot:'guanti', name:'Guanti professionali', description:'Qualità da club importante.', price:90, durability:'alta', weight:'medio', bonuses:{presa:3, riflessi:2}, rarity:'non_comune', sell_value:40 },
+  { id:'GU_INV', category:'GUANTI', slot:'guanti', name:'Guanti invernali', description:'Per le giornate più fredde, più flavor che prestazione.', price:12, durability:'media', weight:'basso', onEquip:s=>{ s.morale=clamp(s.morale+1,0,100); }, rarity:'comune', sell_value:4 },
+  // ABBIGLIAMENTO TECNICO
+  { id:'AB_MAGL', category:'ABBIGLIAMENTO_TECNICO', slot:'abbigliamento', name:'Maglia tecnica traspirante', description:'Ti aiuta a reggere il ritmo nei momenti caldi della partita.', price:25, durability:'media', weight:'basso', bonuses:{fisico:1}, rarity:'comune', sell_value:10 },
+  { id:'AB_TUTA', category:'ABBIGLIAMENTO_TECNICO', slot:'abbigliamento', name:'Tuta da riscaldamento', description:'Un buon riscaldamento parte anche dall\'abbigliamento giusto.', price:35, durability:'media', weight:'medio', onEquip:s=>{ s.forma=clamp(s.forma+3,0,100); }, rarity:'comune', sell_value:14 },
+  { id:'AB_COMP', category:'ABBIGLIAMENTO_TECNICO', slot:'abbigliamento', name:'Abbigliamento compressivo', description:'Sostegno muscolare per chi gioca tante partite.', price:60, durability:'media', weight:'basso', bonuses:{fisico:2}, rarity:'non_comune', sell_value:25 },
+  // ACCESSORI
+  { id:'AC_FASCIA', category:'ACCESSORI', slot:'accessori', name:'Fascia da capitano', description:'Non fa gol, ma pesa nello spogliatoio.', price:20, durability:'alta', weight:'minimo', onEquip:s=>{ s.reputazione=clamp(s.reputazione+2,0,100); }, rarity:'non_comune', sell_value:8 },
+  { id:'AC_POLSINI', category:'ACCESSORI', slot:'accessori', name:'Polsini della fortuna', description:'Puro scaramanzia da spogliatoio.', price:15, durability:'media', weight:'minimo', onEquip:s=>{ s.morale=clamp(s.morale+2,0,100); }, rarity:'comune', sell_value:6 },
+  { id:'AC_OROLOGIO', category:'ACCESSORI', slot:'accessori', name:'Cronometro da polso', description:'Aiuta a gestire i ritmi in allenamento.', price:30, durability:'alta', weight:'minimo', bonuses:{tecnica:1}, rarity:'comune', sell_value:12 },
+  // BORSONI
+  { id:'BO_BASE', category:'BORSONI', slot:'borsone', name:'Borsone base', description:'Ci sta dentro tutto il necessario, niente di più.', price:20, durability:'media', weight:'medio', rarity:'comune', sell_value:8 },
+  { id:'BO_TRASF', category:'BORSONI', slot:'borsone', name:'Borsone da trasferta', description:'Look da squadra organizzata.', price:55, durability:'alta', weight:'medio', onEquip:s=>{ s.reputazione=clamp(s.reputazione+1,0,100); }, rarity:'non_comune', sell_value:22 },
+  // RECUPERO (consumabili: si usano e spariscono dall'inventario)
+  { id:'RC_INTEG', category:'RECUPERO', consumabile:true, name:'Integratore energetico', description:'Una spinta rapida prima di scendere in campo.', price:12, rarity:'comune', sell_value:0, onUse:s=>{ s.energia=clamp(s.energia+15,0,100); } },
+  { id:'RC_MASS', category:'RECUPERO', consumabile:true, name:'Seduta di massaggio', description:'Recupero muscolare più profondo.', price:30, rarity:'non_comune', sell_value:0, onUse:s=>{ s.energia=clamp(s.energia+25,0,100); s.forma=clamp(s.forma+2,0,100); } },
+  { id:'RC_KIT', category:'RECUPERO', consumabile:true, name:'Kit di recupero rapido', description:'Energia e morale in una volta sola.', price:18, rarity:'comune', sell_value:0, onUse:s=>{ s.energia=clamp(s.energia+10,0,100); s.morale=clamp(s.morale+3,0,100); } },
+];
+function possiedeEquip(itemId){ return (state.inventarioEquip[itemId]||0) > 0; }
+function bonusEquipaggiamento(attrKey){
+  if(!attrKey) return 0;
+  let tot = 0;
+  Object.values(state.equipaggiamento).forEach(itemId=>{
+    if(!itemId) return;
+    const item = DB_EQUIPAGGIAMENTO.find(e=>e.id===itemId);
+    if(!item) return;
+    if(item.bonuses && item.bonuses[attrKey]) tot += item.bonuses[attrKey];
+    if(item.maluses && item.maluses[attrKey]) tot -= item.maluses[attrKey];
+  });
+  return tot;
+}
+function acquistaEquip(itemId){
+  const item = DB_EQUIPAGGIAMENTO.find(e=>e.id===itemId);
+  if(!item) return;
+  if(state.finanze.saldo < item.price) return;
+  state.finanze.saldo -= item.price;
+  state.inventarioEquip[itemId] = (state.inventarioEquip[itemId]||0) + 1;
+  addDiario(`Acquistato: ${item.name} (€${item.price}).`);
+  save(); renderShop();
+}
+function vendiEquip(itemId){
+  const item = DB_EQUIPAGGIAMENTO.find(e=>e.id===itemId);
+  if(!item || !possiedeEquip(itemId)) return;
+  state.inventarioEquip[itemId]--;
+  if(item.slot && state.equipaggiamento[item.slot]===itemId && !possiedeEquip(itemId)) state.equipaggiamento[item.slot] = null;
+  state.finanze.saldo += item.sell_value;
+  addDiario(`Venduto: ${item.name} (+€${item.sell_value}).`);
+  save(); renderShop();
+}
+function equipaggiaItem(itemId){
+  const item = DB_EQUIPAGGIAMENTO.find(e=>e.id===itemId);
+  if(!item || !item.slot || !possiedeEquip(itemId)) return;
+  state.equipaggiamento[item.slot] = itemId;
+  if(item.onEquip) item.onEquip(state);
+  addDiario(`Indossi: ${item.name}.`);
+  save(); renderShop();
+}
+function disequipaggiaSlot(slot){
+  state.equipaggiamento[slot] = null;
+  save(); renderShop();
+}
+function usaConsumabile(itemId){
+  const item = DB_EQUIPAGGIAMENTO.find(e=>e.id===itemId);
+  if(!item || !item.consumabile || !possiedeEquip(itemId)) return;
+  state.inventarioEquip[itemId]--;
+  if(item.onUse) item.onUse(state);
+  addDiario(`Usi: ${item.name}.`);
+  save(); renderShop();
+}
+function renderShop(){
+  const box = document.getElementById('shopContent');
+  const categorie = ['SCARPE','PARASTINCHI','GUANTI','ABBIGLIAMENTO_TECNICO','ACCESSORI','BORSONI','RECUPERO'];
+  const labelCategoria = {SCARPE:'Scarpe', PARASTINCHI:'Parastinchi', GUANTI:'Guanti', ABBIGLIAMENTO_TECNICO:'Abbigliamento tecnico', ACCESSORI:'Accessori', BORSONI:'Borsoni', RECUPERO:'Recupero (consumabili)'};
+  const equipaggiatiHtml = Object.entries(SLOT_LABELS).map(([slot,label])=>{
+    const itemId = state.equipaggiamento[slot];
+    const item = itemId && DB_EQUIPAGGIAMENTO.find(e=>e.id===itemId);
+    return `<div class="row" style="margin-bottom:4px;"><span class="subtle">${label}</span><span>${item ? item.name : '—'}</span></div>`;
+  }).join('');
+  let html = `<div class="card"><div class="label">Equipaggiato</div>${equipaggiatiHtml}</div>`;
+  categorie.forEach(cat=>{
+    const items = DB_EQUIPAGGIAMENTO.filter(e=>e.category===cat);
+    if(!items.length) return;
+    html += `<div class="label" style="margin-top:14px;">${labelCategoria[cat]}</div>`;
+    items.forEach(item=>{
+      const qty = state.inventarioEquip[item.id]||0;
+      const bonusTxt = item.bonuses ? Object.entries(item.bonuses).map(([k,v])=>`+${v} ${k}`).join(', ') : '';
+      const malusTxt = item.maluses ? Object.entries(item.maluses).map(([k,v])=>`-${v} ${k}`).join(', ') : '';
+      const effettoTxt = [bonusTxt, malusTxt].filter(Boolean).join(' · ') || (item.consumabile ? 'effetto immediato' : 'effetto narrativo');
+      let azioni;
+      if(item.consumabile){
+        azioni = qty>0
+          ? `<button class="btn ghost" style="width:auto; padding:6px 12px;" onclick="usaConsumabile('${item.id}')">Usa (${qty})</button>`
+          : `<button class="btn" style="width:auto; padding:6px 12px;" onclick="acquistaEquip('${item.id}')" ${state.finanze.saldo<item.price?'disabled':''}>Compra €${item.price}</button>`;
+      } else if(qty>0){
+        const indossato = state.equipaggiamento[item.slot]===item.id;
+        azioni = (indossato ? `<span class="badge gold">Indossato</span>` : `<button class="btn ghost" style="width:auto; padding:6px 12px;" onclick="equipaggiaItem('${item.id}')">Indossa</button>`)
+          + ` <button class="btn ghost" style="width:auto; padding:6px 12px;" onclick="vendiEquip('${item.id}')">Vendi €${item.sell_value}</button>`;
+      } else {
+        azioni = `<button class="btn" style="width:auto; padding:6px 12px;" onclick="acquistaEquip('${item.id}')" ${state.finanze.saldo<item.price?'disabled':''}>Compra €${item.price}</button>`;
+      }
+      html += `<div class="choice-card" style="cursor:default;">
+        <div class="choice-title">${item.name}${qty>0?` <span class="subtle">×${qty}</span>`:''}</div>
+        <div class="choice-meta"><span>${item.description}</span></div>
+        <div class="subtle" style="margin-top:4px;">${effettoTxt}</div>
+        <div style="margin-top:8px;">${azioni}</div>
+      </div>`;
+    });
+  });
+  box.innerHTML = html;
+}
+
+/* ---------- FORMAZIONE ----------
+   Stesso pattern territorio/shop: array dati con id stabile, gating "una formazione a settimana"
+   (stesso schema allenamentoFatto/territorio.fattaSettimana), effetti mappati su campi già
+   esistenti — niente nuove statistiche. "Conoscenza tattica"/"leadership"/"mentalità" richieste
+   dalla spec sono mappate sui contatori di personalità già esistenti (state.personalita:
+   ragionatore≈lettura della partita/mentalità, trascinatore≈leadership) invece di inventare due
+   nuovi campi paralleli. I CORSI (investimento più corposo di un libro) danno un piccolo bonus
+   PERMANENTE a un attributo, stesso identico meccanismo del level-up in addXP() — diverso
+   dall'equipaggiamento (reversibile, mai su state.attr) perché qui è concettualmente un
+   miglioramento acquisito, non qualcosa che si "toglie". I MENTOR hanno un esito probabilistico
+   legato alle relazioni esistenti (mai un bonus garantito), stesso principio già usato per gli
+   eventi di partita a verifica di abilità. */
+const DB_FORMAZIONE = [
+  { id:'LIB_001', type:'LIBRO', name:'"Il gioco senza palla"', autore:'M. Ferretti', description:'Un saggio su come muoversi senza avere la palla tra i piedi.', cost:15, time_cost:3, energy_cost:5, experience_reward:3, effetti:{personalita:{ragionatore:1}} },
+  { id:'LIB_002', type:'LIBRO', name:'"La mentalità del gruppo"', autore:'S. Brambilla', description:'Come si costruisce davvero un gruppo squadra.', cost:15, time_cost:3, energy_cost:5, experience_reward:3, effetti:{personalita:{trascinatore:1}, relazioni:{compagni:2}} },
+  { id:'LIB_003', type:'LIBRO', name:'"Leadership nello spogliatoio"', autore:'S. Brambilla', description:'Guidare senza essere per forza il più forte tecnicamente.', cost:18, time_cost:3, energy_cost:5, experience_reward:4, effetti:{personalita:{trascinatore:2}} },
+  { id:'LIB_004', type:'LIBRO', name:'"Il calcio visto dal campo"', autore:'M. Ferretti', description:'Piccoli aggiustamenti tecnici raccontati da chi il campo lo vive.', cost:15, time_cost:3, energy_cost:5, experience_reward:3, effetti:{personalita:{ragionatore:1}, attr:{tecnica:1}} },
+  { id:'LIB_005', type:'LIBRO', name:'"Leggere la partita"', autore:'D. Colosio', description:'Anticipare le situazioni prima che accadano.', cost:18, time_cost:3, energy_cost:5, experience_reward:4, effetti:{personalita:{ragionatore:2}} },
+  { id:'COR_001', type:'CORSO', name:'Corso tattico di base', description:'Le basi della lettura tattica applicate al tuo ruolo.', cost:60, time_cost:5, energy_cost:15, experience_reward:8, effetti:{attrCasuale:1} },
+  { id:'COR_002', type:'CORSO', name:'Corso avanzato di preparazione atletica', description:'Lavoro specifico su tenuta fisica e scatto.', cost:90, time_cost:5, energy_cost:20, experience_reward:10, effetti:{attr:{fisico:1, velocita:1}} },
+  { id:'COR_003', type:'CORSO', name:'Corso di leadership e comunicazione', description:'Come farsi ascoltare in campo e fuori.', cost:70, time_cost:5, energy_cost:12, experience_reward:8, effetti:{personalita:{trascinatore:2}, relazioni:{mister:3}} },
+  { id:'MEN_001', type:'MENTOR', name:'Una birra con il tuo ex allenatore', description:'Due chiacchiere fuori dal campo con chi ti ha fatto crescere.', cost:15, time_cost:2, energy_cost:20,
+    esito: s=>{
+      const chance = clamp(40 + (s.relazioni.mister-50)*0.6, 15, 85);
+      const success = rand(1,100) <= chance;
+      if(success){ s.relazioni.mister=clamp(s.relazioni.mister+6,0,100); s.personalita.ragionatore++; addXP(6);
+        return 'Un bel confronto: qualche consiglio prezioso e il rapporto si rafforza.'; }
+      s.relazioni.mister=clamp(s.relazioni.mister+1,0,100); addXP(2);
+      return 'Chiacchierata piacevole ma senza grandi spunti, questa volta.';
+    } },
+  { id:'MEN_002', type:'MENTOR', name:'Consiglio del tuo procuratore', description:'Un caffè per fare il punto sulla carriera.', cost:0, time_cost:1, energy_cost:10,
+    esito: s=>{
+      const chance = clamp(35 + (s.relazioni.procuratore-50)*0.6, 15, 85);
+      const success = rand(1,100) <= chance;
+      if(success){ s.relazioni.procuratore=clamp(s.relazioni.procuratore+5,0,100); addXP(4);
+        return 'Il procuratore ti dà indicazioni utili sul prossimo passo della carriera.'; }
+      s.relazioni.procuratore=clamp(s.relazioni.procuratore+1,0,100);
+      return 'Un confronto di routine, niente di nuovo sul fronte carriera.';
+    } },
+  { id:'ESP_001', type:'ESPERIENZA', name:'Allenamento aperto di una squadra professionistica', description:'Osservi da vicino la preparazione di una squadra di categoria superiore.', cost:25, time_cost:4, energy_cost:10, experience_reward:5, effetti:{personalita:{ragionatore:1}} },
+  { id:'ESP_002', type:'ESPERIENZA', name:'Giornata con un preparatore atletico', description:'Una giornata a osservare il lavoro di un preparatore professionista.', cost:30, time_cost:4, energy_cost:10, experience_reward:5, effetti:{attr:{fisico:1}} },
+];
+function applicaEffettiFormazione(s, f){
+  if(f.experience_reward) addXP(f.experience_reward);
+  const eff = f.effetti || {};
+  if(eff.personalita) Object.entries(eff.personalita).forEach(([k,v])=>{ s.personalita[k]=(s.personalita[k]||0)+v; });
+  if(eff.relazioni) Object.entries(eff.relazioni).forEach(([k,v])=>{ s.relazioni[k]=clamp(s.relazioni[k]+v,0,100); });
+  if(eff.attr) Object.entries(eff.attr).forEach(([k,v])=>{ if(s.attr[k]!==undefined) s.attr[k]=clamp(s.attr[k]+v,0,99); });
+  if(eff.attrCasuale){
+    const keys = attrKeysFor(s.role).filter(k=>s.attr[k]<95);
+    const k = keys[rand(0,keys.length-1)];
+    if(k) s.attr[k] = clamp(s.attr[k]+eff.attrCasuale,0,99);
+  }
+}
+function seguiFormazione(id){
+  if(state.formazione.fattaSettimana) return;
+  const f = DB_FORMAZIONE.find(x=>x.id===id);
+  if(!f) return;
+  if(f.type==='LIBRO' && state.formazione.libriLetti.includes(id)) return;
+  const avviso = document.getElementById('formazioneAvviso');
+  if(state.finanze.saldo < f.cost){ avviso.textContent = 'Saldo insufficiente per questa formazione.'; return; }
+  if(state.energia < f.energy_cost){ avviso.textContent = 'Energia insufficiente per questa formazione.'; return; }
+  avviso.textContent = '';
+  state.finanze.saldo -= f.cost;
+  state.energia = clamp(state.energia - f.energy_cost, 0, 100);
+  const esitoTesto = f.type==='MENTOR' ? f.esito(state) : (applicaEffettiFormazione(state, f), f.description);
+  if(f.type==='LIBRO') state.formazione.libriLetti.push(id);
+  state.formazione.fattaSettimana = true;
+  state.formazione.ultimaFormazione = id;
+  addDiario(`${f.name}: ${esitoTesto}`);
+  save(); renderFormazione();
+}
+function renderFormazione(){
+  const box = document.getElementById('formazioneContent');
+  const tipi = [['LIBRO','Libri'],['CORSO','Corsi'],['MENTOR','Mentor ed ex allenatori'],['ESPERIENZA','Esperienze formative']];
+  const fatta = state.formazione.fattaSettimana;
+  let html = fatta ? `<div class="subtle" style="margin-bottom:8px;">Hai già seguito una formazione questa settimana: si sblocca di nuovo alla prossima.</div>` : '';
+  tipi.forEach(([type,label])=>{
+    const items = DB_FORMAZIONE.filter(f=>f.type===type);
+    if(!items.length) return;
+    html += `<div class="label" style="margin-top:14px;">${label}</div>`;
+    items.forEach(f=>{
+      const letto = f.type==='LIBRO' && state.formazione.libriLetti.includes(f.id);
+      const disabilitato = fatta || letto;
+      const costoLabel = f.cost>0 ? `€${f.cost}` : 'Gratis';
+      const autoreLabel = f.autore ? ` <span class="subtle">— ${f.autore}</span>` : '';
+      html += `<div class="choice-card"${disabilitato?' style="opacity:0.4; pointer-events:none;"':''} onclick="seguiFormazione('${f.id}')">
+        <div class="choice-title">${f.name}${autoreLabel}${letto?' <span class="subtle">(già letto)</span>':''}</div>
+        <div class="choice-meta"><span>${f.description}</span></div>
+        <div class="subtle" style="margin-top:4px;">${costoLabel} · -${f.energy_cost} energia · ${f.time_cost}h</div>
+      </div>`;
+    });
+  });
+  box.innerHTML = html;
+}
 
 /* ---------- EVENTI A BIVIO ---------- */
 const EVENTS = [
@@ -1763,7 +2276,16 @@ function showEvent(ev, afterCallback){
       document.getElementById('eventContinue').style.display = 'block';
       document.getElementById('eventContinue').onclick = ()=>{ save(); box.style.display='block'; const cb=pendingAfterEvent; pendingAfterEvent=null; cb && cb(); };
     };
-    el.innerHTML = `<div class="choice-title">${sc.label}</div>`;
+    // Le scelte "vere" verifiche di abilità (skillScelta, stesso motore dei momenti chiave)
+    // mostrano il livello di rischio come fa nextMoment(); le scelte narrative pure (solo
+    // applica/esito fisso, es. eventi RELATIONSHIP/PSYCHOLOGICAL) restano senza meta, perché
+    // non c'è nessun test di abilità da mostrare.
+    let metaHtml = '';
+    if(sc.risk){
+      const riskClass = sc.risk==='safe'?'risk-safe':(sc.risk==='mid'?'risk-mid':'risk-high');
+      metaHtml = `<div class="choice-meta"><span class="${riskClass}">${RISK_LABEL[sc.risk]}</span></div>`;
+    }
+    el.innerHTML = `<div class="choice-title">${sc.label}</div>${metaHtml}`;
     box.appendChild(el);
   });
   showScreen('event');
@@ -1811,6 +2333,7 @@ function skipGiornata(motivo){
     if(motivo==='infortunio' && state.infortunio){
       state.infortunio.giornateRestanti--;
       if(state.infortunio.giornateRestanti<=0){ if(state.infortunio.tipo==='grave') state.recoveredFromGrave = true; state.infortunio = null; }
+      state.energia = clamp(state.energia+40, 0, 100);
     }
     if(motivo==='squalifica'){ state.squalifica = Math.max(0, state.squalifica-1); }
     postCoppaMatch();
@@ -1824,18 +2347,19 @@ function skipGiornata(motivo){
   if(motivo==='infortunio' && state.infortunio){
     state.infortunio.giornateRestanti--;
     if(state.infortunio.giornateRestanti<=0){ if(state.infortunio.tipo==='grave') state.recoveredFromGrave = true; state.infortunio = null; }
+    state.energia = clamp(state.energia+40, 0, 100);
   }
   if(motivo==='squalifica'){ state.squalifica = Math.max(0, state.squalifica-1); }
   state.giornata++;
   postGiornataFlow({risultato:null});
 }
 function saltaPartitaVolontariamente(){
-  // L'assenza è una scelta del giocatore: recupera molto, ma il gruppo la percepisce
+  // L'assenza è una scelta del giocatore: recupera energia, ma il gruppo la percepisce
   // negativamente. Il riposo settimanale applicato nel flusso successivo completa il recupero.
   state.relazioni.mister = clamp(state.relazioni.mister-9, 0, 100);
   state.relazioni.procuratore = clamp(state.relazioni.procuratore-6, 0, 100);
   state.relazioni.compagni = clamp(state.relazioni.compagni-11, 0, 100);
-  state.energia = clamp(state.energia+35, 0, 100);
+  state.energia = clamp(state.energia+40, 0, 100);
   state.morale = clamp(state.morale+14, 0, 100);
   addDiario(`Salti volontariamente la partita: energia e morale recuperano, ma mister, procuratore e compagni perdono fiducia.`);
   skipGiornata('assenza volontaria');
@@ -1848,11 +2372,22 @@ function simulaPartita(){
     return;
   }
   const coppaAttiva = !!(state.coppa && state.coppa.prossimi.length);
+  // Stessa regola di convocazione di beginMatch(): con 2+ valori chiave sotto il 35% il mister
+  // non ti convoca nemmeno per una partita simulata.
+  if(!coppaAttiva && !state.infortunio && state.squalifica<=0 && contaValoriSottoSoglia(35)>=2){
+    addDiario(`Reputazione, energia, forma, morale o rapporto col mister sono troppo bassi: il mister non ti convoca. La settimana di riposo ti aiuta a recuperare.`);
+    skipGiornata('condizione fisica/mentale bassa');
+    return;
+  }
   const opp = coppaAttiva ? state.coppa.prossimi[0] : state.calendario[state.giornata-1];
   const contesto = coppaAttiva ? 'coppa' : 'campionato';
   const r = simSquadra(getForzaSquadra(teamName())||58, opp.forza);
   const overall = overallPesato(state);
-  const condizione = (state.forma-50)*0.22 + (state.energia-50)*0.12 + (state.morale-50)*0.08;
+  // Stessa curva bonus/malus di calcChance() (partita giocata a scelte): sotto 50 il rapporto con
+  // mister/compagni penalizza la prestazione simulata, sopra 50 la premia. Prima qui non contava
+  // nulla, quindi le relazioni non avevano alcun effetto su chi sceglieva "Simula partita".
+  const condizione = (state.forma-50)*0.22 + (state.energia-50)*0.12 + (state.morale-50)*0.08
+    + (state.relazioni.mister-50)*0.06 + (state.relazioni.compagni-50)*0.06;
   const qualita = overall + condizione;
   const esito = r.mieiGol>r.oppGol ? 'W' : (r.mieiGol===r.oppGol ? 'D' : 'L');
   let playerGol = 0, playerAssist = 0;
@@ -1901,27 +2436,40 @@ function simulaPartita(){
   document.getElementById('resXP').textContent = '+'+xpGain;
   document.getElementById('resEvents').textContent = playerGol || playerAssist
     ? `Simulazione completata: ${state.name} contribuisce con ${playerGol} gol e ${playerAssist} assist. Voto: ${rating.toFixed(1)}.`
-    : `Simulazione completata: ${state.name} gioca la partita senza bonus personali. Voto: ${rating.toFixed(1)}.`;
+    : `Simulazione completata: ${state.name} gioca la partita senza incidere su gol o assist. Voto: ${rating.toFixed(1)}.`;
   document.getElementById('resInjuryCard').innerHTML = '';
   save(); showScreen('result');
 }
 
 /* ---------- HUB → PARTITA ---------- */
+// Reputazione/energia/forma/morale/rapporto col mister troppo bassi pesano sulla convocazione:
+// 1 valore sotto il 40% manda in panchina, 2 (o più) sotto il 35% tengono fuori dai convocati del
+// tutto. Un'unica funzione condivisa fra beginMatch/simulaPartita/renderHub, così la regola è
+// identica ovunque si possa scendere in campo (niente controlli duplicati che potrebbero
+// disallinearsi).
+function contaValoriSottoSoglia(soglia){
+  return [state.reputazione, state.energia, state.forma, state.morale, state.relazioni.mister].filter(v=>v<soglia).length;
+}
 function beginMatch(){
   const coppaAttiva = !!(state.coppa && state.coppa.prossimi.length);
-  if(!coppaAttiva && !state.infortunio && state.squalifica<=0 && state.relazioni.mister<25 && Math.random()<0.3){
-    const eventoPanchina = { testo:"Il mister ha deciso: oggi resti in panchina. Il rapporto teso con lui si fa sentire.", scelte:[
-        {label:"Accetta con professionalità", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister+4,0,100); s.morale=clamp(s.morale-4,0,100); }, esito:"Resti concentrato, il mister apprezza l'atteggiamento."},
-        {label:"Protesta apertamente", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister-6,0,100); s.reputazione=clamp(s.reputazione-3,0,100); }, esito:"La protesta non migliora il rapporto con il mister."}]};
-    showEvent(eventoPanchina, ()=>{
-      const opp = state.calendario[state.giornata-1];
-      const r = simSquadra(getForzaSquadra(teamName())||58, opp.forza);
-      applyResultToClassifica(opp.nome, r.mieiGol, r.oppGol);
-      addDiario(`G${state.giornata}: ${teamName()} ${r.mieiGol}-${r.oppGol} ${opp.nome} (in panchina).`);
-      state.giornata++;
-      postGiornataFlow({risultato:null});
-    });
-    return;
+  if(!coppaAttiva && !state.infortunio && state.squalifica<=0){
+    const sottoSoglia35 = contaValoriSottoSoglia(35);
+    const sottoSoglia40 = contaValoriSottoSoglia(40);
+
+    if(sottoSoglia35>=2){
+      addDiario(`Reputazione, energia, forma, morale o rapporto col mister sono troppo bassi: il mister non ti convoca. La settimana di riposo ti aiuta a recuperare.`);
+      skipGiornata('condizione fisica/mentale bassa');
+      return;
+    }
+
+    if(sottoSoglia40>=1){
+      const eventoPanchina = { testo: "Reputazione, energia, forma, morale o rapporto col mister sono troppo bassi: oggi resti in panchina.",
+        scelte:[
+          {label:"Accetta con professionalità", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister+4,0,100); s.morale=clamp(s.morale-4,0,100); }, esito:"Resti concentrato, il mister apprezza l'atteggiamento."},
+          {label:"Protesta apertamente", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister-6,0,100); s.reputazione=clamp(s.reputazione-3,0,100); }, esito:"La protesta non migliora il rapporto con il mister."}]};
+      showEvent(eventoPanchina, ()=> beginMatchAsSub());
+      return;
+    }
   }
   const opp = coppaAttiva ? state.coppa.prossimi[0] : state.calendario[state.giornata-1];
   state.matchTemp = { opp, contesto: coppaAttiva ? 'coppa' : 'campionato', minute:0, myGoals:0, oppGoals:0, myPlayerGoals:0, myPlayerAssists:0,
@@ -1943,7 +2491,29 @@ function beginMatch(){
   // Evento di partita opzionale a inizio gara (match_start): non blocca mai il flusso, è solo
   // un intermezzo prima del primo momento chiave.
   const evStart = pickMatchEvent(['match_start'], state.matchTemp);
-  if(evStart){ showMatchEvent(evStart, ()=>{ showScreen('match'); nextMoment(); }); } else { nextMoment(); }
+  if(evStart){ showMatchEvent(evStart, ()=>nextMoment()); } else { nextMoment(); }
+}
+/* Partire dalla panchina non vuol dire non giocare affatto: il giocatore entra a partita in
+   corso, con meno occasioni (2 invece dei 4 normali) e un costo energetico più basso, ma scende
+   davvero in campo — stesso motore di beginMatch() (matchTemp/nextMoment/finishMatch), solo un
+   ingresso ritardato e un pool di momenti ridotto. Niente simSquadra "senza il giocatore": quello
+   resta riservato a chi non è proprio convocato (skipGiornata). */
+function beginMatchAsSub(){
+  const opp = state.calendario[state.giornata-1];
+  const numMomentiSub = 2;
+  state.matchTemp = { opp, contesto:'campionato', minute:65, myGoals:0, oppGoals:0, myPlayerGoals:0, myPlayerAssists:0,
+    momentumIdx:0, successes:0, attempts:0, highRiskFails:0, preMatchEnergia: state.energia,
+    infortunioEsito:null, cartellinoRosso:false, cartellinoEventoUsato:false, consecutiveFails:0,
+    gkMomenti: state.role==='Portiere' ? shuffle(GK_MOMENTS_POOL).slice(0,numMomentiSub) : null,
+    momentiOutfieldRidotti: state.role!=='Portiere' ? shuffle(MOMENTS).slice(0,numMomentiSub) : null,
+    compagni: sceglieCompagni(teamName()) };
+  document.getElementById('matchTeams').textContent = `${teamName()} vs ${opp.nome} · Giornata ${state.giornata}/${state.calendario.length}`;
+  document.getElementById('matchScore').textContent = '0 - 0';
+  document.getElementById('commentaryLog').innerHTML = '';
+  addLog(`Il mister ti chiama dalla panchina: entri al 65', tempo per lasciare il segno.`, false);
+  state.energia = clamp(state.energia-8,0,100);
+  showScreen('match');
+  nextMoment();
 }
 function addLog(text, isEvent){
   const log = document.getElementById('commentaryLog');
@@ -2028,7 +2598,10 @@ const RISK_LABEL = {safe:'Sicuro', mid:'Rischioso', high:'Estremo'};
    nessun secondo motore, nessuna nuova skill, nessun doppio conteggio di attempts/successes
    (qui viene contato esattamente una volta, in questa singola chiamata). */
 function skillScelta(label, attr, attr2, risk, out, esitoOk, esitoKo, tratto){
-  return { label, applica: s=>{
+  // attr/attr2/risk/out restano esposti (non solo chiusi dentro applica) così showMatchEvent() può
+  // mostrare il livello di rischio sulla choice-card esattamente come fa nextMoment() per i
+  // momenti chiave: stessa informazione, niente di nuovo.
+  return { label, attr, attr2, risk, out, applica: s=>{
       const chance = calcChance(attr, risk, out, attr2);
       const m = s.matchTemp; m.attempts++;
       const success = rand(1,100) <= chance;
@@ -2040,11 +2613,12 @@ function skillScelta(label, attr, attr2, risk, out, esitoOk, esitoKo, tratto){
 }
 const MATCH_EVENTS = [
   { id:'primo_contrasto', category:'GAMEPLAY', trigger:'match_start', weight:0.5, cooldown:3,
+    conditions: s=>s.role!=='Portiere',
     testo:"Primo pallone conteso a centrocampo: senti subito l'intensità della gara.",
     scelte:[
-      {label:"Provi la giocata da solo", applica:s=>{ s.personalita.individualista++; s.forma=clamp(s.forma+1,0,100); }, esito:"Ti fai valere subito, il pubblico se ne accorge."},
-      {label:"Urli ai compagni di stringere le linee", applica:s=>{ s.personalita.trascinatore++; s.relazioni.compagni=clamp(s.relazioni.compagni+2,0,100); }, esito:"I compagni rispondono al richiamo."},
-      {label:"Rallenti, cerchi la soluzione più semplice", applica:s=>{ s.personalita.ragionatore++; s.morale=clamp(s.morale+1,0,100); }, esito:"Gestisci con ordine il primo pallone."}
+      skillScelta("Attacchi il duello con decisione", 'fisico','velocita','high','recupero', "Vinci il contrasto e conquisti subito il pallone: parti con piglio.", "Perdi il contrasto, l'avversario si invola con la palla.", 'individualista'),
+      skillScelta("Anticipi leggendo la traiettoria", 'tecnica','difesa','mid','recupero', "Anticipo pulito: il primo pallone è tuo.", "L'anticipo non riesce, ma resti dentro la partita.", 'ragionatore'),
+      skillScelta("Temporeggi e resti coperto", 'difesa',null,'safe','possesso', "Gestisci con ordine il primo pallone, la squadra si muove compatta.", "L'avversario avanza di poco, ma senza conseguenze.", 'ragionatore')
     ]},
   { id:'compagno_non_passa', category:'RELATIONSHIP', trigger:'after_missed_chance', weight:0.35, cooldown:4,
     conditions: s=>s.relazioni.compagni<90,
@@ -2213,13 +2787,44 @@ function pickMatchEvent(triggersAttivi, ctx){
   return null;
 }
 function showMatchEvent(ev, cb){
+  // Gli eventi ◆ durante la gara (MATCH_EVENTS) restavano su una schermata a parte (screen-event),
+  // separata dal resto della cronaca: interrompevano il flusso invece di sembrare parte della
+  // stessa partita. Ora appaiono nella stessa finestra dei momenti chiave (commentary-log +
+  // choice-card in matchAction), stesso motore/stessa UI di nextMoment()/resolveChoice(), nessuna
+  // schermata a parte.
   state.eventiMatchUltimaGiornata[ev.id] = state.giornata;
-  showEvent(ev, cb);
+  addLog(typeof ev.testo==='function' ? ev.testo(state) : ev.testo, true);
+  const box = document.getElementById('matchAction'); box.innerHTML = '';
+  ev.scelte.forEach(sc=>{
+    const el = document.createElement('div'); el.className = 'choice-card';
+    let metaHtml = '';
+    if(sc.risk){
+      const riskClass = sc.risk==='safe'?'risk-safe':(sc.risk==='mid'?'risk-mid':'risk-high');
+      metaHtml = `<div class="choice-meta"><span class="${riskClass}">${RISK_LABEL[sc.risk]}</span></div>`;
+    }
+    el.innerHTML = `<div class="choice-title">${sc.label}</div>${metaHtml}`;
+    el.onclick = ()=>{
+      const ritorno = sc.applica(state);
+      const esitoTesto = ritorno || sc.esito;
+      addLog(esitoTesto, true);
+      addDiario(esitoTesto);
+      save();
+      box.innerHTML = '';
+      const cont = document.createElement('div');
+      cont.className = 'btn ghost'; cont.style.textAlign = 'center'; cont.style.cursor = 'pointer';
+      cont.textContent = 'Continua ▸';
+      cont.onclick = cb;
+      box.appendChild(cont);
+    };
+    box.appendChild(el);
+  });
 }
 
 function nextMoment(){
   const m = state.matchTemp;
-  const momentiAttivi = state.role==='Portiere' ? m.gkMomenti : MOMENTS;
+  // Chi subentra dalla panchina (beginMatchAsSub) porta un pool di momenti ridotto in
+  // m.momentiOutfieldRidotti: stesso motore, solo meno occasioni perché entra a partita in corso.
+  const momentiAttivi = state.role==='Portiere' ? m.gkMomenti : (m.momentiOutfieldRidotti || MOMENTS);
   if(m.momentumIdx >= momentiAttivi.length){ return finishMatch(); }
   m.minute += rand(9,13);
   document.getElementById('matchMinute').textContent = m.minute+"'";
@@ -2231,7 +2836,7 @@ function nextMoment(){
     const el = document.createElement('div'); el.className = 'choice-card';
     el.onclick = ()=> resolveChoice(c, chance);
     const riskClass = c.risk==='safe'?'risk-safe':(c.risk==='mid'?'risk-mid':'risk-high');
-    el.innerHTML = `<div class="choice-title">${c.label}</div><div class="choice-meta"><span class="${riskClass}">${RISK_LABEL[c.risk]}</span><span>${chance}% riuscita</span></div>`;
+    el.innerHTML = `<div class="choice-title">${c.label}</div><div class="choice-meta"><span class="${riskClass}">${RISK_LABEL[c.risk]}</span></div>`;
     box.appendChild(el);
   });
 }
@@ -2240,10 +2845,14 @@ function calcChance(attrKey, risk, out, attrKey2){
   // combinare due skill (attrKey2, es. Anticipo + Presa): in quel caso si media fra le due.
   let base;
   if(!attrKey){ base = 60; }
-  else if(attrKey2){ base = (state.attr[attrKey] + state.attr[attrKey2]) / 2; }
-  else { base = state.attr[attrKey]; }
+  else if(attrKey2){ base = (state.attr[attrKey]+bonusEquipaggiamento(attrKey) + state.attr[attrKey2]+bonusEquipaggiamento(attrKey2)) / 2; }
+  else { base = state.attr[attrKey] + bonusEquipaggiamento(attrKey); }
   const formaBonus = (state.forma-50)*0.15;
+  // Curva bonus/malus centrata su 50: sotto 50 penalizza, sopra 50 premia, sia per il rapporto
+  // coi compagni (già presente) sia per quello col mister (mancava, aggiunto qui) — stesso peso,
+  // stessa logica applicata anche in simulaPartita() per chi non gioca la partita a scelte.
   const chimicaBonus = (state.relazioni.compagni-50)*0.05;
+  const misterBonus = (state.relazioni.mister-50)*0.05;
   let compagnoBonus = 0;
   const compagni = state.matchTemp && state.matchTemp.compagni;
   if(compagni){
@@ -2255,7 +2864,7 @@ function calcChance(attrKey, risk, out, attrKey2){
   // (bug: si vinceva quasi sempre, il gioco risultava troppo semplice).
   const oppForza = state.matchTemp && state.matchTemp.opp ? state.matchTemp.opp.forza : 60;
   const forzaPenalty = (oppForza-60)*0.35;
-  const chance = 44 + (base-50)*0.65 + RISK_MOD[risk] + formaBonus + chimicaBonus + compagnoBonus - forzaPenalty;
+  const chance = 44 + (base-50)*0.65 + RISK_MOD[risk] + formaBonus + chimicaBonus + misterBonus + compagnoBonus - forzaPenalty;
   return clamp(Math.round(chance), 8, 92);
 }
 function applyChoiceOutcome(choice, success){
@@ -2300,7 +2909,7 @@ function resolveChoice(choice, chance){
 
   const ev = pickMatchEvent(triggersAttivi, m);
   if(ev){
-    showMatchEvent(ev, ()=>{ showScreen('match'); nextMoment(); });
+    showMatchEvent(ev, ()=>nextMoment());
   } else {
     document.getElementById('matchAction').innerHTML = '<div class="btn ghost" onclick="nextMoment()" style="text-align:center; cursor:pointer;">Continua ▸</div>';
   }
@@ -2418,8 +3027,11 @@ function postGiornataFlow(ctx){
     TRAININGS.find(t=>t.id==='riposo').apply(state);
   }
   state.allenamentoFatto = false; state.ultimoAllenamento = null; state.allenamentoSnapshot = null;
+  state.territorio.fattaSettimana = false; state.territorio.ultimaEsperienza = null;
+  state.formazione.fattaSettimana = false; state.formazione.ultimaFormazione = null;
   payStipendio(ctx);
   applyLavoroSettimanale();
+  applyRiflessoReputazioneSuRelazioni();
   const giornataAppenaGiocata = state.giornata - 1;
   if(giornataAppenaGiocata>0 && giornataAppenaGiocata%4===0) applyPagamentoMensile();
   checkAchievements(); save();
@@ -2458,28 +3070,38 @@ function renderMercatoInvernale(){
 
   const trainBox = document.getElementById('mwTraining'); trainBox.innerHTML = '';
   if(state.allenamentoFattoInvernale){
-    trainBox.innerHTML = `<div class="subtle" style="margin-bottom:8px;">Allenamento supplementare già svolto in questa pausa.</div>`;
+    trainBox.innerHTML = `<div class="subtle" style="margin-bottom:8px;">Puoi ancora cambiare l'allenamento supplementare finché non torni in campo.</div>`;
   }
   TRAININGS.forEach(t=>{
     const el = document.createElement('div');
     const scelto = state.ultimoAllenamentoInvernale === t.id;
     el.className = 'choice-card'; el.style.marginBottom = '8px';
-    if(state.allenamentoFattoInvernale){
-      el.style.opacity = scelto ? '1' : '0.4';
-      el.style.pointerEvents = 'none';
-      if(scelto) el.style.borderColor = 'var(--gold)';
-    } else {
-      el.onclick = ()=>{
-        if(state.allenamentoFattoInvernale) return;
-        t.apply(state);
-        state.allenamentoFattoInvernale = true;
-        state.ultimoAllenamentoInvernale = t.id;
-        save(); renderMercatoInvernale();
-      };
-    }
+    if(scelto) el.style.borderColor = 'var(--gold)';
+    el.onclick = ()=>{
+      if(state.ultimoAllenamentoInvernale === t.id) return;
+      scegliAllenamentoInvernale(t.id);
+    };
     el.innerHTML = `<div class="choice-title">${t.label}</div><div class="choice-meta"><span>${t.desc}</span></div>`;
     trainBox.appendChild(el);
   });
+}
+function scegliAllenamentoInvernale(id){
+  // Non vincolante come l'allenamento settimanale in hub (scegliAllenamento): uno snapshot preso
+  // al primo click di questa pausa permette di cambiare idea più volte finché non si torna in
+  // campo, senza sommare gli effetti di scelte precedenti.
+  const t = TRAININGS.find(x=>x.id===id);
+  if(!t) return;
+  if(!state.allenamentoFattoInvernale){
+    state.allenamentoSnapshotInvernale = {
+      attr: {...state.attr}, energia: state.energia, forma: state.forma, morale: state.morale
+    };
+  }
+  const snap = state.allenamentoSnapshotInvernale;
+  state.attr = {...snap.attr}; state.energia = snap.energia; state.forma = snap.forma; state.morale = snap.morale;
+  t.apply(state);
+  state.allenamentoFattoInvernale = true;
+  state.ultimoAllenamentoInvernale = t.id;
+  save(); renderMercatoInvernale();
 }
 function chiediRinnovoInvernale(){
   if(state.rinnovoInvernaleFatto) return;
@@ -2566,35 +3188,53 @@ function renderCoppa(){
   const status = document.getElementById('coppaStatus');
   const content = document.getElementById('coppaContent');
   const mioTeam = teamName();
+  // La fase preliminare resta visibile anche una volta passati alla Fase Principale (o oltre):
+  // stesso girone già giocato, recuperato da state.coppaPrelim.gironi che non viene mai svuotato
+  // durante la stagione. Una squadra di Serie A (nessun preliminare) semplicemente non ha un
+  // girone da trovare qui (trovaGironeSquadra torna undefined, renderTabellaGirone lo ignora).
+  const sezionePreliminare = (girone)=> girone
+    ? `<div class="label" style="margin-top:14px;">Fase Preliminare</div>${renderTabellaGirone(girone, mioTeam)}`
+    : '';
 
   if(state.coppa){
     const prossimo = state.coppa.prossimi[0];
     const numeroPartita = state.coppa.giocate.length + 1;
     const totalePartite = state.coppa.giocate.length + state.coppa.prossimi.length;
     status.textContent = (state.coppa.tipo === 'preliminare' ? 'Fase Preliminare' : 'Fase Principale') + ` — girone in corso (partita ${numeroPartita}/${totalePartite})`;
-    content.innerHTML = (prossimo
+    let html = (prossimo
       ? `Prossimo avversario di girone: <b>${prossimo.nome}</b>. Si gioca dall'hub ("Scendi in campo" o "Simula partita").`
-      : 'Girone completato, risultato in fase di calcolo.')
-      + renderTabellaGirone(ordinaGirone(state.coppa.girone), mioTeam);
+      : 'Girone completato, risultato in fase di calcolo.');
+    if(state.coppa.tipo === 'principale'){
+      html += `<div class="label" style="margin-top:14px;">Fase Principale</div>` + renderTabellaGirone(ordinaGirone(state.coppa.girone), mioTeam);
+      const gironePrelim = state.coppaPrelim && trovaGironeSquadra(state.coppaPrelim.gironi, mioTeam);
+      html += sezionePreliminare(gironePrelim);
+    } else {
+      html += renderTabellaGirone(ordinaGirone(state.coppa.girone), mioTeam);
+    }
+    content.innerHTML = html;
     return;
   }
 
   if(!state.coppaTorneo) { status.textContent = 'Nessuna Coppa'; content.innerHTML = ''; return; }
 
   const t = state.coppaTorneo;
+  const gironePrelim = state.coppaPrelim && trovaGironeSquadra(state.coppaPrelim.gironi, mioTeam);
 
   if(t.fase === 'eliminato_preliminare'){
     status.textContent = 'Eliminato in fase preliminare';
-    const girone = trovaGironeSquadra(state.coppaPrelim.gironi, mioTeam);
-    content.innerHTML = 'La tua squadra non ha superato il girone preliminare (passano i primi e le 47 migliori seconde).' + renderTabellaGirone(girone, mioTeam);
+    content.innerHTML = 'La tua squadra non ha superato il girone preliminare (passano i primi e le 47 migliori seconde).' + renderTabellaGirone(gironePrelim, mioTeam);
   } else if(t.fase === 'eliminato_principale'){
     status.textContent = 'Eliminato in Fase Principale';
-    const girone = trovaGironeSquadra(state.coppaPrincipale.gironi, mioTeam);
-    content.innerHTML = 'La tua squadra ha superato la fase preliminare ma non il girone di Fase Principale (passano i primi e le 19 migliori seconde).' + renderTabellaGirone(girone, mioTeam);
+    const gironePrincipale = trovaGironeSquadra(state.coppaPrincipale.gironi, mioTeam);
+    content.innerHTML = 'La tua squadra ha superato la fase preliminare ma non il girone di Fase Principale (passano i primi e le 19 migliori seconde).'
+      + `<div class="label" style="margin-top:14px;">Fase Principale</div>` + renderTabellaGirone(gironePrincipale, mioTeam)
+      + sezionePreliminare(gironePrelim);
   } else if(t.fase === 'trentaduesimi'){
     status.textContent = 'Qualificato ai 32esimi di Coppa Leonessa!';
-    const girone = trovaGironeSquadra(state.coppaPrincipale.gironi, mioTeam);
-    content.innerHTML = 'La tua squadra ha superato il girone di Fase Principale e accede ai 32esimi.' + renderTabellaGirone(girone, mioTeam);
+    const gironePrincipale = trovaGironeSquadra(state.coppaPrincipale.gironi, mioTeam);
+    content.innerHTML = 'La tua squadra ha superato il girone di Fase Principale e accede ai 32esimi.'
+      + `<div class="label" style="margin-top:14px;">Fase Principale</div>` + renderTabellaGirone(gironePrincipale, mioTeam)
+      + sezionePreliminare(gironePrelim);
   } else {
     status.textContent = 'Coppa Leonessa';
     content.innerHTML = '';
@@ -2648,9 +3288,28 @@ function renderSeasonEnd(){
   generaRegenStagionali(state);
 
   // Coppa Leonessa: si costruiscono i gironi, le partite altrui si simulano subito, le 3 del
-  // giocatore restano da giocare dall'hub (all'inizio della nuova stagione) con il motore normale.
+  // giocatore restano da giocare dall'hub con il motore normale. Parte solo dalla seconda
+  // settimana di aprile: se il campionato finisce prima (girone corto), si aspetta quella data
+  // durante il fuori-stagione (aggiornaFuoriStagione se ne occupa settimana per settimana);
+  // se il campionato finisce dopo, parte subito come sempre.
   state.coppaTorneo = null;
-  iniziaCoppaLeonessa();
+  const annoBaseStagione = ANNO_INIZIO_CARRIERA + (state.stagione - 1);
+  const dataFineCampionato = dataGiornata(state.stagione, state.calendario.length);
+  const sogliaCoppaLeonessa = secondaSettimanaAprile(annoBaseStagione + 1);
+  const coppaRimandata = dataFineCampionato.getTime() < sogliaCoppaLeonessa.getTime();
+  if(!coppaRimandata){
+    // Il calendario fuori-stagione deve già esistere prima della prima partita di Coppa, perché
+    // postCoppaMatch() lo fa avanzare di una settimana a ogni partita (stessa inizializzazione di
+    // iniziaFuoriStagione(), fatta qui invece perché si va subito alla Coppa, non alle settimane
+    // morte/mercato).
+    state.offSeasonData = formatDataISO(aggiungiSettimana(dataFineCampionato));
+    state.mercatoEstivoConcluso = false;
+    state.offerteCorrenti = [];
+    state.mercatoSessione = 0;
+    state.allenamentoFattoMercato = false; state.ultimoAllenamentoMercato = null;
+    state.allenamentoFattoFuoriStagione = false; state.ultimoAllenamentoFuoriStagione = null;
+    iniziaCoppaLeonessa();
+  }
 
   checkAchievements();
 
@@ -2678,6 +3337,11 @@ function renderSeasonEnd(){
     document.getElementById('coppaBannerIcon').textContent = coppaEsito.icon;
     document.getElementById('coppaBannerTitle').textContent = coppaEsito.titolo;
     document.getElementById('coppaBannerSub').textContent = coppaEsito.sub;
+    coppaBanner.style.display = 'block';
+  } else if(coppaRimandata){
+    document.getElementById('coppaBannerIcon').textContent = '🗓️';
+    document.getElementById('coppaBannerTitle').textContent = 'Coppa Leonessa: in attesa';
+    document.getElementById('coppaBannerSub').textContent = `Il campionato è finito in anticipo: la Coppa Leonessa inizia dalla seconda settimana di aprile (${formattaDataIT(sogliaCoppaLeonessa)}).`;
     coppaBanner.style.display = 'block';
   } else {
     coppaBanner.style.display = 'none';
@@ -2753,6 +3417,16 @@ function aggiornaFuoriStagione(){
   const d = parseDataISO(state.offSeasonData);
   const inizioStagioneSuccessiva = primoSabatoDiSettembre(d.getUTCFullYear());
   if(d.getTime() >= inizioStagioneSuccessiva.getTime()){ avviaNuovaStagione(); return; }
+  // Coppa Leonessa rimandata da renderSeasonEnd (campionato finito prima della seconda settimana
+  // di aprile): appena il fuori-stagione raggiunge quella data la si avvia qui, una sola volta a
+  // stagione (state.coppa/state.coppaTorneo entrambi nulli finché non è mai partita).
+  const annoBaseStagione = ANNO_INIZIO_CARRIERA + (state.stagione - 1);
+  if(!state.coppa && !state.coppaTorneo && d.getTime() >= secondaSettimanaAprile(annoBaseStagione+1).getTime()){
+    iniziaCoppaLeonessa();
+    if(state.coppa){ save(); renderHub(); showScreen('hub'); return; }
+    // Nessuna partita da giocare (caso raro, es. risoluzione istantanea): si prosegue normalmente
+    // con la settimana corrente invece di restare bloccati in attesa di un evento che non arriva.
+  }
   if(inFinestraMercatoEstivo(d) && !state.mercatoEstivoConcluso){
     state.mercatoSessione = (state.mercatoSessione||0) + 1;
     generateOffers();
@@ -2894,7 +3568,7 @@ function avviaNuovaStagione(){
   state.mercatoSessione = 0; state.allenamentoFattoMercato = false; state.ultimoAllenamentoMercato = null;
   state.offSeasonData = null; state.mercatoEstivoConcluso = false;
   state.allenamentoFattoFuoriStagione = false; state.ultimoAllenamentoFuoriStagione = null;
-  state.mercatoInvernaleFatto = false; state.allenamentoFattoInvernale = false; state.ultimoAllenamentoInvernale = null; state.rinnovoInvernaleFatto = false;
+  state.mercatoInvernaleFatto = false; state.allenamentoFattoInvernale = false; state.ultimoAllenamentoInvernale = null; state.allenamentoSnapshotInvernale = null; state.rinnovoInvernaleFatto = false;
   // Segnala l'inizio della nuova stagione con un piccolo banner in hub (si chiude col pulsante "Ok",
   // stesso pattern del toast dei traguardi).
   state.nuovaStagioneBanner = true;
@@ -2951,7 +3625,15 @@ function avviaNuovaStagione(){
     }
     if(state.allenamentoFattoInvernale===undefined) state.allenamentoFattoInvernale=false;
     if(state.ultimoAllenamentoInvernale===undefined) state.ultimoAllenamentoInvernale=null;
+    if(state.allenamentoSnapshotInvernale===undefined) state.allenamentoSnapshotInvernale=null;
     if(state.rinnovoInvernaleFatto===undefined) state.rinnovoInvernaleFatto=false;
+    if(state.territorio===undefined) state.territorio = { visite: {}, fattaSettimana: false, ultimaEsperienza: null, eventiUltimaVolta: {}, eventiUsati: [] };
+    if(state.territorio.eventiUltimaVolta===undefined) state.territorio.eventiUltimaVolta = {};
+    if(state.territorio.eventiUsati===undefined) state.territorio.eventiUsati = [];
+    if(state.opportunitaInvestimento===undefined) state.opportunitaInvestimento = [];
+    if(state.inventarioEquip===undefined) state.inventarioEquip = {};
+    if(state.equipaggiamento===undefined) state.equipaggiamento = { scarpe:null, parastinchi:null, guanti:null, abbigliamento:null, accessori:null, borsone:null };
+    if(state.formazione===undefined) state.formazione = { fattaSettimana: false, ultimaFormazione: null, libriLetti: [] };
     renderHub(); renderGironiPicker(); showScreen('hub');
   }
 })();
