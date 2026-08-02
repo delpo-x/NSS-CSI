@@ -550,11 +550,17 @@
       <button class="tab-btn" data-tab="traguardi" onclick="switchTab('screen-carriera','traguardi')">Traguardi</button>
       <button class="tab-btn" data-tab="storico" onclick="switchTab('screen-carriera','storico')">Storico</button>
       <button class="tab-btn" data-tab="vita" onclick="switchTab('screen-carriera','vita')">Vita da calciatore</button>
+      <button class="tab-btn" data-tab="storia" onclick="switchTab('screen-carriera','storia')">La tua storia</button>
     </div>
 
     <div class="tab-panel active" id="screen-carriera_panoramica">
       <div class="card"><div class="label">Attributi</div><div class="attr-grid" id="carAttrs"></div></div>
       <div class="card"><div class="label">Personalità</div><div id="carPersonalita"></div></div>
+      <div class="card" id="carRitiroCard" style="display:none;">
+        <div class="label">Fine carriera da giocatore</div>
+        <div class="subtle" style="margin-bottom:10px;">Hai l'età per appendere gli scarpini al chiodo e iniziare una carriera da allenatore.</div>
+        <button class="btn warning" onclick="avviaRitiro()">Ritirati e diventa allenatore</button>
+      </div>
     </div>
 
     <div class="tab-panel" id="screen-carriera_statistiche">
@@ -591,7 +597,42 @@
       </div>
     </div>
 
+    <div class="tab-panel" id="screen-carriera_storia">
+      <div class="card"><div class="label">La tua storia</div><div id="carLegacy"></div></div>
+    </div>
+
     <div class="btn-stack"><button class="btn ghost" onclick="showScreen('hub')">Torna alla carriera</button></div>
+  </div>
+
+  <!-- ===================== RITIRO (EPILOGO GIOCATORE) ===================== -->
+  <div class="screen" id="screen-ritiro">
+    <h2 style="font-size:18px; margin-bottom:14px;">Fine di una carriera</h2>
+    <div class="card"><div class="label">Statistiche finali da giocatore</div><div id="ritiroStats"></div></div>
+    <div class="card"><div class="label">Le connessioni che ti porti dietro</div><div id="ritiroConnessioni"></div></div>
+    <div class="btn-stack" style="margin-top:16px;">
+      <button class="btn gold" onclick="iniziaCarrieraAllenatore()">Inizia la carriera da allenatore</button>
+    </div>
+  </div>
+
+  <!-- ===================== ALLENATORE ===================== -->
+  <div class="screen" id="screen-allenatore">
+    <h2 style="font-size:18px; margin-bottom:4px;">Panchina</h2>
+    <div class="subtle" style="margin-bottom:14px;" id="allenatoreSquadra">—</div>
+    <div class="card">
+      <div class="row"><div class="label" style="margin:0;">Prossimo impegno</div></div>
+      <div style="font-family:'Oswald'; font-size:16px; margin-top:6px;" id="allenatoreProssima">—</div>
+      <div class="subtle" style="margin-top:6px;" id="allenatoreReputazione">—</div>
+    </div>
+    <div class="label">Tattica per la prossima gara</div>
+    <div class="card" id="allenatoreTattiche"></div>
+    <div class="btn-stack">
+      <button class="btn" onclick="avanzaGiornataAllenatore()">Gioca la giornata</button>
+    </div>
+    <div class="label" style="margin-top:14px;">Classifica</div>
+    <div class="card" style="padding:8px 10px;">
+      <table><thead><tr><th>#</th><th>Squadra</th><th class="center">PT</th><th class="center">G</th></tr></thead>
+      <tbody id="allenatoreClassifica"></tbody></table>
+    </div>
   </div>
 
   <!-- ===================== FINE STAGIONE ===================== -->
@@ -1102,6 +1143,8 @@ function showScreen(id){
   if(id==='territorio'){ territorioAreaSel = null; renderTerritorio(); }
   if(id==='shop') renderShop();
   if(id==='telefono'){ telefonoConversazioneSel = null; renderTelefono(); }
+  if(id==='ritiro') renderRitiro();
+  if(id==='allenatore' && state.allenatore && state.allenatore.squadra) renderAllenatore();
   if(id==='formazione') renderFormazione();
   if(id==='investimenti') renderInvestimenti();
   // Prima "Torna all'hub" (da Classifica/Scheda giocatore/Coppa) riportava alla hub senza
@@ -1434,11 +1477,22 @@ function startCareer(){
     // Memoria relazionale (Fase A): registro di persone con identità stabile (mister, procuratore,
     // compagni reali dalla rosa) e storico narrativo, separato dai 3 numeri aggregati già esistenti
     // in relazioni.*. Vedi registraPersona()/registraEventoPersona().
-    persone: {}
+    persone: {},
+    // Timeline legacy "La tua storia" (Fase F): a differenza di diario (troncato a 60 voci, pensato
+    // per la cronaca recente) qui si registrano solo i momenti che contano per raccontare l'intera
+    // carriera — traguardi, eventi relazionali di grande impatto, tappe di stagione — così arriva
+    // intatta fino a fine carriera. Vedi registraLegacy().
+    legacy: [],
+    // 'giocatore' finché si gioca in campo; 'allenatore' dopo il ritiro (Fase G). Nessun secondo
+    // oggetto stato parallelo per il giocatore: la carriera da giocatore resta tutta in state come
+    // sempre, congelata; allenatore è un oggetto separato che si attiva solo dopo avviaRitiro().
+    modalita: 'giocatore',
+    allenatore: null
   };
   const season = buildTierSeason(state.lega, teamName());
   state.calendario = season.calendario; state.classifica = season.classifica;
   addDiario(`Firmi il primo contratto professionistico con ${teamName()} (${LEAGUES[state.lega].label}).`);
+  registraLegacy('carriera', `Debutto professionistico con ${teamName()} (${LEAGUES[state.lega].label}).`);
   registraPersona('MISTER', { nome:'Il mister', ruolo:'mister' });
   registraPersona('PROCURATORE', { nome:'Il procuratore', ruolo:'procuratore' });
   registraPersona('FAMIGLIA', { nome:'La tua famiglia', ruolo:'famiglia' });
@@ -1707,6 +1761,16 @@ function addDiario(text){
   state.diario.unshift({giornata:state.giornata, stagione:state.stagione, testo:text});
   if(state.diario.length>60) state.diario.pop();
 }
+/* ---------- TIMELINE LEGACY "LA TUA STORIA" (Fase F) ----------
+   Estende il concetto di diario invece di duplicarlo: stesso shape {stagione, giornata, testo},
+   ma qui si registrano solo i momenti che devono sopravvivere a fine carriera (diario è troncato a
+   60 voci per restare leggero come cronaca recente). Nessun salvataggio "a parte": vive dentro
+   state, quindi persiste già automaticamente col save() esistente a ogni azione — è questo il senso
+   di "salvata automaticamente" richiesto, non un secondo meccanismo di persistenza. */
+function registraLegacy(tipo, testo){
+  state.legacy.unshift({ stagione:state.stagione, giornata:state.giornata, tipo, testo });
+  if(state.legacy.length>200) state.legacy.pop();
+}
 
 /* ---------- MEMORIA RELAZIONALE (Fase A del sistema "personaggi") ----------
    I 3 numeri aggregati in state.relazioni (mister/procuratore/compagni) restano invariati e
@@ -1740,6 +1804,9 @@ function registraEventoPersona(id, {tipo, testo, impatto=0, tratto}){
   if(impatto) p.affinita = clamp(p.affinita+impatto, 0, 100);
   if(tratto && !p.tratti.includes(tratto)) p.tratti.push(tratto);
   if(Math.abs(impatto)>=NOTIFICA_SOGLIA_IMPATTO) p.nonLetti = (p.nonLetti||0)+1;
+  // Soglia più alta di quella "notifica" del Telefono: nella storia della carriera entrano solo i
+  // momenti relazionali davvero grandi, non ogni singolo evento con un minimo di impatto.
+  if(Math.abs(impatto)>=8) registraLegacy('relazione', `${p.nome}: ${testo}`);
 }
 // Id stabile per un compagno reale: stessa persona finché si resta nella stessa squadra (sceglieCompagni
 // prende sempre il miglior ATT/DIF della rosa reale corrente), ricostruibile identico se si torna in
@@ -1781,6 +1848,153 @@ function migliorGiocatoreRuolo(nomeSquadra, ruoloInterno){
 function squadraAppenaAffrontata(s){
   const idx = s.giornata-2;
   return (idx>=0 && s.calendario[idx]) ? s.calendario[idx].nome : null;
+}
+
+/* ---------- RITIRO → ALLENATORE (Fase G) ----------
+   La più grande e isolata delle fasi, come da richiesta: si attiva solo a fine carriera (età>=33,
+   voluttario) e non tocca in nessun modo lo stato della carriera da giocatore, che resta congelato
+   in state (gol/assist/livello/reputazione restano lì, semplicemente non cambiano più).
+   Il "passato da giocatore che influenza reputazione/spogliatoio/relazioni" richiesto è
+   implementato come le 20 CONNESSIONI PRATICHE: si leggono le persone già raccolte in state.persone
+   durante tutta la carriera (Fase A-D: mister, procuratore, ex allenatore, famiglia, compagni reali,
+   rivali interni/esterni) e si trasforma la loro affinità in un effetto concreto sulla nuova
+   carriera da allenatore (reputazione iniziale, aiuto/ostacolo nel trovare il primo incarico) —
+   nessun dato nuovo inventato, solo lettura di ciò che si è già costruito.
+   Lean deliberato: il motore delle partite da allenatore NON è un nuovo motore. Riusa esattamente
+   simSquadra()/applyResultToClassifica() già esistenti (già usati per simulare ogni fixture delle
+   ALTRE squadre di un girone ogni giornata) — da allenatore, la "propria" squadra viene semplicemente
+   simulata con quello stesso motore invece di giocata scelta per scelta. Tattica settimanale =
+   stesso pattern dati-motore di TRAININGS (un piccolo modificatore di forza, non un sistema tattico
+   completo). Gestione staff/rosa/scouting NON è in scope di questa fase: è un'estensione futura
+   esplicitamente fuori da questo MVP, non un'omissione silenziosa. */
+const ETA_MINIMA_RITIRO = 33;
+function generaConnessioniAllenatore(s){
+  const persone = Object.values(s.persone)
+    .sort((a,b)=> Math.abs(b.affinita-50) - Math.abs(a.affinita-50))
+    .slice(0,20);
+  return persone.map(p=>{
+    let effetto, delta;
+    if(p.affinita>=70){ effetto = 'alleato: ti apre una porta nel mondo del calcio'; delta = 3; }
+    else if(p.affinita>=55){ effetto = 'conoscenza cordiale: una buona parola quando serve'; delta = 1; }
+    else if(p.affinita>=35){ effetto = 'conoscenza neutra'; delta = 0; }
+    else if(p.affinita>=20){ effetto = 'rapporto freddo: non ti aiuta, ma non ti ostacola'; delta = -1; }
+    else { effetto = 'ostacolo: la voce che gira su di te non è delle migliori'; delta = -3; }
+    return { id:p.id, nome:p.nome, ruoloOrigine:p.ruolo, affinita:p.affinita, effetto, delta };
+  });
+}
+function eleggibileRitiro(s){ const eta = calcolaEta(s); return eta!=null && eta>=ETA_MINIMA_RITIRO; }
+function avviaRitiro(){
+  if(!eleggibileRitiro(state)) return;
+  const connessioni = generaConnessioniAllenatore(state);
+  const bonusConnessioni = connessioni.reduce((tot,c)=>tot+c.delta, 0);
+  state.allenatore = {
+    connessioni,
+    reputazioneAllenatore: clamp(30 + Math.round(state.reputazione*0.3) + bonusConnessioni, 10, 90),
+    squadra: null, lega: null, calendario: [], classifica: [], giornata: 1, stagione: 1,
+    tatticaAttuale: null, vittorie:0, pareggi:0, sconfitte:0
+  };
+  state.modalita = 'allenatore';
+  registraLegacy('ritiro', `Appendi gli scarpini al chiodo dopo una carriera da giocatore. Inizia un nuovo capitolo, in panchina.`);
+  save();
+  renderRitiro();
+  showScreen('ritiro');
+}
+function iniziaCarrieraAllenatore(){
+  const rep = state.allenatore.reputazioneAllenatore;
+  // Stessa logica di partenza della creazione personaggio: reputazione alta → si parte da una lega
+  // più alta, coerente col percorso appena concluso da giocatore.
+  const lega = rep>=65 ? 'B' : (rep>=40 ? 'C' : 'C');
+  const pool = LEAGUES[lega].pool;
+  const squadra = pool[rand(0, pool.length-1)];
+  const season = buildTierSeason(lega, squadra);
+  state.allenatore.lega = lega;
+  state.allenatore.squadra = squadra;
+  state.allenatore.calendario = season.calendario;
+  state.allenatore.classifica = season.classifica;
+  state.allenatore.giornata = 1;
+  save();
+  renderAllenatore();
+  showScreen('allenatore');
+}
+const TATTICHE_ALLENATORE = [
+  { id:'equilibrato', label:'Equilibrato', desc:'Nessun rischio particolare.', modifier:0 },
+  { id:'offensivo', label:'Gioco offensivo', desc:'Più occasioni create, ma ti esponi in contropiede.', modifier:3 },
+  { id:'difensivo', label:'Blocco basso', desc:'Squadra più corta e prudente, meno spettacolo.', modifier:-1 },
+];
+function scegliTatticaAllenatore(id){ state.allenatore.tatticaAttuale = id; save(); renderAllenatore(); }
+function avanzaGiornataAllenatore(){
+  const al = state.allenatore;
+  const opp = al.calendario[al.giornata-1];
+  if(!opp){ nuovaStagioneAllenatore(); return; }
+  const tattica = TATTICHE_ALLENATORE.find(t=>t.id===al.tatticaAttuale) || TATTICHE_ALLENATORE[0];
+  const forzaMia = (getForzaSquadra(al.squadra)||55) + Math.round(al.reputazioneAllenatore*0.1) + tattica.modifier;
+  // applyResultToClassifica() legge/scrive sempre state.classifica: si scambia temporaneamente col
+  // campionato allenatore (stessa forma dati, stesso motore, nessuna riscrittura della funzione).
+  const oldClassifica = state.classifica; state.classifica = al.classifica;
+  const r = simSquadra(forzaMia, opp.forza);
+  applyResultToClassifica(opp.nome, r.mieiGol, r.oppGol);
+  al.classifica = state.classifica; state.classifica = oldClassifica;
+  if(r.mieiGol>r.oppGol){ al.vittorie++; al.reputazioneAllenatore = clamp(al.reputazioneAllenatore+2,0,100); }
+  else if(r.mieiGol<r.oppGol){ al.sconfitte++; al.reputazioneAllenatore = clamp(al.reputazioneAllenatore-2,0,100); }
+  else { al.pareggi++; }
+  // Ritrovare un ex compagno/rivale ora dall'altra parte del campo, da avversari o colleghi: stesso
+  // registro state.persone della carriera da giocatore, mai un dato nuovo.
+  const connessioneRitrovata = al.connessioni.find(c=>{
+    const p = state.persone[c.id];
+    return p && p.squadraOrigine===opp.nome;
+  });
+  const rigaLog = connessioneRitrovata
+    ? `G${al.giornata}: ${al.squadra} ${r.mieiGol}-${r.oppGol} ${opp.nome}. Ritrovi ${connessioneRitrovata.nome}, che conosci dai tempi da giocatore.`
+    : `G${al.giornata}: ${al.squadra} ${r.mieiGol}-${r.oppGol} ${opp.nome}.`;
+  addDiario(rigaLog);
+  al.giornata++;
+  save();
+  if(al.giornata > al.calendario.length){ renderFineStagioneAllenatore(); showScreen('allenatore'); return; }
+  renderAllenatore();
+}
+function nuovaStagioneAllenatore(){
+  const al = state.allenatore;
+  al.stagione++;
+  const season = buildTierSeason(al.lega, al.squadra);
+  al.calendario = season.calendario; al.classifica = season.classifica; al.giornata = 1;
+  save();
+  renderAllenatore();
+}
+function renderRitiro(){
+  const al = state.allenatore;
+  document.getElementById('ritiroStats').innerHTML = `
+    <div class="attr-grid">
+      <div class="attr"><div class="attr-name">Gol carriera</div><div class="attr-val">${state.carriera.gol}</div></div>
+      <div class="attr"><div class="attr-name">Assist carriera</div><div class="attr-val">${state.carriera.assist}</div></div>
+      <div class="attr"><div class="attr-name">Livello raggiunto</div><div class="attr-val">${state.livello}</div></div>
+      <div class="attr"><div class="attr-name">Reputazione finale</div><div class="attr-val" style="color:var(--gold);">${state.reputazione}%</div></div>
+    </div>`;
+  document.getElementById('ritiroConnessioni').innerHTML = al.connessioni.length ? al.connessioni.map(c=>
+    `<div class="diario-entry"><b>${c.nome}</b>${PERSONA_RUOLO_LABEL[c.ruoloOrigine]||c.ruoloOrigine} — ${c.effetto}</div>`
+  ).join('') : `<div class="subtle">Una carriera vissuta soprattutto in campo: nessuna connessione particolare da portare con te.</div>`;
+}
+function renderAllenatore(){
+  const al = state.allenatore;
+  document.getElementById('allenatoreSquadra').textContent = `${al.squadra} · Serie ${al.lega} · Stagione ${al.stagione}`;
+  document.getElementById('allenatoreReputazione').textContent = `Reputazione da allenatore: ${al.reputazioneAllenatore}%`;
+  const opp = al.calendario[al.giornata-1];
+  document.getElementById('allenatoreProssima').textContent = opp ? `Giornata ${al.giornata}/${al.calendario.length} · vs ${opp.nome}` : 'Fine stagione';
+  const tatBox = document.getElementById('allenatoreTattiche'); tatBox.innerHTML = '';
+  TATTICHE_ALLENATORE.forEach(t=>{
+    const el = document.createElement('div');
+    el.className = 'choice-card'; el.style.marginBottom = '8px';
+    if(al.tatticaAttuale===t.id) el.style.borderColor = 'var(--gold)';
+    el.onclick = ()=> scegliTatticaAllenatore(t.id);
+    el.innerHTML = `<div class="choice-title">${t.label}</div><div class="choice-meta"><span>${t.desc}</span></div>`;
+    tatBox.appendChild(el);
+  });
+  const classBody = document.getElementById('allenatoreClassifica');
+  classBody.innerHTML = al.classifica.map((sq,i)=>`<tr${sq.me?' class="me"':''}><td>${i+1}</td><td>${sq.nome}</td><td class="center">${sq.pt}</td><td class="center">${sq.g}</td></tr>`).join('');
+}
+function renderFineStagioneAllenatore(){
+  addDiario(`Stagione ${state.allenatore.stagione} da allenatore conclusa con ${state.allenatore.squadra}: ${state.allenatore.vittorie}V ${state.allenatore.pareggi}N ${state.allenatore.sconfitte}P.`);
+  registraLegacy('allenatore', `Stagione ${state.allenatore.stagione} in panchina al ${state.allenatore.squadra}: ${state.allenatore.vittorie}V ${state.allenatore.pareggi}N ${state.allenatore.sconfitte}P.`);
+  nuovaStagioneAllenatore();
 }
 
 /* ---------- TELEFONO DEL CALCIATORE (Fase B) ----------
@@ -3510,7 +3724,7 @@ function addXP(amount){
 }
 function checkAchievements(){
   ACHIEVEMENTS.forEach(a=>{
-    if(!state.achievements.includes(a.id) && a.cond(state)){ state.achievements.push(a.id); state.achievementsNuovi.push(a.id); }
+    if(!state.achievements.includes(a.id) && a.cond(state)){ state.achievements.push(a.id); state.achievementsNuovi.push(a.id); registraLegacy('traguardo', `${a.icon} ${a.label} — ${a.desc}`); }
   });
 }
 function payStipendio(ctx){
@@ -3641,6 +3855,7 @@ function renderClassifica(){
 }
 function renderCarriera(){
   aggiornaBadgeOpportunita();
+  document.getElementById('carRitiroCard').style.display = (state.modalita==='giocatore' && eleggibileRitiro(state)) ? 'block' : 'none';
   document.getElementById('carName').textContent = state.name;
   document.getElementById('carRole').textContent = state.role + ' · ' + teamName();
   document.getElementById('carLevel').textContent = 'Lv. '+state.livello;
@@ -3689,6 +3904,11 @@ function renderCarriera(){
       <td class="center"><span class="badge ${badgeClass}" style="padding:2px 8px;">${p.mieiGol}-${p.oppGol}</span></td>
       <td class="center">${p.playerGol}</td><td class="center">${p.playerAssist}</td><td class="center">${p.voto!=null ? p.voto.toFixed(1) : '—'}</td></tr>`;
   }).join('') : `<tr><td colspan="6" class="subtle">Nessuna partita ancora registrata.</td></tr>`;
+  const legacyBox = document.getElementById('carLegacy');
+  legacyBox.innerHTML = state.legacy.length
+    ? `<div class="subtle" style="margin-bottom:8px;">I momenti che contano davvero, dall'inizio della carriera.</div>` +
+      state.legacy.map(l=>`<div class="diario-entry"><b>S${l.stagione} G${l.giornata}</b>${l.testo}</div>`).join('')
+    : `<div class="subtle">La tua storia prende forma man mano che la carriera va avanti: traguardi, legami importanti, stagioni che contano.</div>`;
 }
 
 function renderTabellaGirone(girone, mioTeam){
@@ -3798,6 +4018,7 @@ function renderSeasonEnd(){
   const {esito, pos, total} = calcolaEsitoStagione();
   state.ultimoEsitoLega = esito;
   addDiario(`Fine stagione: ${pos}° posto in ${LEAGUES[state.lega===esito? state.lega:state.lega].label}. Esito: ${esito}.`);
+  registraLegacy('stagione', `Stagione ${state.stagione}: ${pos}° posto su ${total} — ${esito}.`);
   generaRegenStagionali(state);
 
   // Coppa Leonessa: si costruiscono i gironi, le partite altrui si simulano subito, le 3 del
@@ -4157,6 +4378,9 @@ function avviaNuovaStagione(){
     registraPersona('MISTER', { nome:'Il mister', ruolo:'mister' });
     registraPersona('PROCURATORE', { nome:'Il procuratore', ruolo:'procuratore' });
     registraPersona('FAMIGLIA', { nome:'La tua famiglia', ruolo:'famiglia' });
+    if(!state.legacy) state.legacy=[];
+    if(!state.modalita) state.modalita='giocatore';
+    if(state.allenatore===undefined) state.allenatore=null;
     if(!state.eventiMatchUltimaGiornata) state.eventiMatchUltimaGiornata={};
     if(!state.coppa || !state.coppa.altreSfide) { if(state.coppa) state.coppa.altreSfide = []; }
     riparaGironeCoppaAttivo();
@@ -4182,7 +4406,12 @@ function avviaNuovaStagione(){
     if(state.inventarioEquip===undefined) state.inventarioEquip = {};
     if(state.equipaggiamento===undefined) state.equipaggiamento = { scarpe:null, parastinchi:null, guanti:null, abbigliamento:null, accessori:null, borsone:null };
     if(state.formazione===undefined) state.formazione = { fattaSettimana: false, ultimaFormazione: null, libriLetti: [] };
-    renderHub(); renderGironiPicker(); showScreen('hub');
+    renderGironiPicker();
+    if(state.modalita==='allenatore' && state.allenatore && state.allenatore.squadra){
+      renderAllenatore(); showScreen('allenatore');
+    } else {
+      renderHub(); showScreen('hub');
+    }
   }
 })();
 </script>

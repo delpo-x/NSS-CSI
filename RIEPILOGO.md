@@ -20,13 +20,17 @@
 > vista di una futura UI PC separata), e l'**estensione del sistema di personalità esistente**
 > (`state.personalita`) a 4 assi — azioni nei momenti chiave di partita, allenamento settimanale, economia
 > extra-campo (shop/formazione/investimenti), dialoghi fuori dal campo — con calcolo del tratto dominante
-> e una card dedicata in Giocatore, e l'avvio del grande piano **"sistema personaggi" (Fasi A-E di un
-> piano più ampio A-G)**: memoria relazionale per persona con identità stabile e storico narrativo
-> (Fase A), un Telefono come hub eventi con filtro anti-spam (Fase B), rivalità dinamiche interne/esterne
-> con 10 eventi che evolvono in rispetto/odio/amicizia/collaborazione (Fase C), eventi di vita privata e
-> imprevisti "caos controllato" (Fase D), un mercato narrativo con voci vere/false/manipolate e Deadline
-> Day (Fase E) — tutto riusando gli stessi motori già esistenti (EVENTS/pickEvent, diario), mai un
-> secondo sistema parallelo. Richiesto esplicitamente (vedi nota in fondo e sezioni dedicate più sotto).
+> e una card dedicata in Giocatore, e il **completamento del piano a 7 fasi "sistema personaggi"
+> (A-G)**: memoria relazionale per persona con identità stabile e storico narrativo (Fase A), un
+> Telefono come hub eventi con filtro anti-spam (Fase B), rivalità dinamiche interne/esterne con 10
+> eventi che evolvono in rispetto/odio/amicizia/collaborazione (Fase C), eventi di vita privata e
+> imprevisti "caos controllato" (Fase D), un mercato narrativo con voci vere/false/manipolate e
+> Deadline Day (Fase E), una timeline legacy "La tua storia" che sopravvive a fine carriera (Fase F),
+> e un **ritiro → allenatore** con 20 connessioni pratiche derivate dalle persone incontrate durante
+> la carriera e un motore da allenatore che riusa la simulazione di girone già esistente (Fase G) —
+> tutto riusando gli stessi motori già esistenti (EVENTS/pickEvent, diario, simSquadra/
+> buildTierSeason), mai un secondo sistema parallelo. Richiesto esplicitamente (vedi nota in fondo e
+> sezioni dedicate più sotto).
 
 ## Cos'è
 
@@ -1015,7 +1019,7 @@ secondo stato parallelo, nessuna astrazione mai usata prima nel progetto.
   corretta; salvataggio/caricamento coerente; nessun errore in console; nessuna regressione sui flussi
   esistenti.
 
-## Sistema "personaggi": Fasi A-E di un piano più ampio (A-G)
+## Sistema "personaggi": piano completo a 7 fasi (A-G)
 
 Richiesto con uno spec molto ampio in stile "sezioni 5-25" (telefono, memoria narrativa, rivalità,
 mondo dinamico/mercato, vita privata, eventi/legacy, ritiro→allenatore). Prima di scrivere codice è
@@ -1069,15 +1073,49 @@ tutte da un'identità stabile per persona.
   regressione. Deadline Day (`isDeadlineDayMercato`, l'ultima settimana della finestra 1 luglio-31
   agosto) genera sempre una voce ed è segnalato in etichetta sulla schermata di mercato; nelle
   settimane normali una voce compare col 45% di probabilità.
-- **Piano parziale**: Fasi A-E completate su un piano a 7 (A-G); mancano Rivalità→Mondo dinamico
-  meccanico (per ora solo narrativo, vedi Fase E), Eventi/Legacy (timeline "La tua storia" a fine
-  carriera) e Ritiro→Allenatore (Fasi F-G), non ancora iniziate.
+- **Fase F — Timeline legacy "La tua storia"**: estende il concetto di `diario` invece di
+  duplicarlo (stesso shape `{stagione, giornata, testo}`), ma senza il troncamento a 60 voci di
+  `diario` — pensata per sopravvivere intatta fino a fine carriera. Nuova `registraLegacy(tipo,
+  testo)`, agganciata a 4 punti esistenti: nuovo traguardo sbloccato (`checkAchievements`), eventi
+  relazionali di grande impatto (`registraEventoPersona`, soglia `|impatto|>=8`, più alta di quella
+  "notifica" del Telefono), debutto professionistico (`startCareer`) e fine di ogni stagione
+  (`renderSeasonEnd`). Nessun nuovo meccanismo di salvataggio: vive dentro `state`, quindi persiste
+  già con `save()` — è questo il senso di "salvata automaticamente". Nuovo 6° tab "La tua storia" in
+  Giocatore, stesso stile `.diario-entry` già esistente, zero CSS nuovo.
+- **Fase G — Ritiro → Allenatore**: la fase più grande, isolata a fine carriera come richiesto.
+  Trigger volontario (età≥33, `calcolaEta` già esistente) con bottone in Giocatore > Panoramica.
+  **Le 20 connessioni pratiche** (`generaConnessioniAllenatore`): si leggono le persone già raccolte
+  in `state.persone` durante tutta la carriera (mister, procuratore, ex allenatore, famiglia,
+  compagni reali, rivali) ordinate per quanto la relazione sia stata significativa (positiva o
+  negativa), e la loro affinità diventa un effetto concreto sulla nuova carriera (reputazione
+  iniziale da allenatore più alta/bassa, "alleato"/"ostacolo") — nessun dato nuovo, solo lettura di
+  ciò che si è già costruito. La carriera da giocatore resta congelata in `state`, mai riscritta.
+  Il motore delle partite da allenatore **riusa `simSquadra()`/`applyResultToClassifica()`** già
+  esistenti (gli stessi che simulano ogni fixture delle altre squadre di un girone ogni giornata:
+  da allenatore la propria squadra viene semplicemente simulata con lo stesso motore) e
+  `buildTierSeason()` per costruire calendario/classifica della squadra assegnata — la stessa
+  funzione già usata per la creazione del personaggio, riusata identica. Tattica settimanale
+  (`TATTICHE_ALLENATORE`, 3 opzioni con un piccolo modificatore di forza) è lo stesso pattern
+  dati-motore di `TRAININGS`. Quando si affronta la squadra di origine di una connessione nota
+  (ex compagno/rivale ora altrove), il diario lo segnala. Fine stagione registra anche in legacy.
+  **Fuori scope dichiarato per questo MVP** (non omissione silenziosa): nessuna gestione
+  staff/rosa/scouting, nessuna scelta tattica approfondita, nessuna progressione di carriera da
+  allenatore oltre il loop stagionale — un'eventuale estensione futura.
+- **Piano completo A-G**: tutte le 7 fasi del sistema "personaggi" sono state implementate.
+  Limite accettato riportato in Fase E: "il mondo che vive da solo" resta narrativo (rumor), non una
+  simulazione meccanica di trasferimenti/esoneri reali — scelta deliberata per non rischiare di
+  squilibrare le simulazioni delle altre 280 squadre.
 - Verificato in browser a ogni fase: persona reale creata da `sceglieCompagni`/rosa avversaria con
   nomi veri, affinità che si muove nella direzione narrativa attesa, badge Telefono che si azzera
   aprendo una conversazione e si aggiorna anche sul bottone hub, `statoRivalita()` corretto ai 4
   confini di soglia, eventi di Fase D con condizioni verificate (es. `crisi_tempo_famiglia` legato
   all'affinità di `FAMIGLIA`), rumor di mercato visibili nel diario esistente con prefisso Deadline
-  Day quando previsto, nessun errore in console, nessuna regressione sui flussi esistenti.
+  Day quando previsto, tab "La tua storia" popolato da traguardi/eventi/stagioni reali, ritiro con
+  età forzata a 34 che genera correttamente le connessioni e cambia schermata, carriera da
+  allenatore con squadra reale assegnata, classifica dell'intero girone aggiornata via
+  `applyResultToClassifica`, rollover di stagione, ricarica pagina che rientra correttamente in
+  modalità allenatore invece che in hub — nessun errore in console, nessuna regressione sui flussi
+  esistenti.
 
 ## Bug noti/limiti accettati
 
@@ -1095,5 +1133,5 @@ tutte da un'identità stabile per persona.
 
 ---
 *Nota di processo: l'utente ha chiesto di aggiornare questo file ogni 5 suoi messaggi. Questo aggiornamento
-(2026-08-02, quinta volta nella stessa sessione) è stato richiesto esplicitamente ("procedi con Fase D ed E,
-altrimenti aggiorna riepilogo.md"); il conteggio del ciclo riparte da qui.*
+(2026-08-02, sesta volta nella stessa sessione) è stato richiesto esplicitamente ("esegui Fase F ed Fase G,
+RIEPILOGO.md aggiorna"); il conteggio del ciclo riparte da qui.*
