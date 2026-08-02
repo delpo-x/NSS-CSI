@@ -9,12 +9,19 @@
 > per riposo/salta partita/infortunio, una curva bonus/malus per le relazioni (mister/compagni) sia in
 > partita che in simulazione, un riflesso settimanale della reputazione sulle relazioni, la Coppa
 > Leonessa che ora parte dalla seconda settimana di aprile con avanzamento data settimanale partita per
-> partita e una scheda che mostra sempre Preliminare + Fase Principale, e l'avvio (Fasi 2-7 di un piano
-> concordato) di un nuovo **sistema territoriale/shop/formazione** — territorio bresciano con 30 POI
-> reali, esperienze territoriali, shop equipaggiamento (parastinchi/scarpe/ecc.), formazione (libri/
-> corsi/mentor) ed eventi relazionali che generano opportunità di investimento (Fase 8, investimenti
-> veri e propri, non ancora implementata). Richiesto esplicitamente (vedi nota in fondo e sezioni
-> dedicate più sotto).
+> partita e una scheda che mostra sempre Preliminare + Fase Principale, il **completamento di tutte le
+> 10 fasi** di un piano concordato per un nuovo **sistema territoriale/shop/formazione/investimenti** —
+> territorio bresciano con 30 POI reali, esperienze territoriali, shop equipaggiamento (parastinchi/
+> scarpe/ecc.), formazione (libri/corsi/mentor), eventi relazionali che generano opportunità, 5 livelli di
+> investimento con rischio calcolato e maturazione nel tempo —, una **riorganizzazione lean/mobile-first
+> dell'interfaccia** (componente tab riutilizzabile, Shop e Formazione da liste lunghe a tab per
+> categoria, Scheda giocatore rinominata "Giocatore" e divisa in 4 tab, "Vita da calciatore" spostata
+> dentro Giocatore come 5° tab invece di card separata in hub, `data-block` sui contenitori dell'hub in
+> vista di una futura UI PC separata), e l'**estensione del sistema di personalità esistente**
+> (`state.personalita`) a 4 assi — azioni nei momenti chiave di partita, allenamento settimanale, economia
+> extra-campo (shop/formazione/investimenti), dialoghi fuori dal campo — con calcolo del tratto dominante
+> e una card dedicata in Giocatore. Richiesto esplicitamente (vedi nota in fondo e sezioni dedicate più
+> sotto).
 
 ## Cos'è
 
@@ -886,15 +893,122 @@ architettura parallela. Procede a fasi con verifica in browser dopo ognuna, come
   degli eventi ("il gestore ha una proposta da farti") è l'aggancio esplicito alla Fase 8: registra solo
   un record in `state.opportunitaInvestimento[]`, senza logiche di investimento che non esistono ancora
   (evita di costruire in anticipo pezzi della fase successiva).
-- **Non ancora fatto**: Fase 8 (investimenti veri, 5 livelli di rischio, che leggeranno
-  `state.opportunitaInvestimento`), Fase 9 (integrazione UI più ampia/coerenza visiva fra le nuove
-  schermate), Fase 10 (test complessivo). Dataset POI fermo a 30 (non 50) per lo stesso motivo di
-  accuratezza spiegato sopra — estendibile in un secondo momento con verifica caso per caso.
+- **Fase 8, investimenti**: `TIPI_INVESTIMENTO` — i 5 livelli richiesti (piccolo investimento,
+  finanziamento progetto, quota societaria, socio di minoranza, investimento speculativo) con
+  capitale/rischio/rendimento/durata/liquidità crescenti; **nessuna categoria calcistica** (vincolo
+  esplicito rispettato). **Nessun menu statico**: gli investimenti sono raggiungibili solo dalle
+  opportunità generate dagli eventi territoriali della Fase 7 (`state.opportunitaInvestimento`), come
+  richiesto. Il rischio (`calcolaRischioInvestimento`) non è una % piatta: parte da un livello base per
+  tipo e si affina in base a quante volte si è visitato il POI, alla reputazione e alla stagionalità
+  dell'area — pochi fattori concreti, non un motore finanziario reale. La maturazione degli investimenti
+  attivi (`avanzaInvestimenti()`, richiamata ogni giornata in `postGiornataFlow`, stesso ciclo settimanale
+  già esistente) risolve l'esito quando le settimane residue arrivano a zero: successo (rendimento
+  accreditato, +reputazione) o fallimento (recupero parziale in base al rischio, -reputazione). Nuova
+  schermata "Investimenti" (opportunità in attesa con scelta del tipo, investimenti in corso con
+  countdown, storico esiti).
+- **Fase 9, coerenza UI**: i 4 pulsanti territorio/shop/formazione/investimenti erano ripetuti identici
+  in tutti e 3 i rami dei pulsanti hub (fino a 9 pulsanti nel ramo normale) — consolidati in un'unica card
+  "Vita da calciatore" in hub, sempre visibile anche durante infortunio/squalifica, separata dai pulsanti
+  di partita. Aggiunto un badge col numero di opportunità di investimento in attesa sul pulsante
+  "Investimenti". Trovata e corretta un'incoerenza: lo Shop non mostrava alcun avviso per saldo
+  insufficiente (usciva silenziosamente), a differenza delle altre 3 schermate nuove — uniformato.
+- **Fase 10, test di regressione**: carriera creata dal flusso reale (non dati sintetici) e verificata
+  fino in hub; tutte e 4 le nuove schermate raggiunte con click reali, incluso un ciclo completo di
+  un'esperienza territoriale dall'interfaccia; nessun errore in console; migrazione salvataggi verificata
+  rimuovendo di proposito i nuovi campi da un salvataggio e ricaricando — `boot()` li ripristina con i
+  default corretti, nessun crash.
+- **Piano a 10 fasi completo.** Limiti accettati (non bug, scelte deliberate): dataset POI fermo a 30 non
+  50 (accuratezza sopra copertura, vedi sopra); nessun sistema di usura/durabilità (il progetto non ne
+  aveva già uno, istruzione esplicita di non crearne uno nuovo); categorie RISTORAZIONE/OSPITALITÀ/
+  BUSINESS del territorio non popolate (richiederebbero nomi di attività commerciali verificati, non solo
+  monumenti/luoghi pubblici) — estendibili in un secondo momento con verifica caso per caso.
 - Verificato in browser a ogni fase: acquisto/equip/vendita con bonus reale su `calcChance` (53%→55%→53%
   su acquisto/equip/vendita di un item), corso con bonus permanente su un attributo, mentor con esito
   legato alla relazione, gating settimanale su territorio/formazione, evento territoriale che scatta alla
   soglia di visite corretta con ritorno alla stessa area invece che alla lista aree (bug trovato e
-  corretto durante il test).
+  corretto durante il test), capitale/rischio di un investimento coerenti con relazione/reputazione,
+  maturazione con esito e impatto reale su saldo/reputazione, regressione completa senza errori.
+
+## Riorganizzazione lean/mobile-first dell'interfaccia
+
+Richiesta esplicita di ridurre lo scrolling verticale raggruppando le sezioni più lunghe in blocchi
+compatti, senza toccare la logica di gioco né introdurre nuove dipendenze — analisi delle schermate
+esistenti fatta prima di scrivere codice, per capire cosa fosse davvero troppo lungo (Shop: 25 oggetti
+in un'unica lista; Scheda giocatore: 7 card impilate) e cosa già andasse bene così (Territorio ha già un
+drill-down area→POI, Investimenti è già diviso in 3 sezioni brevi — nessuna modifica lì).
+
+- **Componente tab riutilizzabile** (`.tab-bar`/`.tab-btn`/`.tab-panel` in CSS + `switchTab(scope,tabId)`
+  in JS): pensato per restare valido sia da mobile (barra a scorrimento orizzontale) sia in un futuro
+  layout PC separato (stessa struttura dati/markup, disposizione diversa).
+- **Shop equipaggiamento**: da un'unica lista di 25 oggetti su 7 categorie a 7 tab (una per categoria),
+  con il riepilogo "Equipaggiato" sempre visibile sopra. `renderShop()` ora filtra per
+  `shopCategoriaSel` (stesso pattern di selezione+re-render già usato da `territorioAreaSel`) invece di
+  disegnare tutto insieme.
+- **Formazione**: stesso trattamento, 4 tab (Libri/Corsi/Mentor/Esperienze) via `formazioneTipoSel`.
+- **Scheda giocatore → "Giocatore"**: rinominata e riorganizzata da 7 card impilate a 4 tab
+  (Panoramica/Statistiche/Traguardi/Storico) — il taglio di scroll più netto. Nessuna funzione di
+  render esistente (`renderCarriera`) ha richiesto modifiche alla logica interna: gli stessi id
+  (`carAttrs`, `carStats`, ecc.) vivono ora dentro i pannelli tab.
+- **"Vita da calciatore" spostata dentro Giocatore**: la card separata in hub (territorio/shop/
+  formazione/investimenti) è stata rimossa e ricreata come 5° tab di Giocatore. Il badge delle
+  opportunità di investimento in attesa (`badgeOpportunita`) è rimasto lo stesso elemento, solo
+  spostato; il conteggio è stato estratto in `aggiornaBadgeOpportunita()`, richiamata sia da
+  `renderHub()` (che ora mostra il badge anche sul pulsante "Giocatore" in hub) sia da
+  `renderCarriera()`, così resta sincronizzato indipendentemente da quale schermata si visita prima.
+- **`data-block` sui contenitori dell'hub** (stato-giocatore, relazioni, prossimo-impegno,
+  preparazione, lavoro, azioni-partita, coppa, vita-calciatore, reset): zero impatto visivo, rende
+  esplicita nel markup la struttura logica dei blocchi in vista di una futura separazione UI PC/mobile,
+  senza anticipare quella separazione con astrazioni non richieste ora.
+- Verificato in browser su un salvataggio reale esistente: acquisto in Shop con tab che resta
+  selezionata dopo il re-render, tutti e 4 i tab di Giocatore navigabili con contenuto corretto,
+  "Vita da calciatore" raggiungibile da Giocatore e poi Shop, saldo/diario coerenti dopo l'acquisto,
+  nessun errore in console.
+
+## Sistema di personalità: estensione a 4 assi (azioni, allenamento, economia, dialoghi)
+
+Richiesta con uno spec dettagliato in stile "pub-sub/event hooks/TypeScript" per tre archetipi
+(Maverick/Virtuoso/Heartbeat). Prima di implementare sono stati segnalati due disallineamenti con lo
+stato attuale del progetto e fatti confermare dall'utente: (1) `state.personalita =
+{individualista, ragionatore, trascinatore}` esiste **già** dalla Fase 6 (Formazione) e i
+`MATCH_EVENTS` lo alimentavano **già** da tempo tramite il parametro `tratto` di `skillScelta()` — gli
+archetipi richiesti coincidono concettualmente con i 3 contatori esistenti; (2) il resto del file è JS
+vanilla senza build/TypeScript/event bus, tutto integrato con chiamate dirette. L'utente ha confermato
+di **estendere il sistema esistente** con **integrazione diretta, nessun event bus nuovo** — nessun
+secondo stato parallelo, nessuna astrazione mai usata prima nel progetto.
+
+- **Azioni nei momenti chiave di partita**: i `MATCH_EVENTS` erano già coperti (`tratto` per scelta).
+  Colmato l'unico varco rimasto — i 4 momenti chiave "core" (`MOMENTS`) e i momenti del Portiere
+  (`GK_MOMENTS_POOL`) — riusando il campo `out` già esistente nel motore (`PERSONALITA_OUT_MAP`:
+  goal→individualista, assist/recupero→trascinatore, possesso→ragionatore) dentro `resolveChoice()`,
+  invece di taggare manualmente 8+ scelte una per una. Semplificazione dichiarata in un commento: un
+  dribbling che smista un assist conta come "trascinatore" e non "individualista" — accettabile perché
+  conta la tendenza aggregata sulla stagione, non il singolo episodio, e l'asse resta comunque ben
+  coperto anche dai `MATCH_EVENTS` che invece taggano scelta per scelta.
+- **Allenamento settimanale**: le 3 sedute di `TRAININGS` (tecnica/fisico/tattico, non riposo) danno ora
+  anche un punto di personalità coerente col contenuto (tecnica/tattico→ragionatore, fisico→
+  trascinatore). Nessuna delle 4 opzioni esistenti è una vera seduta di tiro/finalizzazione: l'asse
+  "allenamento" non alimenta quindi l'individualista, gap documentato in un commento — resta comunque
+  coperto da azioni in campo, shop ed eventi.
+- **Economia extra-campo**: shop (`acquistaEquip`) — oggetti con `rarity:'rara'` (campo già esistente)
+  danno un punto individualista come proxy dell'acquisto vistoso, **senza inventare** auto di lusso o
+  marchi di moda che non hanno riscontro nei dati del gioco; formazione (`applicaEffettiFormazione`) —
+  i corsi/mentor senza già un effetto `personalita` esplicito (COR_001, COR_002, MEN_002) ora danno un
+  punto ragionatore di base; investimenti (`avviaInvestimento`) — mappatura sul tipo di investimento già
+  esistente invece di inventare categorie "beneficenza"/"cena di squadra": speculativo→individualista
+  (guadagno personale veloce), socio di minoranza/quota→trascinatore (impegno lungo su un'attività del
+  territorio), piccolo/finanziamento→ragionatore (scelta prudente e calcolata).
+- **Dialoghi fuori dal campo**: i 13 eventi narrativi di `EVENTS` (inclusi `scandalo_media` ed
+  `evento_sponsor`, i più "media" in senso stretto) ora taggano le scelte coerenti con un archetipo;
+  dove nessuno dei 3 calzava onestamente (es. "vai in famiglia", "resti in silenzio") si è lasciata la
+  scelta senza punto invece di forzare un'etichetta.
+- **Tratto dominante**: nuova `personalitaDistribuzione(s)` calcola percentuali e tratto dominante dai 3
+  contatori. Nuova card "Personalità" nella tab Panoramica di Giocatore (barre nello stesso stile già
+  usato per Relazioni), con messaggio d'attesa finché i contatori sono tutti a zero.
+- Verificato in browser: tutti i punti di innesco (allenamento, acquisto shop, corso formazione,
+  investimento nei 3 tipi mappati, risoluzione di un momento chiave con ciascuno dei 4 `out`, scelta di
+  un evento dialogo) aggiornano correttamente `state.personalita`; card con percentuali/tratto dominante
+  corretta; salvataggio/caricamento coerente; nessun errore in console; nessuna regressione sui flussi
+  esistenti.
 
 ## Bug noti/limiti accettati
 
@@ -912,5 +1026,5 @@ architettura parallela. Procede a fasi con verifica in browser dopo ognuna, come
 
 ---
 *Nota di processo: l'utente ha chiesto di aggiornare questo file ogni 5 suoi messaggi. Questo aggiornamento
-(2026-08-02, seconda volta nella stessa sessione) è stato richiesto esplicitamente con "aggiorniamo il file
-riepilogo.md"; il conteggio del ciclo riparte da qui.*
+(2026-08-02, quarta volta nella stessa sessione) è stato richiesto esplicitamente con "aggiorna riepilogo.md";
+il conteggio del ciclo riparte da qui.*

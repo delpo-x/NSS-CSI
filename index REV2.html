@@ -176,6 +176,19 @@
   #screen-result .card:nth-child(2){ animation-delay:.05s; }
   #screen-result .card:nth-child(3){ animation-delay:.1s; }
 
+  /* Componente tab riutilizzabile: raggruppa contenuti lunghi (liste shop/formazione, sezioni
+     scheda giocatore) in pannelli invece di un'unica colonna scrollabile. Pensato per restare
+     valido sia nel layout mobile (tab a scorrimento orizzontale) sia in un futuro layout PC
+     (stessa struttura dati/markup, eventualmente resa come sidebar invece che barra in alto). */
+  .tab-bar{ display:flex; gap:6px; overflow-x:auto; margin-bottom:14px; padding-bottom:2px; -webkit-overflow-scrolling:touch; }
+  .tab-bar::-webkit-scrollbar{ height:0; }
+  .tab-btn{ flex:0 0 auto; font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:0.04em; text-transform:uppercase;
+    color:var(--text-dim); background:rgba(7,18,30,0.65); border:1px solid rgba(130,167,219,0.22); border-radius:20px;
+    padding:8px 14px; cursor:pointer; white-space:nowrap; transition:background .15s ease, border-color .15s ease, color .15s ease; }
+  .tab-btn.active{ color:#fff; background:linear-gradient(135deg, #196ea9, var(--blue)); border-color:rgba(134,214,255,0.5); }
+  .tab-panel{ display:none; }
+  .tab-panel.active{ display:block; animation:fadeIn .3s ease; }
+
   .choice-card{ background:linear-gradient(135deg, #0e2038, #0a1628); border:1px solid var(--border); border-radius:12px;
     padding:14px; margin-bottom:10px; cursor:pointer; transition:border-color .15s ease, transform .12s ease, box-shadow .15s ease; position:relative; overflow:hidden; }
   .choice-card::before{ content:''; position:absolute; inset:0; background:linear-gradient(120deg, transparent 20%, rgba(255,255,255,0.09) 50%, transparent 80%); transform:translateX(-120%); transition:transform .5s ease; }
@@ -316,7 +329,10 @@
     <div id="nuovaStagioneBanner"></div>
     <div id="achToast"></div>
 
-    <div class="card" style="background:linear-gradient(135deg, var(--navy-card), #0a1a30);">
+    <!-- data-block: raggruppamenti logici dell'hub, pensati per restare identificabili anche
+         quando UI mobile e UI PC verranno separate in due layout (stesso blocco, disposizione
+         diversa: qui colonna singola, su PC potrà diventare griglia/sidebar). -->
+    <div class="card" data-block="stato-giocatore" style="background:linear-gradient(135deg, var(--navy-card), #0a1a30);">
       <div class="row" style="margin-bottom:6px;">
         <div>
           <div style="font-family:'Oswald'; font-size:18px;" id="hubName">—</div>
@@ -345,7 +361,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-block="relazioni">
       <div class="label">Relazioni</div>
       <div class="rel-row"><div class="rel-label"><span>Mister</span><span id="relMisterTxt">55%</span></div>
         <div class="mini-bar-wrap"><div class="mini-bar-fill" id="relMisterBar" style="width:55%; background:var(--blue);"></div></div></div>
@@ -360,7 +376,7 @@
 
     <div id="statusBanner"></div>
 
-    <div class="card">
+    <div class="card" data-block="prossimo-impegno">
       <div class="row">
         <div class="label" style="margin:0;">Prossimo impegno</div>
         <div class="badge blue" id="hubGiornata">Giornata 1/7</div>
@@ -368,22 +384,24 @@
       <div style="font-family:'Oswald'; font-size:18px; margin-top:8px;" id="hubOpponent">—</div>
     </div>
 
-    <div class="label">Preparazione settimanale</div>
-    <div class="card" id="trainingOptions"></div>
+    <div data-block="preparazione">
+      <div class="label">Preparazione settimanale</div>
+      <div class="card" id="trainingOptions"></div>
+    </div>
 
-    <div class="card" id="lavoroCard" style="margin-top:16px; display:none;">
+    <div class="card" id="lavoroCard" data-block="lavoro" style="margin-top:16px; display:none;">
       <div class="label">Lavoro</div>
       <div class="subtle" id="lavoroInfo" style="margin-bottom:8px;">—</div>
       <div class="btn-stack" id="lavoroOptions"></div>
     </div>
 
-    <div class="btn-stack" id="hubActions" style="margin-top:16px;"></div>
+    <div class="btn-stack" id="hubActions" data-block="azioni-partita" style="margin-top:16px;"></div>
 
-    <div class="btn-stack" id="coppaHubBtn" style="display:none; margin-top:10px;">
+    <div class="btn-stack" id="coppaHubBtn" data-block="coppa" style="display:none; margin-top:10px;">
       <button class="btn ghost" onclick="showScreen('coppa')">Coppa Leonessa</button>
     </div>
 
-    <div class="btn-stack" style="margin-top:16px;">
+    <div class="btn-stack" data-block="reset" style="margin-top:16px;">
       <button class="btn danger" onclick="restartCareer()">Ricomincia carriera (cancella salvataggio)</button>
     </div>
   </div>
@@ -435,6 +453,18 @@
     <div class="btn-stack"><button class="btn gold" onclick="closeResult()">Continua</button></div>
   </div>
 
+  <!-- ===================== TELEFONO ===================== -->
+  <div class="screen" id="screen-telefono">
+    <div class="row" style="margin-bottom:14px;">
+      <button class="btn ghost" id="telefonoBack" style="display:none; width:auto; padding:6px 14px;" onclick="telefonoTornaLista()">‹ Chat</button>
+      <h2 style="font-size:18px; margin:0;" id="telefonoTitle">Telefono</h2>
+    </div>
+    <div id="telefonoContent"></div>
+    <div class="btn-stack" style="margin-top:16px;">
+      <button class="btn ghost" onclick="showScreen('hub')">Torna all'hub</button>
+    </div>
+  </div>
+
   <!-- ===================== COPPA LEONESSA ===================== -->
   <div class="screen" id="screen-coppa">
     <h2 style="font-size:18px; margin-bottom:14px;">Coppa Leonessa</h2>
@@ -463,7 +493,10 @@
   <!-- ===================== SHOP EQUIPAGGIAMENTO ===================== -->
   <div class="screen" id="screen-shop">
     <h2 style="font-size:18px; margin-bottom:14px;">Shop equipaggiamento</h2>
-    <div id="shopContent"></div>
+    <div class="form-errors" id="shopAvviso" aria-live="polite"></div>
+    <div class="card" id="shopEquipaggiato"></div>
+    <div class="tab-bar" id="shopTabBar" role="tablist" aria-label="Categorie equipaggiamento"></div>
+    <div id="shopTabContent"></div>
     <div class="btn-stack" style="margin-top:16px;">
       <button class="btn ghost" onclick="showScreen('hub')">Torna all'hub</button>
     </div>
@@ -473,7 +506,19 @@
   <div class="screen" id="screen-formazione">
     <h2 style="font-size:18px; margin-bottom:14px;">Formazione</h2>
     <div class="form-errors" id="formazioneAvviso" aria-live="polite"></div>
-    <div id="formazioneContent"></div>
+    <div id="formazioneStato"></div>
+    <div class="tab-bar" id="formazioneTabBar" role="tablist" aria-label="Tipi di formazione"></div>
+    <div id="formazioneTabContent"></div>
+    <div class="btn-stack" style="margin-top:16px;">
+      <button class="btn ghost" onclick="showScreen('hub')">Torna all'hub</button>
+    </div>
+  </div>
+
+  <!-- ===================== INVESTIMENTI ===================== -->
+  <div class="screen" id="screen-investimenti">
+    <h2 style="font-size:18px; margin-bottom:14px;">Investimenti</h2>
+    <div class="form-errors" id="investimentiAvviso" aria-live="polite"></div>
+    <div id="investimentiContent"></div>
     <div class="btn-stack" style="margin-top:16px;">
       <button class="btn ghost" onclick="showScreen('hub')">Torna all'hub</button>
     </div>
@@ -490,29 +535,62 @@
     <div class="btn-stack"><button class="btn ghost" onclick="showScreen('hub')">Torna alla carriera</button></div>
   </div>
 
-  <!-- ===================== SCHEDA GIOCATORE ===================== -->
+  <!-- ===================== GIOCATORE ===================== -->
   <div class="screen" id="screen-carriera">
-    <h2 style="font-size:18px; margin-bottom:14px; color:#fff;">Scheda giocatore</h2>
+    <h2 style="font-size:18px; margin-bottom:14px; color:#fff;">Giocatore</h2>
     <div class="card center-text">
       <div class="crest" style="width:56px;height:56px;font-size:16px;margin:0 auto 10px;">C7</div>
       <div style="font-family:'Oswald'; font-size:20px;" id="carName">—</div>
       <div class="subtle" id="carRole">—</div>
       <div class="badge blue" style="margin-top:8px;" id="carLevel">Lv. 1</div>
     </div>
-    <div class="card"><div class="label">Attributi</div><div class="attr-grid" id="carAttrs"></div></div>
-    <div class="card"><div class="label">Statistiche di carriera</div><div class="attr-grid" id="carStats"></div></div>
-    <div class="card"><div class="label">Finanze &amp; relazioni</div><div class="attr-grid" id="carFinRel"></div></div>
-    <div class="card" id="carLavoroCard"><div class="label">Lavoro extrasportivo</div><div id="carLavoro"></div></div>
-    <div class="card"><div class="label">Traguardi</div><div id="carAchievements"></div></div>
-    <div class="card">
-      <div class="label">Registro partite</div>
-      <div style="max-height:260px; overflow-y:auto;">
-        <table style="width:100%;"><thead><tr>
-          <th>S/G</th><th>Avversario</th><th class="center">Risultato</th><th class="center">Gol</th><th class="center">Assist</th><th class="center">Voto</th>
-        </tr></thead><tbody id="carRegistro"></tbody></table>
+    <div class="tab-bar" role="tablist" aria-label="Sezioni scheda giocatore">
+      <button class="tab-btn active" data-tab="panoramica" onclick="switchTab('screen-carriera','panoramica')">Panoramica</button>
+      <button class="tab-btn" data-tab="statistiche" onclick="switchTab('screen-carriera','statistiche')">Statistiche</button>
+      <button class="tab-btn" data-tab="traguardi" onclick="switchTab('screen-carriera','traguardi')">Traguardi</button>
+      <button class="tab-btn" data-tab="storico" onclick="switchTab('screen-carriera','storico')">Storico</button>
+      <button class="tab-btn" data-tab="vita" onclick="switchTab('screen-carriera','vita')">Vita da calciatore</button>
+    </div>
+
+    <div class="tab-panel active" id="screen-carriera_panoramica">
+      <div class="card"><div class="label">Attributi</div><div class="attr-grid" id="carAttrs"></div></div>
+      <div class="card"><div class="label">Personalità</div><div id="carPersonalita"></div></div>
+    </div>
+
+    <div class="tab-panel" id="screen-carriera_statistiche">
+      <div class="card"><div class="label">Statistiche di carriera</div><div class="attr-grid" id="carStats"></div></div>
+      <div class="card"><div class="label">Finanze &amp; relazioni</div><div class="attr-grid" id="carFinRel"></div></div>
+      <div class="card" id="carLavoroCard"><div class="label">Lavoro extrasportivo</div><div id="carLavoro"></div></div>
+    </div>
+
+    <div class="tab-panel" id="screen-carriera_traguardi">
+      <div class="card"><div class="label">Traguardi</div><div id="carAchievements"></div></div>
+    </div>
+
+    <div class="tab-panel" id="screen-carriera_storico">
+      <div class="card">
+        <div class="label">Registro partite</div>
+        <div style="max-height:260px; overflow-y:auto;">
+          <table style="width:100%;"><thead><tr>
+            <th>S/G</th><th>Avversario</th><th class="center">Risultato</th><th class="center">Gol</th><th class="center">Assist</th><th class="center">Voto</th>
+          </tr></thead><tbody id="carRegistro"></tbody></table>
+        </div>
+      </div>
+      <div class="card"><div class="label">Diario di carriera</div><div id="carDiario" style="max-height:220px; overflow-y:auto;"></div></div>
+    </div>
+
+    <div class="tab-panel" id="screen-carriera_vita">
+      <div class="card">
+        <div class="label">Vita da calciatore</div>
+        <div class="btn-stack">
+          <button class="btn ghost" onclick="showScreen('territorio')">Territorio</button>
+          <button class="btn ghost" onclick="showScreen('shop')">Shop</button>
+          <button class="btn ghost" onclick="showScreen('formazione')">Formazione</button>
+          <button class="btn ghost" onclick="showScreen('investimenti')">Investimenti<span class="badge gold" id="badgeOpportunita" style="display:none; margin-left:6px;"></span></button>
+        </div>
       </div>
     </div>
-    <div class="card"><div class="label">Diario di carriera</div><div id="carDiario" style="max-height:220px; overflow-y:auto;"></div></div>
+
     <div class="btn-stack"><button class="btn ghost" onclick="showScreen('hub')">Torna alla carriera</button></div>
   </div>
 
@@ -1013,15 +1091,24 @@ function showScreen(id){
   document.getElementById('screen-'+id).classList.add('active');
   document.getElementById('topbar').style.display = (id==='create')?'none':'flex';
   if(id==='classifica') renderClassifica();
-  if(id==='carriera') renderCarriera();
+  if(id==='carriera'){ switchTab('screen-carriera','panoramica'); renderCarriera(); }
   if(id==='coppa') renderCoppa();
   if(id==='territorio'){ territorioAreaSel = null; renderTerritorio(); }
   if(id==='shop') renderShop();
+  if(id==='telefono'){ telefonoConversazioneSel = null; renderTelefono(); }
   if(id==='formazione') renderFormazione();
+  if(id==='investimenti') renderInvestimenti();
   // Prima "Torna all'hub" (da Classifica/Scheda giocatore/Coppa) riportava alla hub senza
   // aggiornarla: se nel frattempo era partita la Coppa Leonessa, restava visibile la vecchia
   // "Giornata X/Y" di campionato invece del badge "Coppa · ...".
   if(id==='hub' && typeof state!=='undefined' && state) renderHub();
+}
+// Componente tab generico: sposta la classe "active" su bottone/pannello corrispondenti.
+// scope è l'id dello screen contenitore, tabId deve combaciare con data-tab del bottone
+// e con il suffisso "_tabId" dell'id del pannello (screen-carriera_panoramica, ecc.).
+function switchTab(scope, tabId){
+  document.querySelectorAll('#'+scope+' .tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tabId));
+  document.querySelectorAll('#'+scope+' .tab-panel').forEach(p=>p.classList.toggle('active', p.id===scope+'_'+tabId));
 }
 
 /* ---------- CREAZIONE ---------- */
@@ -1326,9 +1413,10 @@ function startCareer(){
     // scattare eventi di relazione/opportunità più avanti, es. "sei tornato spesso qui"), più il
     // gating "una esperienza a settimana" sullo stesso schema di allenamentoFatto/ultimoAllenamento.
     territorio: { visite: {}, fattaSettimana: false, ultimaEsperienza: null, eventiUltimaVolta: {}, eventiUsati: [] },
-    // Opportunità di investimento segnalate dagli eventi territoriali (Fase 7): la Fase 8
-    // (investimenti) leggerà questo elenco invece di duplicare la logica di generazione qui.
+    // Opportunità di investimento segnalate dagli eventi territoriali (Fase 7), ognuna con
+    // stato in_attesa/investita/rifiutata. Fase 8: gli investimenti veri e propri.
     opportunitaInvestimento: [],
+    investimenti: [],
     // Shop equipaggiamento: quantità possedute per id, e id equipaggiato per slot (null = niente
     // equipaggiato in quello slot). I bonus non toccano mai state.attr, vedi commento su
     // bonusEquipaggiamento().
@@ -1336,11 +1424,17 @@ function startCareer(){
     equipaggiamento: { scarpe:null, parastinchi:null, guanti:null, abbigliamento:null, accessori:null, borsone:null },
     // Formazione: stesso gating settimanale di territorio/allenamento, più l'elenco dei libri già
     // letti (non si possono ricomprare/rileggere per lo stesso effetto).
-    formazione: { fattaSettimana: false, ultimaFormazione: null, libriLetti: [] }
+    formazione: { fattaSettimana: false, ultimaFormazione: null, libriLetti: [] },
+    // Memoria relazionale (Fase A): registro di persone con identità stabile (mister, procuratore,
+    // compagni reali dalla rosa) e storico narrativo, separato dai 3 numeri aggregati già esistenti
+    // in relazioni.*. Vedi registraPersona()/registraEventoPersona().
+    persone: {}
   };
   const season = buildTierSeason(state.lega, teamName());
   state.calendario = season.calendario; state.classifica = season.classifica;
   addDiario(`Firmi il primo contratto professionistico con ${teamName()} (${LEAGUES[state.lega].label}).`);
+  registraPersona('MISTER', { nome:'Il mister', ruolo:'mister' });
+  registraPersona('PROCURATORE', { nome:'Il procuratore', ruolo:'procuratore' });
   save(); renderHub(); showScreen('hub');
 }
 
@@ -1607,6 +1701,133 @@ function addDiario(text){
   if(state.diario.length>60) state.diario.pop();
 }
 
+/* ---------- MEMORIA RELAZIONALE (Fase A del sistema "personaggi") ----------
+   I 3 numeri aggregati in state.relazioni (mister/procuratore/compagni) restano invariati e
+   continuano a guidare calcChance/simulaPartita/convocazione come già fanno: questo NON è un
+   sostituto, è additivo. state.persone dà invece identità stabile e storico narrativo a singole
+   persone (id fisso 'MISTER'/'PROCURATORE' per le due figure singole già esistenti, id derivato da
+   nome+squadra per i compagni reali scelti da sceglieCompagni() — quindi "lo stesso" compagno finché
+   si resta in quella squadra, ricostruibile identico se ci si torna). Stesso pattern
+   engine-generico-riusato di TRAININGS/EVENTS: una funzione che crea/aggiorna, mai logica duplicata
+   nei chiamanti. Ogni persona ha una propria affinità (0-100, indipendente dall'aggregato) più uno
+   storico eventi (favori/tradimenti/promesse/litigi) — la base per Telefono (Fase B) e Rivalità
+   (Fase C), che leggeranno questi stessi record invece di inventarne di nuovi. */
+function registraPersona(id, datiIniziali){
+  if(!state.persone[id]){
+    state.persone[id] = Object.assign({
+      id, affinita:50, primaApparizione:{stagione:state.stagione, giornata:state.giornata}, eventi:[], tratti:[], nonLetti:0
+    }, datiIniziali);
+  }
+  return state.persone[id];
+}
+// Soglia anti-spam del Telefono (Fase B): non ogni singolo evento registrato deve generare una
+// notifica — solo quelli con un impatto reale sull'affinità (|impatto|>=3). I micro-eventi (es. un
+// singolo recupero difensivo, impatto:1) restano comunque nello storico della conversazione, semplicemente
+// senza far comparire un badge.
+const NOTIFICA_SOGLIA_IMPATTO = 3;
+function registraEventoPersona(id, {tipo, testo, impatto=0, tratto}){
+  const p = state.persone[id];
+  if(!p) return;
+  p.eventi.unshift({ stagione:state.stagione, giornata:state.giornata, tipo, testo });
+  if(p.eventi.length>40) p.eventi.pop();
+  if(impatto) p.affinita = clamp(p.affinita+impatto, 0, 100);
+  if(tratto && !p.tratti.includes(tratto)) p.tratti.push(tratto);
+  if(Math.abs(impatto)>=NOTIFICA_SOGLIA_IMPATTO) p.nonLetti = (p.nonLetti||0)+1;
+}
+// Id stabile per un compagno reale: stessa persona finché si resta nella stessa squadra (sceglieCompagni
+// prende sempre il miglior ATT/DIF della rosa reale corrente), ricostruibile identico se si torna in
+// quella squadra in futuro (stesso nome, stessa squadra → stesso id).
+function idPersonaCompagno(nome, squadra){
+  return 'COMPAGNO_' + squadra + '_' + nome;
+}
+
+/* ---------- RIVALITÀ DINAMICHE (Fase C) ----------
+   Le rivalità sono persone come tutte le altre (state.persone, Fase A): ruolo:'rivale' +
+   sottotipo che ne distingue l'origine — 'compagno_interno' (il migliore nel tuo ruolo nella TUA
+   rosa reale, concorrente diretto per il posto da titolare) o 'avversario_esterno' (il migliore
+   nel tuo ruolo nella rosa reale della squadra che stai affrontando in campionato: dati reali da
+   DB_SQUADRE, mai un nome inventato). Nessun nuovo "stato di rivalità" separato: si riusa la
+   stessa affinità 0-100 già esistente, con statoRivalita() che ne deriva una delle 4 etichette
+   richieste (rispetto/odio/amicizia/collaborazione) — un'unica scala invece di 4 flag paralleli
+   da tenere sincronizzati a mano. Le rivalità compaiono già nel Telefono (Fase B) come qualunque
+   altra conversazione, nessuna nuova UI dedicata. */
+const RUOLO_INTERNO_TO_DB = { Portiere:'POR', Difensore:'DIF', Regista:'CEN', Ala:'ALA', Attaccante:'ATT' };
+const STATO_RIVALITA_LABEL = { rispetto:'Rispetto', odio:'Odio', amicizia:'Amicizia', collaborazione:'Collaborazione' };
+function statoRivalita(p){
+  if(p.affinita>=70) return p.sottotipo==='avversario_esterno' ? 'collaborazione' : 'amicizia';
+  if(p.affinita>=45) return 'rispetto';
+  return 'odio';
+}
+function idRivaleInterno(nome, squadra){ return 'RIVALE_INT_' + squadra + '_' + nome; }
+function idRivaleEsterno(nome, squadra){ return 'RIVALE_EST_' + squadra + '_' + nome; }
+function trovaRivaleInterno(s){ return Object.values(s.persone).find(p=>p.sottotipo==='compagno_interno') || null; }
+function trovaRivaleEsterno(s, squadra){ return Object.values(s.persone).find(p=>p.sottotipo==='avversario_esterno' && p.squadraOrigine===squadra) || null; }
+function migliorGiocatoreRuolo(nomeSquadra, ruoloInterno){
+  const rosa = getRosaReale(nomeSquadra);
+  if(!rosa) return null;
+  const ruoloDB = RUOLO_INTERNO_TO_DB[ruoloInterno] || 'ALA';
+  return rosa.filter(g=>g.ruolo===ruoloDB).sort((a,b)=>b.ovr-a.ovr)[0] || null;
+}
+// Squadra affrontata nell'ultima giornata di CAMPIONATO (non Coppa: postCoppaMatch ha un flusso
+// separato che non passa da pickEvent, quindi le rivalità esterne restano legate solo al campionato).
+// s.giornata è già incrementato in closeResult() prima che questi eventi vengano valutati.
+function squadraAppenaAffrontata(s){
+  const idx = s.giornata-2;
+  return (idx>=0 && s.calendario[idx]) ? s.calendario[idx].nome : null;
+}
+
+/* ---------- TELEFONO DEL CALCIATORE (Fase B) ----------
+   Vista sopra state.persone (Fase A): nessuna nuova logica di gioco, solo presentazione. Lista
+   conversazioni (una per persona registrata, ordinata per evento più recente) + thread per
+   persona che riusa .commentary/.commentary-log già esistenti (stesso stile a opacità
+   decrescente della cronaca di partita, coerenza visiva gratis). Il filtro anti-spam è già nel
+   motore (NOTIFICA_SOGLIA_IMPATTO in registraEventoPersona): qui si legge solo p.nonLetti. */
+const PERSONA_RUOLO_LABEL = { mister:'Mister', procuratore:'Procuratore', compagno:'Compagno di squadra', mentore:'Mentore', famiglia:'Famiglia', rivale:'Rivale', dirigente:'Dirigenza' };
+let telefonoConversazioneSel = null;
+function selezionaConversazione(id){
+  telefonoConversazioneSel = id;
+  const p = state.persone[id];
+  if(p) p.nonLetti = 0;
+  save(); renderTelefono();
+}
+function telefonoTornaLista(){ telefonoConversazioneSel = null; renderTelefono(); }
+function totaleNonLettiTelefono(){
+  return Object.values(state.persone).reduce((tot,p)=>tot+(p.nonLetti||0), 0);
+}
+function renderTelefono(){
+  const box = document.getElementById('telefonoContent');
+  const backBtn = document.getElementById('telefonoBack');
+  const title = document.getElementById('telefonoTitle');
+  if(!telefonoConversazioneSel || !state.persone[telefonoConversazioneSel]){
+    telefonoConversazioneSel = null;
+    backBtn.style.display = 'none';
+    title.textContent = 'Telefono';
+    const persone = Object.values(state.persone).sort((a,b)=>{
+      const chiave = p => p.eventi[0] ? p.eventi[0].stagione*100+p.eventi[0].giornata : -1;
+      return chiave(b) - chiave(a);
+    });
+    box.innerHTML = persone.length ? persone.map(p=>{
+      const ultimo = p.eventi[0];
+      const preview = ultimo ? ultimo.testo : 'Nessun messaggio ancora.';
+      return `<div class="choice-card" onclick="selezionaConversazione('${p.id}')">
+        <div class="row"><div class="choice-title">${p.nome}</div>${p.nonLetti ? `<span class="badge gold">${p.nonLetti}</span>` : ''}</div>
+        <div class="choice-meta"><span>${preview}</span></div>
+      </div>`;
+    }).join('') : `<div class="subtle">Nessun contatto ancora: le persone che incontri in carriera appariranno qui.</div>`;
+  } else {
+    const p = state.persone[telefonoConversazioneSel];
+    backBtn.style.display = 'block';
+    title.textContent = p.nome;
+    const badgeRivalita = p.ruolo==='rivale' ? ` · <span style="color:var(--gold);">${STATO_RIVALITA_LABEL[statoRivalita(p)]}</span>` : '';
+    const intestazione = `<div class="card"><div class="label">${PERSONA_RUOLO_LABEL[p.ruolo]||p.ruolo}</div>
+      <div class="subtle">Affinità ${p.affinita}%${badgeRivalita}</div></div>`;
+    const thread = p.eventi.length
+      ? `<div class="commentary-log">${p.eventi.map(e=>`<div class="commentary"><div>${e.testo}</div><div class="subtle" style="margin-top:4px;">S${e.stagione} G${e.giornata}</div></div>`).join('')}</div>`
+      : `<div class="subtle">Ancora nessun messaggio in questa conversazione.</div>`;
+    box.innerHTML = intestazione + thread;
+  }
+}
+
 /* Registro statistiche: elenco strutturato di ogni partita giocata dalla squadra (giocata
    davvero o simulata), con risultato di squadra e apporto personale. Diverso dal diario
    testuale: qui i dati sono a colonne, per poterli scorrere come uno storico partite/gol/assist. */
@@ -1622,9 +1843,12 @@ function registraPartita({opp, mieiGol, oppGol, playerGol, playerAssist, voto, c
 
 /* ---------- HUB ---------- */
 const TRAININGS = [
-  {id:'tecnica', label:'Allenamento tecnico', desc:'+Tecnica, +Passaggio · -12 energia', apply:s=>{ s.attr.tecnica=clamp(s.attr.tecnica+1,0,99); s.attr.passaggio=clamp(s.attr.passaggio+1,0,99); s.energia=clamp(s.energia-12,0,100); s.forma=clamp(s.forma+4,0,100); }},
-  {id:'fisico', label:'Preparazione atletica', desc:'+Fisico, +Velocità · -18 energia', apply:s=>{ s.attr.fisico=clamp(s.attr.fisico+1,0,99); s.attr.velocita=clamp(s.attr.velocita+1,0,99); s.energia=clamp(s.energia-18,0,100); s.forma=clamp(s.forma+2,0,100); }},
-  {id:'tattico', label:'Lavoro tattico di squadra', desc:'+Difesa, +Tiro · -10 energia', apply:s=>{ s.attr.difesa=clamp(s.attr.difesa+1,0,99); s.attr.tiro=clamp(s.attr.tiro+1,0,99); s.energia=clamp(s.energia-10,0,100); s.forma=clamp(s.forma+3,0,100); }},
+  {id:'tecnica', label:'Allenamento tecnico', desc:'+Tecnica, +Passaggio · -12 energia', apply:s=>{ s.attr.tecnica=clamp(s.attr.tecnica+1,0,99); s.attr.passaggio=clamp(s.attr.passaggio+1,0,99); s.energia=clamp(s.energia-12,0,100); s.forma=clamp(s.forma+4,0,100); s.personalita.ragionatore++; }},
+  {id:'fisico', label:'Preparazione atletica', desc:'+Fisico, +Velocità · -18 energia', apply:s=>{ s.attr.fisico=clamp(s.attr.fisico+1,0,99); s.attr.velocita=clamp(s.attr.velocita+1,0,99); s.energia=clamp(s.energia-18,0,100); s.forma=clamp(s.forma+2,0,100); s.personalita.trascinatore++; }},
+  // "Lavoro tattico di squadra": nessuna delle 4 opzioni di allenamento corrisponde a una vera
+  // seduta di tiro/finalizzazione, quindi qui l'asse "allenamento" non alimenta l'individualista —
+  // resta comunque ben coperto da azioni in campo, shop ed eventi extra-campo.
+  {id:'tattico', label:'Lavoro tattico di squadra', desc:'+Difesa, +Tiro · -10 energia', apply:s=>{ s.attr.difesa=clamp(s.attr.difesa+1,0,99); s.attr.tiro=clamp(s.attr.tiro+1,0,99); s.energia=clamp(s.energia-10,0,100); s.forma=clamp(s.forma+3,0,100); s.personalita.ragionatore++; }},
   {id:'riposo', label:'Riposo e recupero', desc:'+Energia, +Morale', apply:s=>{ s.energia=clamp(s.energia+40,0,100); s.morale=clamp(s.morale+8,0,100); }},
 ];
 
@@ -1648,6 +1872,17 @@ function scegliAllenamento(id){
   save(); renderHub();
 }
 
+// Il badge sul bottone "Investimenti" (dentro Giocatore > Vita da calciatore) e quello sul
+// bottone "Giocatore" dell'hub condividono lo stesso conteggio: un solo punto di calcolo,
+// richiamato sia da renderHub sia da renderCarriera per restare aggiornati indipendentemente
+// da quale schermata si visita per prima.
+function aggiornaBadgeOpportunita(){
+  const n = state.opportunitaInvestimento.filter(o=>o.stato==='in_attesa').length;
+  const badgeOpp = document.getElementById('badgeOpportunita');
+  badgeOpp.style.display = n ? 'inline-block' : 'none';
+  badgeOpp.textContent = n;
+  return n;
+}
 function renderHub(){
   document.getElementById('tbTeam').innerHTML = LEAGUES[state.lega].label + '<b id="tbName">'+state.name+'</b>';
   document.getElementById('tbLega').textContent = 'Serie '+state.lega;
@@ -1689,6 +1924,10 @@ function renderHub(){
   }
 
   document.getElementById('coppaHubBtn').style.display = (state.coppa || state.coppaTorneo) ? 'flex' : 'none';
+
+  const nOpportunita = aggiornaBadgeOpportunita();
+  const nTelefono = totaleNonLettiTelefono();
+  const btnTelefono = `<button class="btn ghost" onclick="showScreen('telefono')">Telefono${nTelefono?` <span class="badge gold">${nTelefono}</span>`:''}</button>`;
 
   const coppaAttiva = !!(state.coppa && state.coppa.prossimi.length);
   if(coppaAttiva){
@@ -1733,29 +1972,23 @@ function renderHub(){
     banner.innerHTML = `<div class="card warn"><div class="badge red">Infortunio (${state.infortunio.tipo})</div>
       <div style="margin-top:8px; font-size:13px;">Sei fuori per ancora <b>${state.infortunio.giornateRestanti}</b> giornata/e.</div></div>`;
     actions.innerHTML = `<button class="btn danger" onclick="skipGiornata('infortunio')">Salta giornata (recupero)</button>
+      ${btnTelefono}
       <button class="btn ghost" onclick="showScreen('classifica')">Classifica</button>
-      <button class="btn ghost" onclick="showScreen('carriera')">Scheda giocatore</button>
-      <button class="btn ghost" onclick="showScreen('territorio')">Territorio</button>
-      <button class="btn ghost" onclick="showScreen('shop')">Shop</button>
-      <button class="btn ghost" onclick="showScreen('formazione')">Formazione</button>`;
+      <button class="btn ghost" onclick="showScreen('carriera')">Giocatore${nOpportunita?` <span class="badge gold">${nOpportunita}</span>`:''}</button>`;
   } else if(state.squalifica>0){
     banner.innerHTML = `<div class="card warn"><div class="badge red">Squalifica</div>
       <div style="margin-top:8px; font-size:13px;">Ancora <b>${state.squalifica}</b> giornata/e di stop.</div></div>`;
     actions.innerHTML = `<button class="btn danger" onclick="skipGiornata('squalifica')">Salta giornata</button>
+      ${btnTelefono}
       <button class="btn ghost" onclick="showScreen('classifica')">Classifica</button>
-      <button class="btn ghost" onclick="showScreen('carriera')">Scheda giocatore</button>
-      <button class="btn ghost" onclick="showScreen('territorio')">Territorio</button>
-      <button class="btn ghost" onclick="showScreen('shop')">Shop</button>
-      <button class="btn ghost" onclick="showScreen('formazione')">Formazione</button>`;
+      <button class="btn ghost" onclick="showScreen('carriera')">Giocatore${nOpportunita?` <span class="badge gold">${nOpportunita}</span>`:''}</button>`;
   } else {
     actions.innerHTML = `<button class="btn" id="btnPlayMatch" onclick="beginMatch()">${coppaAttiva?'Scendi in campo (Coppa)':'Scendi in campo'}</button>
       <button class="btn ghost" id="btnSimMatch" onclick="simulaPartita()">Simula partita</button>
       <button class="btn warning" onclick="saltaPartitaVolontariamente()" aria-label="Salta partita: penalità alle relazioni">Salta partita</button>
+      ${btnTelefono}
       <button class="btn ghost" onclick="showScreen('classifica')">Classifica</button>
-      <button class="btn ghost" onclick="showScreen('carriera')">Scheda giocatore</button>
-      <button class="btn ghost" onclick="showScreen('territorio')">Territorio</button>
-      <button class="btn ghost" onclick="showScreen('shop')">Shop</button>
-      <button class="btn ghost" onclick="showScreen('formazione')">Formazione</button>`;
+      <button class="btn ghost" onclick="showScreen('carriera')">Giocatore${nOpportunita?` <span class="badge gold">${nOpportunita}</span>`:''}</button>`;
     const nonConvocato = !coppaAttiva && contaValoriSottoSoglia(35)>=2;
     document.getElementById('btnPlayMatch').disabled = state.energia < 15 || nonConvocato;
     document.getElementById('btnSimMatch').disabled = state.energia < 15 || nonConvocato;
@@ -1923,7 +2156,7 @@ const TERRITORIO_EVENTI = [
     testo:(poi)=>`A forza di tornare a ${displayNamePoi(poi)}, chi lo gestisce ti conosce ormai bene: ha qualcosa da proporti.`,
     scelte:[
       {label:'Ascolta la proposta', applica:(s,poi)=>{
-          s.opportunitaInvestimento.push({ id:'OPP_'+poi.id+'_'+Date.now(), poi_id:poi.id, comune:poi.comune, category:poi.category, testo:`Proposta ricevuta a ${displayNamePoi(poi)}`, vista:false });
+          s.opportunitaInvestimento.push({ id:'OPP_'+poi.id+'_'+Date.now(), poi_id:poi.id, comune:poi.comune, category:poi.category, testo:`Proposta ricevuta a ${displayNamePoi(poi)}`, stato:'in_attesa' });
           s.reputazione=clamp(s.reputazione+1,0,100);
         }, esito:'Ascolti con interesse: potrebbe diventare un\'occasione da valutare più avanti.'},
       {label:'Non è il momento', applica:s=>{}, esito:'Rimandi la conversazione a un\'altra volta.'}
@@ -1954,6 +2187,133 @@ function showTerritorioEvento(te, poi){
     document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
     document.getElementById('screen-territorio').classList.add('active');
   });
+}
+
+/* ---------- INVESTIMENTI ----------
+   Non un simulatore finanziario: 5 tipi di investimento con capitale/rischio/rendimento/durata
+   crescenti, applicabili SOLO alle opportunità generate dagli eventi territoriali (Fase 7,
+   state.opportunitaInvestimento) — niente menu statico con investimenti sempre disponibili, come
+   richiesto. Il rischio non è una % piatta: parte da un livello base per tipo e si affina in base
+   a relazione col luogo (quante volte visitato), reputazione e stagionalità dell'area — pochi
+   fattori concreti, non un motore finanziario reale. Categorie esplicitamente escluse: nessuna
+   società calcistica/settore giovanile/club, coerente con "il calcio resta il cuore del gioco, non
+   una categoria di investimento territoriale". */
+const CATEGORIA_INVESTIMENTO_LABEL = { CULTURA:'un progetto culturale', NATURA:'un\'attività outdoor', TURISMO:'un\'attività turistica', RISTORAZIONE:'un locale', OSPITALITA:'una struttura ricettiva', BENESSERE:'un centro benessere', SPORT:'un\'attività sportiva', FORMAZIONE:'un\'iniziativa formativa', BUSINESS:'una piccola impresa' };
+const RISCHIO_LABEL = { molto_basso:'Molto basso', basso:'Basso', medio:'Medio', alto:'Alto', molto_alto:'Molto alto' };
+const PROB_SUCCESSO_RISCHIO = { molto_basso:0.85, basso:0.72, medio:0.55, alto:0.38, molto_alto:0.22 };
+const RECUPERO_FALLIMENTO_RISCHIO = { molto_basso:0.9, basso:0.7, medio:0.5, alto:0.25, molto_alto:0 };
+const TIPI_INVESTIMENTO = [
+  { id:'piccolo', label:'Piccolo investimento', mult:1, risk_base:'basso', expected_return:0.15, duration_weeks:6, liquidity:'alta' },
+  { id:'finanziamento', label:'Finanziamento progetto', mult:3, risk_base:'medio', expected_return:0.25, duration_weeks:14, liquidity:'media' },
+  { id:'quota', label:'Quota societaria', mult:6, risk_base:'alto', expected_return:0.40, duration_weeks:24, liquidity:'bassa' },
+  { id:'socio_minoranza', label:'Socio di minoranza', mult:12, risk_base:'alto', expected_return:0.60, duration_weeks:36, liquidity:'molto_bassa' },
+  { id:'speculativo', label:'Investimento speculativo', mult:2, risk_base:'molto_alto', expected_return:1.00, duration_weeks:5, liquidity:'alta' },
+];
+function capitaleBaseOpportunita(opp){
+  const poi = DB_POI.find(p=>p.id===opp.poi_id);
+  const area = poi && TERRITORIO_AREE.find(a=>a.id===poi.area_id);
+  const fascia = area ? area.fascia_economica : 'media';
+  return { bassa:250, media:500, medio_alta:800 }[fascia] || 500;
+}
+function calcolaRischioInvestimento(tipo, opp){
+  const livelli = ['molto_basso','basso','medio','alto','molto_alto'];
+  let idx = livelli.indexOf(tipo.risk_base);
+  const visite = state.territorio.visite[opp.poi_id]||0;
+  if(visite>=6) idx--;
+  if(state.reputazione>=70) idx--;
+  if(state.reputazione<30) idx++;
+  const poi = DB_POI.find(p=>p.id===opp.poi_id);
+  const area = poi && TERRITORIO_AREE.find(a=>a.id===poi.area_id);
+  if(area && area.stagionalita!=='tutto_anno') idx++;
+  return livelli[clamp(idx, 0, livelli.length-1)];
+}
+function avviaInvestimento(oppId, tipoId){
+  const opp = state.opportunitaInvestimento.find(o=>o.id===oppId);
+  const tipo = TIPI_INVESTIMENTO.find(t=>t.id===tipoId);
+  if(!opp || !tipo || opp.stato!=='in_attesa') return;
+  const capitale = Math.round(capitaleBaseOpportunita(opp) * tipo.mult);
+  const avviso = document.getElementById('investimentiAvviso');
+  if(state.finanze.saldo < capitale){ avviso.textContent = 'Capitale insufficiente per questo investimento.'; return; }
+  avviso.textContent = '';
+  state.finanze.saldo -= capitale;
+  const rischio = calcolaRischioInvestimento(tipo, opp);
+  state.investimenti.push({ id:'INV_'+Date.now(), opportunity_id:opp.id, tipo_id:tipo.id, tipo_label:tipo.label,
+    category:opp.category, comune:opp.comune, capitale, rischio, rendimento_atteso:tipo.expected_return,
+    liquidity:tipo.liquidity, settimane_rimanenti:tipo.duration_weeks, durata_totale:tipo.duration_weeks, esito:null });
+  opp.stato = 'investita';
+  // Asse "economia extra-campo": nessuna categoria di investimento esistente è "beneficenza" o
+  // "cena di squadra" (inventarla vorrebbe dire aggiungere dati fittizi, evitato in tutto questo
+  // sistema) — il tipo di investimento già esistente distingue però bene lo spirito della scelta:
+  // speculativo = rincorsa al guadagno personale veloce, socio di minoranza/quota = impegno lungo
+  // e illiquido su un'attività del territorio, piccolo/finanziamento = scelta prudente e calcolata.
+  const trattoInvest = tipo.id==='speculativo' ? 'individualista'
+    : (tipo.id==='socio_minoranza' || tipo.id==='quota') ? 'trascinatore' : 'ragionatore';
+  state.personalita[trattoInvest]++;
+  addDiario(`Investi €${capitale} (${tipo.label}) in ${CATEGORIA_INVESTIMENTO_LABEL[opp.category]||'un\'opportunità'} a ${opp.comune}.`);
+  save(); renderInvestimenti();
+}
+function rifiutaOpportunita(oppId){
+  const opp = state.opportunitaInvestimento.find(o=>o.id===oppId);
+  if(!opp || opp.stato!=='in_attesa') return;
+  opp.stato = 'rifiutata';
+  save(); renderInvestimenti();
+}
+function avanzaInvestimenti(){
+  state.investimenti.forEach(inv=>{
+    if(inv.esito) return;
+    inv.settimane_rimanenti--;
+    if(inv.settimane_rimanenti > 0) return;
+    const successo = Math.random() < PROB_SUCCESSO_RISCHIO[inv.rischio];
+    if(successo){
+      const rientro = Math.round(inv.capitale * (1+inv.rendimento_atteso));
+      state.finanze.saldo += rientro;
+      state.reputazione = clamp(state.reputazione+2, 0, 100);
+      inv.esito = 'successo'; inv.rientro = rientro;
+      addDiario(`Investimento a ${inv.comune} andato bene: rientrano €${rientro} (avevi investito €${inv.capitale}).`);
+    } else {
+      const rientro = Math.round(inv.capitale * RECUPERO_FALLIMENTO_RISCHIO[inv.rischio]);
+      state.finanze.saldo += rientro;
+      state.reputazione = clamp(state.reputazione - (inv.rischio==='molto_alto' ? 3 : 1), 0, 100);
+      inv.esito = 'fallimento'; inv.rientro = rientro;
+      addDiario(`Investimento a ${inv.comune} non è andato come sperato: recuperi solo €${rientro} su €${inv.capitale} investiti.`);
+    }
+  });
+}
+function renderInvestimenti(){
+  const box = document.getElementById('investimentiContent');
+  const attesa = state.opportunitaInvestimento.filter(o=>o.stato==='in_attesa');
+  const attivi = state.investimenti.filter(i=>!i.esito);
+  const conclusi = state.investimenti.filter(i=>i.esito);
+  let html = `<div class="label">Opportunità in attesa</div>`;
+  html += attesa.length ? attesa.map(opp=>{
+    const label = CATEGORIA_INVESTIMENTO_LABEL[opp.category] || 'un\'opportunità';
+    const base = capitaleBaseOpportunita(opp);
+    const righeTipi = TIPI_INVESTIMENTO.map(t=>{
+      const capitale = Math.round(base*t.mult);
+      const rischio = calcolaRischioInvestimento(t, opp);
+      const disabled = state.finanze.saldo<capitale ? 'disabled' : '';
+      return `<div class="row" style="margin-bottom:6px; align-items:center;"><span class="subtle" style="font-size:12px;">${t.label} · €${capitale} · rischio ${RISCHIO_LABEL[rischio]} · rende ${Math.round(t.expected_return*100)}% in ${t.duration_weeks} sett.</span>
+        <button class="btn ghost" style="width:auto; padding:4px 10px;" onclick="avviaInvestimento('${opp.id}','${t.id}')" ${disabled}>Investi</button></div>`;
+    }).join('');
+    return `<div class="card"><div class="choice-title">Ti propongono ${label} a ${opp.comune}</div>
+      <div class="subtle" style="margin-bottom:8px;">${opp.testo}</div>${righeTipi}
+      <button class="btn warning" style="margin-top:6px;" onclick="rifiutaOpportunita('${opp.id}')">Rifiuta</button></div>`;
+  }).join('') : `<div class="subtle">Nessuna opportunità al momento: torna spesso nei luoghi del territorio che ti interessano.</div>`;
+
+  html += `<div class="label" style="margin-top:14px;">Investimenti in corso</div>`;
+  html += attivi.length ? attivi.map(inv=>`<div class="choice-card" style="cursor:default;">
+      <div class="choice-title">${inv.tipo_label} — ${inv.comune}</div>
+      <div class="subtle">€${inv.capitale} · rischio ${RISCHIO_LABEL[inv.rischio]} · matura tra ${inv.settimane_rimanenti} settiman${inv.settimane_rimanenti===1?'a':'e'}</div>
+    </div>`).join('') : `<div class="subtle">Nessun investimento attivo.</div>`;
+
+  if(conclusi.length){
+    html += `<div class="label" style="margin-top:14px;">Storico</div>`;
+    html += conclusi.slice(-10).reverse().map(inv=>`<div class="choice-card" style="cursor:default;">
+        <div class="choice-title">${inv.tipo_label} — ${inv.comune} <span class="badge ${inv.esito==='successo'?'green':'red'}">${inv.esito}</span></div>
+        <div class="subtle">Capitale €${inv.capitale} → rientro €${inv.rientro}</div>
+      </div>`).join('');
+  }
+  box.innerHTML = html;
 }
 
 /* ---------- SHOP EQUIPAGGIAMENTO ----------
@@ -2018,9 +2378,15 @@ function bonusEquipaggiamento(attrKey){
 function acquistaEquip(itemId){
   const item = DB_EQUIPAGGIAMENTO.find(e=>e.id===itemId);
   if(!item) return;
-  if(state.finanze.saldo < item.price) return;
+  const avviso = document.getElementById('shopAvviso');
+  if(state.finanze.saldo < item.price){ avviso.textContent = 'Saldo insufficiente per questo acquisto.'; return; }
+  avviso.textContent = '';
   state.finanze.saldo -= item.price;
   state.inventarioEquip[itemId] = (state.inventarioEquip[itemId]||0) + 1;
+  // Asse "economia extra-campo": l'equipaggiamento è materiale sportivo (niente lusso/auto/moda
+  // inventati apposta), ma il campo rarity già esistente distingue i pezzi vistosi/costosi —
+  // riusarlo come proxy per l'acquisto "da individualista" invece di introdurre nuovi oggetti.
+  if(item.rarity==='rara') state.personalita.individualista++;
   addDiario(`Acquistato: ${item.name} (€${item.price}).`);
   save(); renderShop();
 }
@@ -2053,46 +2419,54 @@ function usaConsumabile(itemId){
   addDiario(`Usi: ${item.name}.`);
   save(); renderShop();
 }
+const SHOP_CATEGORIE = ['SCARPE','PARASTINCHI','GUANTI','ABBIGLIAMENTO_TECNICO','ACCESSORI','BORSONI','RECUPERO'];
+const SHOP_LABEL_CATEGORIA = {SCARPE:'Scarpe', PARASTINCHI:'Parastinchi', GUANTI:'Guanti', ABBIGLIAMENTO_TECNICO:'Abbigliamento', ACCESSORI:'Accessori', BORSONI:'Borsoni', RECUPERO:'Recupero'};
+// Categoria attualmente in vista nello shop: 7 categorie/25 oggetti erano un'unica lista lunghissima
+// da scorrere su mobile, ora si vede una categoria alla volta (stesso pattern di territorioAreaSel:
+// variabile di selezione + re-render, niente nuovo stato salvato).
+let shopCategoriaSel = 'SCARPE';
+function selezionaCategoriaShop(cat){ shopCategoriaSel = cat; renderShop(); }
 function renderShop(){
-  const box = document.getElementById('shopContent');
-  const categorie = ['SCARPE','PARASTINCHI','GUANTI','ABBIGLIAMENTO_TECNICO','ACCESSORI','BORSONI','RECUPERO'];
-  const labelCategoria = {SCARPE:'Scarpe', PARASTINCHI:'Parastinchi', GUANTI:'Guanti', ABBIGLIAMENTO_TECNICO:'Abbigliamento tecnico', ACCESSORI:'Accessori', BORSONI:'Borsoni', RECUPERO:'Recupero (consumabili)'};
+  const equipBox = document.getElementById('shopEquipaggiato');
   const equipaggiatiHtml = Object.entries(SLOT_LABELS).map(([slot,label])=>{
     const itemId = state.equipaggiamento[slot];
     const item = itemId && DB_EQUIPAGGIAMENTO.find(e=>e.id===itemId);
     return `<div class="row" style="margin-bottom:4px;"><span class="subtle">${label}</span><span>${item ? item.name : '—'}</span></div>`;
   }).join('');
-  let html = `<div class="card"><div class="label">Equipaggiato</div>${equipaggiatiHtml}</div>`;
-  categorie.forEach(cat=>{
-    const items = DB_EQUIPAGGIAMENTO.filter(e=>e.category===cat);
-    if(!items.length) return;
-    html += `<div class="label" style="margin-top:14px;">${labelCategoria[cat]}</div>`;
-    items.forEach(item=>{
-      const qty = state.inventarioEquip[item.id]||0;
-      const bonusTxt = item.bonuses ? Object.entries(item.bonuses).map(([k,v])=>`+${v} ${k}`).join(', ') : '';
-      const malusTxt = item.maluses ? Object.entries(item.maluses).map(([k,v])=>`-${v} ${k}`).join(', ') : '';
-      const effettoTxt = [bonusTxt, malusTxt].filter(Boolean).join(' · ') || (item.consumabile ? 'effetto immediato' : 'effetto narrativo');
-      let azioni;
-      if(item.consumabile){
-        azioni = qty>0
-          ? `<button class="btn ghost" style="width:auto; padding:6px 12px;" onclick="usaConsumabile('${item.id}')">Usa (${qty})</button>`
-          : `<button class="btn" style="width:auto; padding:6px 12px;" onclick="acquistaEquip('${item.id}')" ${state.finanze.saldo<item.price?'disabled':''}>Compra €${item.price}</button>`;
-      } else if(qty>0){
-        const indossato = state.equipaggiamento[item.slot]===item.id;
-        azioni = (indossato ? `<span class="badge gold">Indossato</span>` : `<button class="btn ghost" style="width:auto; padding:6px 12px;" onclick="equipaggiaItem('${item.id}')">Indossa</button>`)
-          + ` <button class="btn ghost" style="width:auto; padding:6px 12px;" onclick="vendiEquip('${item.id}')">Vendi €${item.sell_value}</button>`;
-      } else {
-        azioni = `<button class="btn" style="width:auto; padding:6px 12px;" onclick="acquistaEquip('${item.id}')" ${state.finanze.saldo<item.price?'disabled':''}>Compra €${item.price}</button>`;
-      }
-      html += `<div class="choice-card" style="cursor:default;">
-        <div class="choice-title">${item.name}${qty>0?` <span class="subtle">×${qty}</span>`:''}</div>
-        <div class="choice-meta"><span>${item.description}</span></div>
-        <div class="subtle" style="margin-top:4px;">${effettoTxt}</div>
-        <div style="margin-top:8px;">${azioni}</div>
-      </div>`;
-    });
-  });
-  box.innerHTML = html;
+  equipBox.innerHTML = `<div class="label">Equipaggiato</div>${equipaggiatiHtml}`;
+
+  if(!SHOP_CATEGORIE.includes(shopCategoriaSel)) shopCategoriaSel = SHOP_CATEGORIE[0];
+  const tabBar = document.getElementById('shopTabBar');
+  tabBar.innerHTML = SHOP_CATEGORIE.filter(cat=>DB_EQUIPAGGIAMENTO.some(e=>e.category===cat)).map(cat=>
+    `<button class="tab-btn${cat===shopCategoriaSel?' active':''}" onclick="selezionaCategoriaShop('${cat}')">${SHOP_LABEL_CATEGORIA[cat]}</button>`
+  ).join('');
+
+  const box = document.getElementById('shopTabContent');
+  const items = DB_EQUIPAGGIAMENTO.filter(e=>e.category===shopCategoriaSel);
+  box.innerHTML = items.map(item=>{
+    const qty = state.inventarioEquip[item.id]||0;
+    const bonusTxt = item.bonuses ? Object.entries(item.bonuses).map(([k,v])=>`+${v} ${k}`).join(', ') : '';
+    const malusTxt = item.maluses ? Object.entries(item.maluses).map(([k,v])=>`-${v} ${k}`).join(', ') : '';
+    const effettoTxt = [bonusTxt, malusTxt].filter(Boolean).join(' · ') || (item.consumabile ? 'effetto immediato' : 'effetto narrativo');
+    let azioni;
+    if(item.consumabile){
+      azioni = qty>0
+        ? `<button class="btn ghost" style="width:auto; padding:6px 12px;" onclick="usaConsumabile('${item.id}')">Usa (${qty})</button>`
+        : `<button class="btn" style="width:auto; padding:6px 12px;" onclick="acquistaEquip('${item.id}')" ${state.finanze.saldo<item.price?'disabled':''}>Compra €${item.price}</button>`;
+    } else if(qty>0){
+      const indossato = state.equipaggiamento[item.slot]===item.id;
+      azioni = (indossato ? `<span class="badge gold">Indossato</span>` : `<button class="btn ghost" style="width:auto; padding:6px 12px;" onclick="equipaggiaItem('${item.id}')">Indossa</button>`)
+        + ` <button class="btn ghost" style="width:auto; padding:6px 12px;" onclick="vendiEquip('${item.id}')">Vendi €${item.sell_value}</button>`;
+    } else {
+      azioni = `<button class="btn" style="width:auto; padding:6px 12px;" onclick="acquistaEquip('${item.id}')" ${state.finanze.saldo<item.price?'disabled':''}>Compra €${item.price}</button>`;
+    }
+    return `<div class="choice-card" style="cursor:default;">
+      <div class="choice-title">${item.name}${qty>0?` <span class="subtle">×${qty}</span>`:''}</div>
+      <div class="choice-meta"><span>${item.description}</span></div>
+      <div class="subtle" style="margin-top:4px;">${effettoTxt}</div>
+      <div style="margin-top:8px;">${azioni}</div>
+    </div>`;
+  }).join('');
 }
 
 /* ---------- FORMAZIONE ----------
@@ -2118,18 +2492,25 @@ const DB_FORMAZIONE = [
   { id:'COR_003', type:'CORSO', name:'Corso di leadership e comunicazione', description:'Come farsi ascoltare in campo e fuori.', cost:70, time_cost:5, energy_cost:12, experience_reward:8, effetti:{personalita:{trascinatore:2}, relazioni:{mister:3}} },
   { id:'MEN_001', type:'MENTOR', name:'Una birra con il tuo ex allenatore', description:'Due chiacchiere fuori dal campo con chi ti ha fatto crescere.', cost:15, time_cost:2, energy_cost:20,
     esito: s=>{
+      // L'ex allenatore è una persona distinta dal mister attuale (che cambia se si cambia squadra):
+      // primo esempio concreto di memoria relazionale che sopravvive al cambio di club — registrata
+      // qui al primo utilizzo (non a inizio carriera, perché non esiste finché non la si incontra).
+      registraPersona('EX_ALLENATORE', { nome:'Il tuo ex allenatore', ruolo:'mentore' });
       const chance = clamp(40 + (s.relazioni.mister-50)*0.6, 15, 85);
       const success = rand(1,100) <= chance;
       if(success){ s.relazioni.mister=clamp(s.relazioni.mister+6,0,100); s.personalita.ragionatore++; addXP(6);
+        registraEventoPersona('EX_ALLENATORE', {tipo:'consiglio', testo:'Un confronto prezioso fuori dal campo, il legame si rafforza.', impatto:5});
         return 'Un bel confronto: qualche consiglio prezioso e il rapporto si rafforza.'; }
       s.relazioni.mister=clamp(s.relazioni.mister+1,0,100); addXP(2);
+      registraEventoPersona('EX_ALLENATORE', {tipo:'incontro', testo:'Una birra insieme, chiacchiere senza grandi spunti.', impatto:1});
       return 'Chiacchierata piacevole ma senza grandi spunti, questa volta.';
     } },
   { id:'MEN_002', type:'MENTOR', name:'Consiglio del tuo procuratore', description:'Un caffè per fare il punto sulla carriera.', cost:0, time_cost:1, energy_cost:10,
     esito: s=>{
       const chance = clamp(35 + (s.relazioni.procuratore-50)*0.6, 15, 85);
       const success = rand(1,100) <= chance;
-      if(success){ s.relazioni.procuratore=clamp(s.relazioni.procuratore+5,0,100); addXP(4);
+      if(success){ s.relazioni.procuratore=clamp(s.relazioni.procuratore+5,0,100); s.personalita.ragionatore++; addXP(4);
+        registraEventoPersona('PROCURATORE', {tipo:'consiglio', testo:'Ti dà indicazioni utili sul prossimo passo di carriera.', impatto:3});
         return 'Il procuratore ti dà indicazioni utili sul prossimo passo della carriera.'; }
       s.relazioni.procuratore=clamp(s.relazioni.procuratore+1,0,100);
       return 'Un confronto di routine, niente di nuovo sul fronte carriera.';
@@ -2141,6 +2522,11 @@ function applicaEffettiFormazione(s, f){
   if(f.experience_reward) addXP(f.experience_reward);
   const eff = f.effetti || {};
   if(eff.personalita) Object.entries(eff.personalita).forEach(([k,v])=>{ s.personalita[k]=(s.personalita[k]||0)+v; });
+  // Asse "economia extra-campo" del sistema personalità: i CORSI senza un effetto personalita
+  // esplicito (COR_001/COR_002, solo bonus attributi) sono comunque "formazione professionale
+  // pagata di tasca propria" nello spirito della richiesta — un punto ragionatore di base, invece
+  // di editare ogni singola voce del DB.
+  else if(f.type==='CORSO') s.personalita.ragionatore++;
   if(eff.relazioni) Object.entries(eff.relazioni).forEach(([k,v])=>{ s.relazioni[k]=clamp(s.relazioni[k]+v,0,100); });
   if(eff.attr) Object.entries(eff.attr).forEach(([k,v])=>{ if(s.attr[k]!==undefined) s.attr[k]=clamp(s.attr[k]+v,0,99); });
   if(eff.attrCasuale){
@@ -2167,75 +2553,136 @@ function seguiFormazione(id){
   addDiario(`${f.name}: ${esitoTesto}`);
   save(); renderFormazione();
 }
+const FORMAZIONE_TIPI = [['LIBRO','Libri'],['CORSO','Corsi'],['MENTOR','Mentor'],['ESPERIENZA','Esperienze']];
+let formazioneTipoSel = 'LIBRO';
+function selezionaTipoFormazione(type){ formazioneTipoSel = type; renderFormazione(); }
 function renderFormazione(){
-  const box = document.getElementById('formazioneContent');
-  const tipi = [['LIBRO','Libri'],['CORSO','Corsi'],['MENTOR','Mentor ed ex allenatori'],['ESPERIENZA','Esperienze formative']];
   const fatta = state.formazione.fattaSettimana;
-  let html = fatta ? `<div class="subtle" style="margin-bottom:8px;">Hai già seguito una formazione questa settimana: si sblocca di nuovo alla prossima.</div>` : '';
-  tipi.forEach(([type,label])=>{
-    const items = DB_FORMAZIONE.filter(f=>f.type===type);
-    if(!items.length) return;
-    html += `<div class="label" style="margin-top:14px;">${label}</div>`;
-    items.forEach(f=>{
-      const letto = f.type==='LIBRO' && state.formazione.libriLetti.includes(f.id);
-      const disabilitato = fatta || letto;
-      const costoLabel = f.cost>0 ? `€${f.cost}` : 'Gratis';
-      const autoreLabel = f.autore ? ` <span class="subtle">— ${f.autore}</span>` : '';
-      html += `<div class="choice-card"${disabilitato?' style="opacity:0.4; pointer-events:none;"':''} onclick="seguiFormazione('${f.id}')">
-        <div class="choice-title">${f.name}${autoreLabel}${letto?' <span class="subtle">(già letto)</span>':''}</div>
-        <div class="choice-meta"><span>${f.description}</span></div>
-        <div class="subtle" style="margin-top:4px;">${costoLabel} · -${f.energy_cost} energia · ${f.time_cost}h</div>
-      </div>`;
-    });
-  });
-  box.innerHTML = html;
+  document.getElementById('formazioneStato').innerHTML = fatta
+    ? `<div class="subtle" style="margin-bottom:8px;">Hai già seguito una formazione questa settimana: si sblocca di nuovo alla prossima.</div>` : '';
+
+  if(!FORMAZIONE_TIPI.some(([type])=>type===formazioneTipoSel)) formazioneTipoSel = FORMAZIONE_TIPI[0][0];
+  const tabBar = document.getElementById('formazioneTabBar');
+  tabBar.innerHTML = FORMAZIONE_TIPI.filter(([type])=>DB_FORMAZIONE.some(f=>f.type===type)).map(([type,label])=>
+    `<button class="tab-btn${type===formazioneTipoSel?' active':''}" onclick="selezionaTipoFormazione('${type}')">${label}</button>`
+  ).join('');
+
+  const box = document.getElementById('formazioneTabContent');
+  const items = DB_FORMAZIONE.filter(f=>f.type===formazioneTipoSel);
+  box.innerHTML = items.map(f=>{
+    const letto = f.type==='LIBRO' && state.formazione.libriLetti.includes(f.id);
+    const disabilitato = fatta || letto;
+    const costoLabel = f.cost>0 ? `€${f.cost}` : 'Gratis';
+    const autoreLabel = f.autore ? ` <span class="subtle">— ${f.autore}</span>` : '';
+    return `<div class="choice-card"${disabilitato?' style="opacity:0.4; pointer-events:none;"':''} onclick="seguiFormazione('${f.id}')">
+      <div class="choice-title">${f.name}${autoreLabel}${letto?' <span class="subtle">(già letto)</span>':''}</div>
+      <div class="choice-meta"><span>${f.description}</span></div>
+      <div class="subtle" style="margin-top:4px;">${costoLabel} · -${f.energy_cost} energia · ${f.time_cost}h</div>
+    </div>`;
+  }).join('');
 }
 
 /* ---------- EVENTI A BIVIO ---------- */
+// Asse "media/dialoghi" del sistema personalità: sono le uniche scelte del gioco che sono
+// puro dialogo/narrativa fuori dal campo (non azioni di gioco, non acquisti), quindi il fit più
+// diretto con quanto richiesto. Non tutte le opzioni sono taggate: dove nessuno dei 3 archetipi
+// calza onestamente (es. "vai in famiglia" o "resti in silenzio") si lascia senza punto invece
+// di forzare un'etichetta.
 const EVENTS = [
   { id:'serata_amici', testo:"I tuoi amici ti invitano fuori la sera prima di allenarti forte. Che fai?", scelte:[
-      {label:"Esci, ti serve staccare", applica:s=>{ s.morale=clamp(s.morale+8,0,100); s.forma=clamp(s.forma-4,0,100); s.relazioni.compagni=clamp(s.relazioni.compagni+2,0,100); }, esito:"Serata perfetta, torni a casa rilassato ma un po' stanco."},
-      {label:"Rimani a casa, testa al campo", applica:s=>{ s.forma=clamp(s.forma+3,0,100); s.morale=clamp(s.morale-2,0,100); }, esito:"Rinunci al divertimento per concentrarti sulla prossima gara."}]},
+      {label:"Esci, ti serve staccare", applica:s=>{ s.morale=clamp(s.morale+8,0,100); s.forma=clamp(s.forma-4,0,100); s.relazioni.compagni=clamp(s.relazioni.compagni+2,0,100); s.personalita.individualista++; }, esito:"Serata perfetta, torni a casa rilassato ma un po' stanco."},
+      {label:"Rimani a casa, testa al campo", applica:s=>{ s.forma=clamp(s.forma+3,0,100); s.morale=clamp(s.morale-2,0,100); s.personalita.ragionatore++; }, esito:"Rinunci al divertimento per concentrarti sulla prossima gara."}]},
   { id:'sponsor_call', condizione:s=>s.relazioni.procuratore>=20, testo:"Il tuo procuratore ti chiama: c'è una proposta di sponsor personale sul tavolo.", scelte:[
-      {label:"Accetta l'accordo", applica:s=>{ s.finanze.saldo+=140; s.reputazione=clamp(s.reputazione+3,0,100); s.relazioni.procuratore=clamp(s.relazioni.procuratore+5,0,100); }, esito:"Firmi l'accordo, il procuratore incassa la sua percentuale soddisfatto."},
-      {label:"Rifiuta, vuoi pensare solo al campo", applica:s=>{ s.relazioni.procuratore=clamp(s.relazioni.procuratore-5,0,100); s.morale=clamp(s.morale+2,0,100); }, esito:"Il procuratore resta perplesso, ma rispetti i tuoi principi."}]},
+      {label:"Accetta l'accordo", applica:s=>{ s.finanze.saldo+=140; s.reputazione=clamp(s.reputazione+3,0,100); s.relazioni.procuratore=clamp(s.relazioni.procuratore+5,0,100); s.personalita.individualista++; registraEventoPersona('PROCURATORE',{tipo:'affare', testo:'Chiudete insieme un accordo di sponsorizzazione personale.', impatto:4}); }, esito:"Firmi l'accordo, il procuratore incassa la sua percentuale soddisfatto."},
+      {label:"Rifiuta, vuoi pensare solo al campo", applica:s=>{ s.relazioni.procuratore=clamp(s.relazioni.procuratore-5,0,100); s.morale=clamp(s.morale+2,0,100); s.personalita.ragionatore++; registraEventoPersona('PROCURATORE',{tipo:'rifiuto', testo:'Rifiuti una proposta di sponsor che ti aveva portato.', impatto:-3}); }, esito:"Il procuratore resta perplesso, ma rispetti i tuoi principi."}]},
   { id:'spogliatoio_teso', condizione:(s,ctx)=>ctx && ctx.risultato==='L', testo:"Dopo la sconfitta il clima nello spogliatoio è teso. Un compagno alza la voce.", scelte:[
-      {label:"Parli con calma, ricompatti il gruppo", applica:s=>{ s.relazioni.compagni=clamp(s.relazioni.compagni+6,0,100); s.morale=clamp(s.morale+3,0,100); }, esito:"Le tue parole riportano equilibrio nel gruppo."},
-      {label:"Rispondi a tono", applica:s=>{ s.relazioni.compagni=clamp(s.relazioni.compagni-8,0,100); s.reputazione=clamp(s.reputazione-3,0,100); }, esito:"La discussione degenera, il mister nota la tensione."},
+      {label:"Parli con calma, ricompatti il gruppo", applica:s=>{ s.relazioni.compagni=clamp(s.relazioni.compagni+6,0,100); s.morale=clamp(s.morale+3,0,100); s.personalita.trascinatore++; }, esito:"Le tue parole riportano equilibrio nel gruppo."},
+      {label:"Rispondi a tono", applica:s=>{ s.relazioni.compagni=clamp(s.relazioni.compagni-8,0,100); s.reputazione=clamp(s.reputazione-3,0,100); s.personalita.individualista++; }, esito:"La discussione degenera, il mister nota la tensione."},
       {label:"Resti in silenzio", applica:s=>{ s.morale=clamp(s.morale-3,0,100); }, esito:"Non intervieni: la tensione resta ma passa inosservata."}]},
   { id:'complimenti_mister', condizione:(s,ctx)=>ctx && ctx.risultato==='W', testo:"Il mister ti ferma dopo l'allenamento per farti i complimenti.", scelte:[
-      {label:"Ringrazi e chiedi consigli", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister+8,0,100); }, esito:"Il mister apprezza la tua umiltà."},
-      {label:"Accetti senza troppi giri di parole", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister+3,0,100); s.reputazione=clamp(s.reputazione+1,0,100); }, esito:"Resti concentrato, il mister annuisce compiaciuto."}]},
+      {label:"Ringrazi e chiedi consigli", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister+8,0,100); s.personalita.ragionatore++; registraEventoPersona('MISTER',{tipo:'complimento', testo:'Ti fa i complimenti dopo una vittoria e apprezza la tua umiltà.', impatto:3}); }, esito:"Il mister apprezza la tua umiltà."},
+      {label:"Accetti senza troppi giri di parole", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister+3,0,100); s.reputazione=clamp(s.reputazione+1,0,100); s.personalita.individualista++; registraEventoPersona('MISTER',{tipo:'complimento', testo:'Ti fa i complimenti dopo una vittoria, resti sul pratico.', impatto:1}); }, esito:"Resti concentrato, il mister annuisce compiaciuto."}]},
   { id:'prestito_compagno', condizione:s=>s.finanze.saldo<200, testo:"Sei a corto di soldi questo mese. Un compagno di squadra ti offre un prestito.", scelte:[
-      {label:"Accetta il prestito", applica:s=>{ s.finanze.saldo+=200; s.relazioni.compagni=clamp(s.relazioni.compagni+3,0,100); }, esito:"Il gesto rafforza il legame nello spogliatoio, ma ora gli devi un favore."},
-      {label:"Rifiuta, te la cavi da solo", applica:s=>{ s.morale=clamp(s.morale-2,0,100); }, esito:"Preferisci non avere debiti con nessuno."}]},
+      {label:"Accetta il prestito", applica:s=>{ s.finanze.saldo+=200; s.relazioni.compagni=clamp(s.relazioni.compagni+3,0,100); s.personalita.trascinatore++; }, esito:"Il gesto rafforza il legame nello spogliatoio, ma ora gli devi un favore."},
+      {label:"Rifiuta, te la cavi da solo", applica:s=>{ s.morale=clamp(s.morale-2,0,100); s.personalita.individualista++; }, esito:"Preferisci non avere debiti con nessuno."}]},
   { id:'investimento', condizione:s=>s.finanze.saldo>=500, testo:"Un conoscente ti propone un investimento fuori dal calcio, promette guadagni rapidi.", scelte:[
-      {label:"Investi 300€", applica:s=>{ s.finanze.saldo-=300; if(Math.random()<0.5){ s.finanze.saldo+=600; } }, esito:"Il risultato dell'investimento è ormai noto: controlla il saldo."},
-      {label:"Non ti fidi, rifiuti", applica:s=>{ s.reputazione=clamp(s.reputazione+1,0,100); }, esito:"Meglio prudenti: i risparmi restano al sicuro."}]},
+      {label:"Investi 300€", applica:s=>{ s.finanze.saldo-=300; if(Math.random()<0.5){ s.finanze.saldo+=600; } s.personalita.individualista++; }, esito:"Il risultato dell'investimento è ormai noto: controlla il saldo."},
+      {label:"Non ti fidi, rifiuti", applica:s=>{ s.reputazione=clamp(s.reputazione+1,0,100); s.personalita.ragionatore++; }, esito:"Meglio prudenti: i risparmi restano al sicuro."}]},
   { id:'famiglia', testo:"Tua madre ti chiede di passare la domenica in famiglia, ma coincide con una seduta di recupero facoltativa.", scelte:[
       {label:"Vai in famiglia", applica:s=>{ s.morale=clamp(s.morale+6,0,100); s.forma=clamp(s.forma-1,0,100); }, esito:"Una giornata serena ti ricarica le pile."},
       {label:"Vai comunque ad allenarti", applica:s=>{ s.forma=clamp(s.forma+4,0,100); s.morale=clamp(s.morale-3,0,100); }, esito:"Ti alleni extra, ma la distanza da casa un po' si sente."}]},
   { id:'proc_preoccupato', condizione:s=>!!s.infortunio || s.squalifica>0, testo:"Il tuo procuratore è preoccupato per il tuo periodo lontano dal campo e insiste per parlare.", scelte:[
-      {label:"Lo rassicuri, resti professionale", applica:s=>{ s.relazioni.procuratore=clamp(s.relazioni.procuratore+4,0,100); s.morale=clamp(s.morale+2,0,100); }, esito:"Il procuratore apprezza il tuo atteggiamento."},
-      {label:"Sfoghi la frustrazione con lui", applica:s=>{ s.relazioni.procuratore=clamp(s.relazioni.procuratore-6,0,100); s.morale=clamp(s.morale-2,0,100); }, esito:"La telefonata si chiude su un tono acceso."}]},
+      {label:"Lo rassicuri, resti professionale", applica:s=>{ s.relazioni.procuratore=clamp(s.relazioni.procuratore+4,0,100); s.morale=clamp(s.morale+2,0,100); registraEventoPersona('PROCURATORE',{tipo:'supporto', testo:'Lo rassicuri durante un periodo difficile lontano dal campo.', impatto:2}); }, esito:"Il procuratore apprezza il tuo atteggiamento."},
+      {label:"Sfoghi la frustrazione con lui", applica:s=>{ s.relazioni.procuratore=clamp(s.relazioni.procuratore-6,0,100); s.morale=clamp(s.morale-2,0,100); registraEventoPersona('PROCURATORE',{tipo:'litigio', testo:'Sfoghi la frustrazione con lui per il periodo lontano dal campo.', impatto:-3}); }, esito:"La telefonata si chiude su un tono acceso."}]},
   { id:'ruolo_diverso', condizione:s=>s.relazioni.mister>=60, testo:"Il mister vuole provarti in una posizione diversa in allenamento, per aumentare la tua duttilità.", scelte:[
-      {label:"Accetti con entusiasmo", applica:s=>{ const keys=attrKeysFor(s.role); const k=keys[rand(0,keys.length-1)]; s.attr[k]=clamp(s.attr[k]+1,0,99); s.relazioni.mister=clamp(s.relazioni.mister+5,0,100); }, esito:"Il mister apprezza la tua disponibilità."},
+      {label:"Accetti con entusiasmo", applica:s=>{ const keys=attrKeysFor(s.role); const k=keys[rand(0,keys.length-1)]; s.attr[k]=clamp(s.attr[k]+1,0,99); s.relazioni.mister=clamp(s.relazioni.mister+5,0,100); s.personalita.trascinatore++; registraEventoPersona('MISTER',{tipo:'favore', testo:'Accetti di buon grado di provare un ruolo diverso per la squadra.', impatto:3, tratto:'ti_ha_chiesto_un_favore'}); }, esito:"Il mister apprezza la tua disponibilità."},
       {label:"Preferisci restare nel tuo ruolo", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister-2,0,100); s.forma=clamp(s.forma+2,0,100); }, esito:"Resti fedele al tuo ruolo naturale."}]},
   { id:'evento_sponsor', condizione:s=>s.reputazione>=60, testo:"Il club ti invita a un evento ufficiale con gli sponsor.", scelte:[
-      {label:"Partecipi con entusiasmo", applica:s=>{ s.finanze.saldo+=70; s.reputazione=clamp(s.reputazione+5,0,100); s.forma=clamp(s.forma-2,0,100); }, esito:"La serata rafforza la tua immagine, ma torni a casa tardi."},
-      {label:"Declini l'invito", applica:s=>{ s.reputazione=clamp(s.reputazione-3,0,100); s.morale=clamp(s.morale+2,0,100); }, esito:"Preferisci riposare, ma lo sponsor nota l'assenza."}]},
+      {label:"Partecipi con entusiasmo", applica:s=>{ s.finanze.saldo+=70; s.reputazione=clamp(s.reputazione+5,0,100); s.forma=clamp(s.forma-2,0,100); s.personalita.individualista++; }, esito:"La serata rafforza la tua immagine, ma torni a casa tardi."},
+      {label:"Declini l'invito", applica:s=>{ s.reputazione=clamp(s.reputazione-3,0,100); s.morale=clamp(s.morale+2,0,100); s.personalita.ragionatore++; }, esito:"Preferisci riposare, ma lo sponsor nota l'assenza."}]},
   { id:'testimone_imbroglio', condizione:s=>s.relazioni.compagni>=30, testo:"Vedi un compagno di squadra intascare di nascosto un extra in nero promesso dal presidente solo a lui per il derby. Che fai?", scelte:[
       {label:"Fai finta di niente", applica:s=>{ s.morale=clamp(s.morale-3,0,100); }, esito:"Non dici nulla, ma la cosa ti resta sullo stomaco per qualche giorno."},
-      {label:"Lo segnali al mister", applica:s=>{ s.relazioni.compagni=clamp(s.relazioni.compagni-10,0,100); s.relazioni.mister=clamp(s.relazioni.mister+6,0,100); s.reputazione=clamp(s.reputazione+2,0,100); }, esito:"Il mister apprezza la tua correttezza, ma la voce gira e nello spogliatoio qualcuno inizia a guardarti storto."},
-      {label:"Chiedi che ne dia una parte anche a te", applica:s=>{ if(Math.random()<0.5){ s.finanze.saldo+=180; s.relazioni.compagni=clamp(s.relazioni.compagni+2,0,100); } else { s.reputazione=clamp(s.reputazione-6,0,100); s.relazioni.mister=clamp(s.relazioni.mister-5,0,100); } }, esito:"È andata come è andata: controlla saldo e reputazione per capire come si è chiusa."}]},
+      {label:"Lo segnali al mister", applica:s=>{ s.relazioni.compagni=clamp(s.relazioni.compagni-10,0,100); s.relazioni.mister=clamp(s.relazioni.mister+6,0,100); s.reputazione=clamp(s.reputazione+2,0,100); s.personalita.trascinatore++; registraEventoPersona('MISTER',{tipo:'lealta', testo:'Gli segnali un imbroglio nello spogliatoio.', impatto:4, tratto:'ha_dimostrato_lealta'}); }, esito:"Il mister apprezza la tua correttezza, ma la voce gira e nello spogliatoio qualcuno inizia a guardarti storto."},
+      {label:"Chiedi che ne dia una parte anche a te", applica:s=>{ if(Math.random()<0.5){ s.finanze.saldo+=180; s.relazioni.compagni=clamp(s.relazioni.compagni+2,0,100); } else { s.reputazione=clamp(s.reputazione-6,0,100); s.relazioni.mister=clamp(s.relazioni.mister-5,0,100); } s.personalita.individualista++; }, esito:"È andata come è andata: controlla saldo e reputazione per capire come si è chiusa."}]},
   { id:'scandalo_media', condizione:s=>s.reputazione>=50, testo:"Un giornale locale pubblica un articolo che ti accusa di esserti presentato brillo a un evento di sponsor, sulla base di una foto ambigua.", scelte:[
-      {label:"Smentisci pubblicamente", applica:s=>{ if(Math.random()<0.55){ s.reputazione=clamp(s.reputazione+4,0,100); } else { s.reputazione=clamp(s.reputazione-5,0,100); s.morale=clamp(s.morale-3,0,100); } }, esito:"La tua versione dei fatti ha convinto (o no) l'opinione pubblica — guarda come si è mossa la reputazione."},
-      {label:"Lasci correre, non alimenti la polemica", applica:s=>{ s.reputazione=clamp(s.reputazione-2,0,100); s.morale=clamp(s.morale+1,0,100); }, esito:"La storia si sgonfia da sola in pochi giorni, con un piccolo strascico d'immagine."},
-      {label:"Ti scusi comunque per calmare le acque", applica:s=>{ s.reputazione=clamp(s.reputazione-1,0,100); s.relazioni.procuratore=clamp(s.relazioni.procuratore+4,0,100); }, esito:"Il procuratore approva la mossa prudente, anche se ammettere qualcosa che non hai fatto ti resta un po' storto."}]},
+      {label:"Smentisci pubblicamente", applica:s=>{ if(Math.random()<0.55){ s.reputazione=clamp(s.reputazione+4,0,100); } else { s.reputazione=clamp(s.reputazione-5,0,100); s.morale=clamp(s.morale-3,0,100); } s.personalita.individualista++; }, esito:"La tua versione dei fatti ha convinto (o no) l'opinione pubblica — guarda come si è mossa la reputazione."},
+      {label:"Lasci correre, non alimenti la polemica", applica:s=>{ s.reputazione=clamp(s.reputazione-2,0,100); s.morale=clamp(s.morale+1,0,100); s.personalita.ragionatore++; }, esito:"La storia si sgonfia da sola in pochi giorni, con un piccolo strascico d'immagine."},
+      {label:"Ti scusi comunque per calmare le acque", applica:s=>{ s.reputazione=clamp(s.reputazione-1,0,100); s.relazioni.procuratore=clamp(s.relazioni.procuratore+4,0,100); s.personalita.trascinatore++; registraEventoPersona('PROCURATORE',{tipo:'supporto', testo:'Ti sta vicino durante uno scandalo mediatico infondato.', impatto:3}); }, esito:"Il procuratore approva la mossa prudente, anche se ammettere qualcosa che non hai fatto ti resta un po' storto."}]},
   { id:'stipendio_in_ritardo', condizione:s=>s.finanze.saldo<400, testo:"La società tarda a pagarti lo stipendio di due mesi. Come la gestisci?", scelte:[
-      {label:"Aspetti con pazienza", applica:s=>{ s.morale=clamp(s.morale-4,0,100); }, esito:"Aspetti, ma la tensione con la dirigenza resta sullo sfondo."},
-      {label:"Minacci vie legali tramite il procuratore", applica:s=>{ if(Math.random()<0.6){ s.finanze.saldo+=state.contratto.stipendio*4; s.relazioni.procuratore=clamp(s.relazioni.procuratore+3,0,100); } else { s.relazioni.mister=clamp(s.relazioni.mister-6,0,100); s.reputazione=clamp(s.reputazione-2,0,100); } }, esito:"La vertenza si è chiusa in un modo o nell'altro — controlla saldo e rapporto col mister."},
-      {label:"Ne parli pubblicamente sui social", applica:s=>{ s.reputazione=clamp(s.reputazione+3,0,100); s.relazioni.mister=clamp(s.relazioni.mister-8,0,100); }, esito:"I tifosi ti danno ragione, ma in società non l'hanno presa bene."}]},
+      {label:"Aspetti con pazienza", applica:s=>{ s.morale=clamp(s.morale-4,0,100); s.personalita.ragionatore++; }, esito:"Aspetti, ma la tensione con la dirigenza resta sullo sfondo."},
+      {label:"Minacci vie legali tramite il procuratore", applica:s=>{ if(Math.random()<0.6){ s.finanze.saldo+=state.contratto.stipendio*4; s.relazioni.procuratore=clamp(s.relazioni.procuratore+3,0,100); registraEventoPersona('PROCURATORE',{tipo:'favore', testo:'Recupera per te due mensilità arretrate.', impatto:3, tratto:'ti_ha_fatto_un_favore'}); } else { s.relazioni.mister=clamp(s.relazioni.mister-6,0,100); s.reputazione=clamp(s.reputazione-2,0,100); registraEventoPersona('MISTER',{tipo:'tensione', testo:'La vertenza sullo stipendio arretrato incrina il rapporto.', impatto:-4}); } s.personalita.individualista++; }, esito:"La vertenza si è chiusa in un modo o nell'altro — controlla saldo e rapporto col mister."},
+      {label:"Ne parli pubblicamente sui social", applica:s=>{ s.reputazione=clamp(s.reputazione+3,0,100); s.relazioni.mister=clamp(s.relazioni.mister-8,0,100); s.personalita.trascinatore++; registraEventoPersona('MISTER',{tipo:'litigio', testo:'Ti sfoghi sui social per lo stipendio arretrato: il rapporto ne risente.', impatto:-6, tratto:'litigio_pubblico'}); }, esito:"I tifosi ti danno ragione, ma in società non l'hanno presa bene."}]},
+  // ---- Rivalità dinamiche (Fase C): 10 eventi, stesso motore EVENTS/pickEvent, nessun nuovo trigger ----
+  { id:'rivale_interno_emerge', condizione:s=> !trovaRivaleInterno(s) && s.giornata<=8 && !!migliorGiocatoreRuolo(teamName(), s.role),
+    testo:s=>`Noti che ${migliorGiocatoreRuolo(teamName(), s.role).nome}, nel tuo stesso ruolo in rosa, si allena con un'intensità sospetta: sembra puntare dritto al tuo posto da titolare.`,
+    scelte:[
+      {label:"Lo prendi come stimolo per migliorare", applica:s=>{ const c=migliorGiocatoreRuolo(teamName(), s.role); const id=idRivaleInterno(c.nome, teamName()); registraPersona(id,{nome:c.nome, ruolo:'rivale', sottotipo:'compagno_interno', squadraOrigine:teamName()}); registraEventoPersona(id,{tipo:'rivalita_nata', testo:'Inizia una sana competizione per il posto da titolare.', impatto:8}); s.personalita.ragionatore++; }, esito:"Trasformi la concorrenza interna in una spinta ad allenarti meglio."},
+      {label:"Lo vedi subito come una minaccia", applica:s=>{ const c=migliorGiocatoreRuolo(teamName(), s.role); const id=idRivaleInterno(c.nome, teamName()); registraPersona(id,{nome:c.nome, ruolo:'rivale', sottotipo:'compagno_interno', squadraOrigine:teamName()}); registraEventoPersona(id,{tipo:'rivalita_nata', testo:"Lo guardi con sospetto fin dal primo giorno.", impatto:-8, tratto:'ostilita_iniziale'}); s.personalita.individualista++; }, esito:"Il clima fra voi due parte subito teso."}]},
+  { id:'rivale_interno_ballottaggio', condizione:s=>{ const r=trovaRivaleInterno(s); return !!r && s.giornata%5===0; },
+    testo:s=>`Il mister deve decidere chi schierare fra te e ${trovaRivaleInterno(s).nome} per la prossima gara.`,
+    scelte:[
+      {label:"Ti alleni ancora più duro per superarlo", applica:s=>{ const r=trovaRivaleInterno(s); registraEventoPersona(r.id,{tipo:'competizione', testo:'Alzi il livello in allenamento per guadagnarti il posto.', impatto:4}); s.personalita.ragionatore++; s.forma=clamp(s.forma+2,0,100); }, esito:"La competizione resta leale, entrambi ne uscite più forti."},
+      {label:"Provi a metterlo in cattiva luce col mister", applica:s=>{ const r=trovaRivaleInterno(s); registraEventoPersona(r.id,{tipo:'sgambetto', testo:'Provi a screditarlo agli occhi del mister.', impatto:-10, tratto:'sgambetto'}); s.relazioni.mister=clamp(s.relazioni.mister-2,0,100); s.personalita.individualista++; }, esito:"Ottieni qualcosa, ma il mister nota anche il tuo atteggiamento."}]},
+  { id:'rivale_interno_infortunio', condizione:s=>{ const r=trovaRivaleInterno(s); return !!r && !!s.infortunio; },
+    testo:s=>`Sei fermo per infortunio: ${trovaRivaleInterno(s).nome} gioca al tuo posto.`,
+    scelte:[
+      {label:"Gli fai un in bocca al lupo sincero", applica:s=>{ const r=trovaRivaleInterno(s); registraEventoPersona(r.id,{tipo:'sportivita', testo:'Gli fai un in bocca al lupo sincero prima della gara.', impatto:10}); s.personalita.trascinatore++; s.morale=clamp(s.morale+3,0,100); }, esito:"Il gesto non passa inosservato nello spogliatoio."},
+      {label:"Speri segretamente che vada male", applica:s=>{ const r=trovaRivaleInterno(s); registraEventoPersona(r.id,{tipo:'rancore', testo:'Speri in segreto che vada male, senza dirlo a nessuno.', impatto:-6, tratto:'rancore'}); s.personalita.individualista++; }, esito:"Nessuno lo sa, ma tu sai cosa provi davvero."}]},
+  { id:'rivale_interno_capitano', condizione:s=>{ const r=trovaRivaleInterno(s); return !!r && s.relazioni.mister>=55 && r.affinita<60; },
+    testo:s=>`Il mister deve scegliere il prossimo capitano fra te e ${trovaRivaleInterno(s).nome}.`,
+    scelte:[
+      {label:"Fai un passo indietro, lo sostieni", applica:s=>{ const r=trovaRivaleInterno(s); registraEventoPersona(r.id,{tipo:'sostegno', testo:'Fai un passo indietro sulla fascia da capitano, a suo favore.', impatto:12}); s.relazioni.mister=clamp(s.relazioni.mister+3,0,100); s.personalita.trascinatore++; }, esito:"Un gesto che il gruppo, e lui per primo, non dimenticherà."},
+      {label:"Ti proponi con decisione", applica:s=>{ const r=trovaRivaleInterno(s); registraEventoPersona(r.id,{tipo:'competizione', testo:'Ti proponi apertamente per la fascia da capitano.', impatto:-8}); s.reputazione=clamp(s.reputazione+2,0,100); s.personalita.individualista++; }, esito:"Ti fai valere, ma il rapporto fra voi due si raffredda."}]},
+  { id:'rivale_esterno_emerge', condizione:s=>{ const sq=squadraAppenaAffrontata(s); return !!sq && !trovaRivaleEsterno(s,sq) && !!migliorGiocatoreRuolo(sq, s.role); },
+    testo:s=>{ const sq=squadraAppenaAffrontata(s); return `Nell'ultima gara contro ${sq} hai duellato spesso con ${migliorGiocatoreRuolo(sq, s.role).nome}, nel tuo stesso ruolo: qualcosa fra voi due si è acceso.`; },
+    scelte:[
+      {label:"Ti fai rispettare in un contrasto diretto", applica:s=>{ const sq=squadraAppenaAffrontata(s); const c=migliorGiocatoreRuolo(sq, s.role); const id=idRivaleEsterno(c.nome, sq); registraPersona(id,{nome:c.nome, ruolo:'rivale', sottotipo:'avversario_esterno', squadraOrigine:sq}); registraEventoPersona(id,{tipo:'rivalita_nata', testo:'Un contrasto diretto e leale, senza rancore.', impatto:5}); }, esito:"Nasce una rivalità sportiva, la prossima sfida sarà da seguire."},
+      {label:"Lo provochi a fine partita", applica:s=>{ const sq=squadraAppenaAffrontata(s); const c=migliorGiocatoreRuolo(sq, s.role); const id=idRivaleEsterno(c.nome, sq); registraPersona(id,{nome:c.nome, ruolo:'rivale', sottotipo:'avversario_esterno', squadraOrigine:sq}); registraEventoPersona(id,{tipo:'provocazione', testo:'Lo provochi a fine gara davanti a tutti.', impatto:-8, tratto:'provocazione'}); s.reputazione=clamp(s.reputazione-2,0,100); }, esito:"Nasce una rivalità più accesa, e qualcuno se lo ricorda."}]},
+  { id:'rivale_esterno_rivincita', condizione:s=>{ const sq=squadraAppenaAffrontata(s); return !!sq && !!trovaRivaleEsterno(s,sq); },
+    testo:s=>{ const sq=squadraAppenaAffrontata(s); return `Ritrovi ${trovaRivaleEsterno(s,sq).nome} in campo, come sempre quando affronti ${sq}.`; },
+    scelte:[
+      {label:"Scambio di maglia a fine gara", applica:s=>{ const sq=squadraAppenaAffrontata(s); const r=trovaRivaleEsterno(s,sq); registraEventoPersona(r.id,{tipo:'rispetto_reciproco', testo:'Vi scambiate la maglia a fine partita.', impatto:10}); s.personalita.trascinatore++; }, esito:"Un gesto di rispetto reciproco che va oltre la partita."},
+      {label:"Battibecco nel tunnel", applica:s=>{ const sq=squadraAppenaAffrontata(s); const r=trovaRivaleEsterno(s,sq); registraEventoPersona(r.id,{tipo:'litigio', testo:'Battibecco acceso nel tunnel spogliatoi.', impatto:-10, tratto:'litigio_pubblico'}); s.reputazione=clamp(s.reputazione-1,0,100); s.personalita.individualista++; }, esito:"La tensione fra voi due sale ulteriormente."}]},
+  { id:'rivale_esterno_umiliazione', condizione:(s,ctx)=>{ const sq=squadraAppenaAffrontata(s); return !!sq && !!trovaRivaleEsterno(s,sq) && ctx && ctx.risultato==='L'; },
+    testo:s=>{ const sq=squadraAppenaAffrontata(s); return `${trovaRivaleEsterno(s,sq).nome} ha avuto la meglio su di te nella sconfitta di oggi.`; },
+    scelte:[
+      {label:"Prendi la sconfitta con sportività", applica:s=>{ const sq=squadraAppenaAffrontata(s); const r=trovaRivaleEsterno(s,sq); registraEventoPersona(r.id,{tipo:'sportivita', testo:'Accetti la sconfitta e ti congratuli con lui.', impatto:4}); }, esito:"La sportività paga anche nella sconfitta."},
+      {label:"Non gli parli nemmeno a fine partita", applica:s=>{ const sq=squadraAppenaAffrontata(s); const r=trovaRivaleEsterno(s,sq); registraEventoPersona(r.id,{tipo:'freddezza', testo:'Non gli rivolgi la parola a fine partita.', impatto:-6}); }, esito:"Il gelo fra voi due si fa sentire anche fuori dal campo."}]},
+  { id:'rivale_esterno_derby_sociale', condizione:s=>{ const sq=squadraAppenaAffrontata(s); const r=sq && trovaRivaleEsterno(s,sq); return !!r && r.affinita>=65; },
+    testo:s=>{ const sq=squadraAppenaAffrontata(s); return `${trovaRivaleEsterno(s,sq).nome} ti scrive: propone di allenarvi insieme in un centro comune, fuori dagli impegni di squadra.`; },
+    scelte:[
+      {label:"Accetti, vi allenate insieme", applica:s=>{ const sq=squadraAppenaAffrontata(s); const r=trovaRivaleEsterno(s,sq); registraEventoPersona(r.id,{tipo:'collaborazione', testo:'Vi allenate insieme fuori dagli impegni di squadra.', impatto:8, tratto:'allenamento_condiviso'}); s.personalita.trascinatore++; s.forma=clamp(s.forma+2,0,100); }, esito:"Da rivali a compagni di allenamento: la sfida in campo resta, ma cambia segno."},
+      {label:"Mantieni le distanze da professionista", applica:s=>{ const sq=squadraAppenaAffrontata(s); const r=trovaRivaleEsterno(s,sq); registraEventoPersona(r.id,{tipo:'distacco', testo:'Declini con cortesia, preferisci restare concentrato per conto tuo.', impatto:2}); s.personalita.ragionatore++; }, esito:"Restate su un piano di stima reciproca, ma senza avvicinarvi troppo."}]},
+  { id:'rivale_esterno_mercato', condizione:s=>{ const sq=squadraAppenaAffrontata(s); const r=sq && trovaRivaleEsterno(s,sq); return !!r && r.affinita<35; },
+    testo:s=>`Ti arriva voce che il tuo club sta trattando il tuo rivale in campo per la prossima stagione.`,
+    scelte:[
+      {label:"Ti mostri professionale col mister", applica:s=>{ s.personalita.ragionatore++; s.relazioni.mister=clamp(s.relazioni.mister+2,0,100); }, esito:"Il mister apprezza la maturità con cui gestisci la voce di mercato."},
+      {label:"Fai pressioni perché l'affare salti", applica:s=>{ s.personalita.individualista++; s.reputazione=clamp(s.reputazione-3,0,100); }, esito:"Ottieni qualcosa, ma la mossa non passa inosservata."}]},
+  { id:'rivale_interno_mentore', condizione:s=>{ const r=trovaRivaleInterno(s); return !!r && r.affinita>=70; },
+    testo:s=>`Con ${trovaRivaleInterno(s).nome} il rapporto è ormai di stima reciproca: la concorrenza per il posto è diventata un'amicizia.`,
+    scelte:[
+      {label:"Vi allenate a vicenda dopo gli allenamenti ufficiali", applica:s=>{ const r=trovaRivaleInterno(s); registraEventoPersona(r.id,{tipo:'collaborazione', testo:'Vi fermate insieme dopo l\'allenamento per lavorare l\'uno con l\'altro.', impatto:5, tratto:'allenamento_condiviso'}); s.personalita.trascinatore++; }, esito:"La squadra beneficia di questa sana competizione diventata collaborazione."},
+      {label:"Restate colleghi cordiali ma distanti", applica:s=>{ s.personalita.ragionatore++; }, esito:"Un rapporto professionale, sereno, senza troppa confidenza."}]},
 ];
 const EVENTI_FINANZIARI = new Set(['sponsor_call','evento_sponsor','investimento','prestito_compagno']);
 const COOLDOWN_EVENTO_FINANZIARIO = 6; // giornate minime fra un evento economico e il successivo
@@ -2583,6 +3030,29 @@ const GK_MOMENTS_POOL = [
 ];
 const RISK_MOD = {safe:10, mid:0, high:-15};
 const RISK_LABEL = {safe:'Sicuro', mid:'Rischioso', high:'Estremo'};
+/* ---------- SISTEMA PERSONALITÀ (individualista/ragionatore/trascinatore) ----------
+   Non è un sistema nuovo: state.personalita esiste già (nato con Formazione, Fase 6) e i
+   MATCH_EVENTS lo alimentano già da tempo tramite il parametro "tratto" di skillScelta(). Qui
+   si chiudono i varchi rimasti scoperti nei 4 assi richiesti (azioni in campo nei momenti chiave,
+   allenamento settimanale, economia extra-campo, dialoghi fuori dal campo) riusando ovunque lo
+   stesso contatore, mai un secondo stato parallelo.
+   Per i momenti chiave (MOMENTS/GK_MOMENTS_POOL) non esiste un campo "tratto" per scelta come nei
+   MATCH_EVENTS: si userebbero 8+ tag manuali senza guadagnare granularità reale, quando il campo
+   "out" già esistente (goal/assist/recupero/possesso) è già la categorizzazione che il motore usa
+   per tutto il resto (calcChance, applyChoiceOutcome). Riusarlo per la personalità è una
+   semplificazione dichiarata: un dribbling che smista un assist finisce come "trascinatore" invece
+   che "individualista" — accettabile perché quello che conta è la tendenza aggregata su una
+   stagione, non il singolo episodio, e l'asse "azioni in campo" resta comunque ben coperto anche
+   dai MATCH_EVENTS (skillScelta) che invece taggano scelta per scelta. */
+const PERSONALITA_OUT_MAP = { goal:'individualista', assist:'trascinatore', recupero:'trascinatore', possesso:'ragionatore' };
+const PERSONALITA_LABELS = { individualista:'Individualista', ragionatore:'Ragionatore', trascinatore:'Trascinatore' };
+function personalitaDistribuzione(s){
+  const p = s.personalita;
+  const tot = p.individualista + p.ragionatore + p.trascinatore;
+  const pct = k => tot ? Math.round(p[k]/tot*100) : 0;
+  const dominante = tot ? Object.keys(p).reduce((a,b)=> p[b]>p[a] ? b : a) : null;
+  return { tot, pct, dominante };
+}
 
 /* ====== EVENTI DINAMICI DI PARTITA (data-driven, riusa il motore EVENTS/showEvent già esistente) ======
    Schema di ogni evento (stessi campi che showEvent() già si aspetta per testo/scelte, così non
@@ -2871,8 +3341,14 @@ function applyChoiceOutcome(choice, success){
   const m = state.matchTemp;
   if(success){
     if(choice.out==='goal'){ m.myGoals++; m.myPlayerGoals++; addLog(`GOL! ${state.name} la mette dentro!`, true); }
-    else if(choice.out==='assist'){ m.myGoals++; m.myPlayerAssists++; addLog(`Assist perfetto di ${state.name} per ${m.compagni.attacco.nome}, che non sbaglia: gol della squadra!`, true); }
-    else if(choice.out==='recupero'){ addLog(`Ottimo intervento difensivo di ${state.name}, chiudi lo spazio insieme a ${m.compagni.difesa.nome}.`, true); }
+    else if(choice.out==='assist'){ m.myGoals++; m.myPlayerAssists++; addLog(`Assist perfetto di ${state.name} per ${m.compagni.attacco.nome}, che non sbaglia: gol della squadra!`, true);
+      const idAtt = idPersonaCompagno(m.compagni.attacco.nome, teamName());
+      registraPersona(idAtt, { nome:m.compagni.attacco.nome, ruolo:'compagno' });
+      registraEventoPersona(idAtt, { tipo:'assist', testo:`Gli fai un assist decisivo contro ${m.opp.nome}.`, impatto:2 }); }
+    else if(choice.out==='recupero'){ addLog(`Ottimo intervento difensivo di ${state.name}, chiudi lo spazio insieme a ${m.compagni.difesa.nome}.`, true);
+      const idDif = idPersonaCompagno(m.compagni.difesa.nome, teamName());
+      registraPersona(idDif, { nome:m.compagni.difesa.nome, ruolo:'compagno' });
+      registraEventoPersona(idDif, { tipo:'recupero', testo:`Chiudete insieme un'azione pericolosa di ${m.opp.nome}.`, impatto:1 }); }
     else { addLog(`Giocata pulita di ${state.name}, l'azione continua con ordine.`, false); }
   } else {
     if(choice.risk==='high'){
@@ -2889,6 +3365,8 @@ function resolveChoice(choice, chance){
   const success = rand(1,100) <= chance;
   if(success) m.successes++;
   applyChoiceOutcome(choice, success);
+  const trattoMomento = PERSONALITA_OUT_MAP[choice.out];
+  if(trattoMomento) state.personalita[trattoMomento]++;
   if(success) m.consecutiveFails = 0; else m.consecutiveFails = (m.consecutiveFails||0)+1;
   m.momentumIdx++;
 
@@ -3029,6 +3507,7 @@ function postGiornataFlow(ctx){
   state.allenamentoFatto = false; state.ultimoAllenamento = null; state.allenamentoSnapshot = null;
   state.territorio.fattaSettimana = false; state.territorio.ultimaEsperienza = null;
   state.formazione.fattaSettimana = false; state.formazione.ultimaFormazione = null;
+  avanzaInvestimenti();
   payStipendio(ctx);
   applyLavoroSettimanale();
   applyRiflessoReputazioneSuRelazioni();
@@ -3135,6 +3614,7 @@ function renderClassifica(){
   });
 }
 function renderCarriera(){
+  aggiornaBadgeOpportunita();
   document.getElementById('carName').textContent = state.name;
   document.getElementById('carRole').textContent = state.role + ' · ' + teamName();
   document.getElementById('carLevel').textContent = 'Lv. '+state.livello;
@@ -3150,6 +3630,13 @@ function renderCarriera(){
     <div class="attr"><div class="attr-name">Partite</div><div class="attr-val">${state.carriera.partiteVoti.length}</div></div>
     <div class="attr"><div class="attr-name">Valore di mercato</div><div class="attr-val">€${valoreMercato(state).toLocaleString('it-IT')}</div></div>
     ${etaAttuale!=null ? `<div class="attr"><div class="attr-name">Età</div><div class="attr-val">${etaAttuale}</div></div>` : ''}`;
+  const distPers = personalitaDistribuzione(state);
+  const barColorPers = { individualista:'var(--red)', ragionatore:'var(--ice)', trascinatore:'var(--green)' };
+  document.getElementById('carPersonalita').innerHTML = distPers.tot ? `
+    ${Object.keys(PERSONALITA_LABELS).map(k=>`<div class="rel-row"><div class="rel-label"><span>${PERSONALITA_LABELS[k]}</span><span>${distPers.pct(k)}%</span></div>
+      <div class="mini-bar-wrap"><div class="mini-bar-fill" style="width:${distPers.pct(k)}%; background:${barColorPers[k]};"></div></div></div>`).join('')}
+    <div class="subtle" style="margin-top:8px;">Tratto dominante: <b style="color:var(--gold);">${PERSONALITA_LABELS[distPers.dominante]}</b></div>`
+    : `<div class="subtle">La tua personalità in campo e fuori si delineerà con le scelte che farai durante la carriera.</div>`;
   document.getElementById('carFinRel').innerHTML = `
     <div class="attr"><div class="attr-name">Saldo</div><div class="attr-val">€${state.finanze.saldo}</div></div>
     <div class="attr"><div class="attr-name">Compenso sportivo</div><div class="attr-val">€${state.finanze.compensoSportivo||0}/mese</div></div>
@@ -3610,6 +4097,9 @@ function avviaNuovaStagione(){
     }
     if(state.stagioneStats.cleanSheet===undefined) state.stagioneStats.cleanSheet=0;
     if(!state.personalita) state.personalita={individualista:0, trascinatore:0, ragionatore:0};
+    if(!state.persone) state.persone={};
+    registraPersona('MISTER', { nome:'Il mister', ruolo:'mister' });
+    registraPersona('PROCURATORE', { nome:'Il procuratore', ruolo:'procuratore' });
     if(!state.eventiMatchUltimaGiornata) state.eventiMatchUltimaGiornata={};
     if(!state.coppa || !state.coppa.altreSfide) { if(state.coppa) state.coppa.altreSfide = []; }
     riparaGironeCoppaAttivo();
@@ -3631,6 +4121,7 @@ function avviaNuovaStagione(){
     if(state.territorio.eventiUltimaVolta===undefined) state.territorio.eventiUltimaVolta = {};
     if(state.territorio.eventiUsati===undefined) state.territorio.eventiUsati = [];
     if(state.opportunitaInvestimento===undefined) state.opportunitaInvestimento = [];
+    if(state.investimenti===undefined) state.investimenti = [];
     if(state.inventarioEquip===undefined) state.inventarioEquip = {};
     if(state.equipaggiamento===undefined) state.equipaggiamento = { scarpe:null, parastinchi:null, guanti:null, abbigliamento:null, accessori:null, borsone:null };
     if(state.formazione===undefined) state.formazione = { fattaSettimana: false, ultimaFormazione: null, libriLetti: [] };
