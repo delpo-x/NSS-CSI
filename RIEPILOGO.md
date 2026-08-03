@@ -31,6 +31,19 @@
 > tutto riusando gli stessi motori già esistenti (EVENTS/pickEvent, diario, simSquadra/
 > buildTierSeason), mai un secondo sistema parallelo. Richiesto esplicitamente (vedi nota in fondo e
 > sezioni dedicate più sotto).
+>
+> **Aggiornamento 2026-08-03**: bug fix (giocatore esistente non più a rischio di ritrovarsi come
+> proprio compagno/rivale), logo del gioco (immagine reale al posto del segnaposto "C7"), **40 nuovi
+> MATCH_EVENTS in 5 pool per ruolo** (Attaccante/Att-Cen/Centrocampista/Cen-Dif/Difensore), sponsor
+> personale reso più raro, +5 energia extra su riposo/salta partita/infortunio, soglia panchina al
+> 50%, curva di livellaggio più ripida, relazioni coi compagni anche in "Simula partita", **sistema
+> procuratore/agente** (`state.agent` + 8 `AGENT_EVENTS` + `calcChance` esteso ad array di 2 skill),
+> **sistema famiglia** (`state.family` + 8 `FAMILY_EVENTS`), **rete sociale** (10 `SOCIAL_EVENTS`,
+> conoscenze in `state.persone` con `ruolo:'conoscenza'`), **gruppi sociali dello spogliatoio**
+> (`state.gruppoSociale` + 10 `GRUPPO_EVENTS`, appartenenza emergente da età/personalità/ruolo), e
+> un bug fix sulla durata delle partite (subentro dalla panchina corretto da 65' — dopo il fischio
+> finale a 50' — a 28', reso visivamente evidente con un badge, e ora anche legato alle skill del
+> giocatore rispetto al resto della rosa reale).
 
 ## Cos'è
 
@@ -249,15 +262,20 @@ bug, corretto: vedi cronologia). Le partite di tutte le altre squadre restano in
   14 peggiori penultime" su TUTTI i gironi B) è solo approssimata (`calcolaEsitoStagione`) perché il motore
   segue soltanto il girone del giocatore, non l'intera Serie B in parallelo. Servirebbe simulare tutti i
   gironi B (come si fa già per la Coppa Leonessa) per renderla esatta.
-- `MATCH_EVENTS`: implementati solo 8 eventi rappresentativi (5 normali + 3 GK) sui ~22 archetipi
-  originariamente proposti (primo contrasto, compagno che non passa, errore arbitrale, occasione sbagliata,
-  gol segnato, compagno in difficoltà, duello personale, richiamo allenatore, partita in equilibrio,
-  cartellino, crisi di fiducia, errore consecutivo, campo pesante, pioggia, freddo, pubblico avversario,
-  compagno in ritardo, pallone perso fuori, borracce dimenticate, presidente a bordo campo, ex compagno
-  sugli spalti, terzo tempo) — per ora coperte solo le prime 5-6 categorie (GAMEPLAY, RELATIONSHIP,
-  ENVIRONMENTAL, PSYCHOLOGICAL, TEAM, GOALKEEPER); mancano ancora TACTICAL, PHYSICAL, PROVINCIAL_LIFE.
-  L'architettura (schema dati + resolver + cooldown/pesi) è già pronta per aggiungerne altri senza toccare
-  il motore.
+- `MATCH_EVENTS`: oltre agli 8 eventi rappresentativi originali (5 normali + 3 GK) e ai 12 trade-off
+  generici, ora ci sono 40 eventi specifici per ruolo (5 pool da 8, vedi sezione dedicata) — restano
+  scoperte solo le categorie TACTICAL/PHYSICAL/PROVINCIAL_LIFE del brief narrativo originario
+  (campo pesante, pioggia, freddo, pubblico avversario, borracce dimenticate, presidente a bordo
+  campo, terzo tempo, ecc.). L'architettura (schema dati + resolver + cooldown/pesi) è già pronta
+  per aggiungerne altri senza toccare il motore.
+- "Più rapporti coi compagni di squadra" (richiesta dell'utente, risposta ricevuta: espandere il
+  numero di compagni nominati stabili, non solo i 2 attuali best-ATT/best-DIF, con possibilità di
+  affinità anche negativa) — **non ancora implementata**: la conversazione è passata ad altre
+  richieste (logo, poi il resto di questa sessione) prima di arrivare al codice.
+- Rischio panchina per skill (`rischioPanchinaPerSkill`) confronta solo l'overall pesato con gli
+  altri giocatori reali del proprio ruolo nella squadra attuale — non tiene conto di anzianità,
+  rapporto col mister o andamento recente, che potrebbero in futuro affinare ulteriormente la % di
+  rischio.
 - Sistema rigori: non esiste, nemmeno come struttura minima (scelta esplicita dell'utente, da fare solo
   quando si svilupperà davvero quel sistema).
 - Mercato invernale (pausa 21 dic-24 gen): niente trasferimenti, solo allenamento + rinnovo col club
@@ -1117,6 +1135,188 @@ tutte da un'identità stabile per persona.
   modalità allenatore invece che in hub — nessun errore in console, nessuna regressione sui flussi
   esistenti.
 
+## Bug: giocatore esistente poteva ritrovarsi come proprio compagno/rivale
+
+Limite documentato in "Creazione carriera: continua con un giocatore esistente" (vedi sopra) è
+diventato un bug reale da correggere: la riga della rosa reale che il giocatore ha sostituito
+restava nei dati sorgente, quindi `sceglieCompagni()`/`migliorGiocatoreRuolo()` potevano pescare
+te stesso come tuo "compagno" in partita o come tuo "rivale interno" nello stesso ruolo.
+
+- Nuovo `state.giocatoreRealeOrigine` (`{nome, squadra}`, valorizzato solo in modalità
+  `'esistente'`) + nuova `rosaSenzaGiocatoreReale(rosa, nomeSquadra)`: filtra quella singola riga
+  quando la squadra combacia con l'origine, riusata da `sceglieCompagni()` e
+  `migliorGiocatoreRuolo()` — nessun nuovo motore, solo un filtro in più sulla stessa fonte dati.
+- Migrazione in `boot()` per i salvataggi esistenti (`giocatoreRealeOrigine: null`, quindi restano
+  esposti al bug retroattivamente — vale per le carriere create da ora in poi).
+- Verificato in browser: la rosa reale del DB continua a includere il proprio nome (dato statico
+  invariato), ma `sceglieCompagni()`/`migliorGiocatoreRuolo()` non lo restituiscono più.
+
+## Logo del gioco
+
+Sostituito il segnalibro testuale "C7" (3 occorrenze: topbar, creazione carriera, scheda
+giocatore) con il logo fornito dall'utente ("New Star Brescia"), incorporato come immagine
+base64 nella regola CSS `.crest` (ridimensionata a 160×160px, ~53KB, per restare un solo file
+senza gonfiarlo troppo) — nessun file esterno aggiunto. Su richiesta successiva, rimossi
+`border-radius`/`box-shadow` dalla stessa regola (il "riquadro smussato" attorno al logo).
+
+## Sistema eventi per ruolo durante la partita (40 nuovi MATCH_EVENTS)
+
+Richiesto con un task strutturato lean (analisi confermata prima di scrivere codice). Estende
+ulteriormente `MATCH_EVENTS` con **40 nuovi eventi** in **5 pool per ruolo** (8 ciascuno), oltre ai
+12 trade-off "generici" (`role!=='Portiere'`) già esistenti — stesso motore, stessa `skillScelta()`
+(2 skill attive + 1 conservativa a rischio basso), nessuna nuova skill, nessuna modifica a
+`calcChance()`/`resolveChoice()`/`pickMatchEvent()`/`nextMoment()`.
+
+- **Pool per ruolo**: Attaccante (`roleRequirement:'Attaccante'`), Attaccante/Centrocampista
+  (`conditions` su `RUOLI_ATT_CEN=['Attaccante','Regista','Ala']`), Centrocampista
+  (`RUOLI_CEN=['Regista','Ala']`), Centrocampista/Difensore (`RUOLI_CEN_DIF=[...,'Difensore']`),
+  Difensore (`roleRequirement:'Difensore'`) — 3 nuove costanti array riusate dalle `conditions`,
+  nessun nuovo campo sullo schema evento.
+- Verificato: eleggibilità per ruolo corretta (Attaccante 16 eventi eligibili, Regista/Ala 24,
+  Difensore 16, Portiere 0), 720 esecuzioni di test su tutte le 120 scelte senza errori, ciclo UI
+  reale evento→scelta→esito→continua.
+
+## Riduzione probabilità sponsor personale
+
+`sponsor_call` (proposta di sponsor personale dal procuratore) usciva troppo spesso rispetto agli
+altri eventi finanziari. Aggiunta `COOLDOWN_EVENTO_OVERRIDE` (per ora solo `{sponsor_call: 24}`),
+riusata dallo stesso meccanismo di cooldown già esistente per `EVENTI_FINANZIARI` — nessun nuovo
+sistema di probabilità, solo una soglia dedicata più lunga per questo singolo id.
+
+## +5 energia extra su riposo/salta partita/infortunio
+
+Portato da +40 a **+45** in tutti e 3 gli scenari: `TRAININGS` id `'riposo'` (incluso quando si
+applica implicitamente se non si sceglie un allenamento), `saltaPartitaVolontariamente()`, e il
+recupero per infortunio in `skipGiornata('infortunio')` (sia campionato che Coppa Leonessa).
+
+## Soglia panchina al 50%, curva di livellaggio più ripida, relazioni anche simulando
+
+Tre richieste indipendenti nello stesso messaggio:
+
+- **Soglia "non giochi la partita per intero" alzata da 40% a 50%**: in `beginMatch()`, se anche
+  solo uno tra Reputazione/Energia/Forma/Morale/rapporto col Mister è sotto il 50% (`sottoSoglia50`,
+  rinominata da `sottoSoglia40`), il giocatore entra dalla panchina (`beginMatchAsSub()`) invece di
+  partire titolare. La soglia dei "2+ sotto 35%" che tiene fuori dai convocati del tutto resta
+  invariata.
+- **Curva XP più ripida**: il moltiplicatore di `addXP()` per il costo del livello successivo è
+  passato da `1.15` a `1.22` (100→122→149→182→222→271 sui primi 5 livelli, contro
+  100→115→132→152→174 di prima).
+- **`simulaPartita()` ora costruisce relazioni coi compagni**: prima non toccava mai
+  `state.persone` (solo giocando a scelte si costruivano rapporti con compagni nominati). Ogni
+  assist simulato pesca un compagno reale (stessa `sceglieCompagni()`/`pescaCompagno()` di
+  partita giocata) e ne fa crescere l'affinità (+2, stesso impatto di un assist "vero"). Verificato
+  su 25 partite simulate: 15 assist totali → 2 compagni registrati con affinità cresciuta.
+
+## Sistema procuratore/agente (state.agent, AGENT_EVENTS) + calcChance esteso
+
+Richiesto con un task strutturato lean.
+
+- **`calcChance(attrKey, risk, out, attrKey2)` esteso**: se `attrKey` è un Array di 2 skill (es.
+  `['tecnica','velocita']`), viene decomposto internamente in `attrKey=attrKey[0]`,
+  `attrKey2=attrKey[1]` — stessa media già esistente per la combinazione a 2 skill, piena
+  retrocompatibilità con tutte le chiamate esistenti (verificato: risultato identico chiamando via
+  Array o via il parametro `attrKey2` già esistente).
+- **`state.agent`** (`{name, type, trust, influence}`, default `"Gino 'Il Calibra' Baresi"` /
+  `'Cacciatore'` / `50` / `60`): identità con archetipo, aggiuntiva rispetto a
+  `relazioni.procuratore`/persona `PROCURATORE` già esistenti (che restano invariati e vengono
+  comunque aggiornati in parallelo dove ha senso). Migrazione in `boot()`.
+- **8 `AGENT_EVENTS`** integrati direttamente nell'array `EVENTS` esistente (stesso
+  `pickEvent()`/`showEvent()`): Proposta di Cambio Maglia (gated sulla finestra della pausa
+  invernale già esistente), Cena di Rappresentanza, Provino a Sorpresa in Eccellenza, Richiesta
+  Aumento Rimborso Spese, Articolo sul Giornale di Brescia, Offerta da una Rivale Storica, Sponsor
+  Tecnico Locale (aggiunto a `EVENTI_FINANZIARI` per il cooldown), Chiarimento a Fine Stagione
+  (`s.giornata===s.calendario.length`, con opzione "licenzia l'agente" → `state.agent=null`, dopo
+  la quale gli eventi smettono semplicemente di comparire via `condizione:s=>s.agent&&...`).
+- Verificato: tutti e 8 gli eventi senza errori, ciclo UI reale completo (evento→scelta→saldo/trust
+  aggiornati→esito→callback).
+
+## Sistema famiglia (state.family, FAMILY_EVENTS)
+
+Stesso pattern del procuratore/agente, stesso motore `EVENTS`/`pickEvent`/`showEvent`.
+
+- **`state.family`** (`{harmony:60, support:50, focus:'Tradizionale'}`), aggiuntivo rispetto alla
+  persona `FAMIGLIA` già esistente. Migrazione in `boot()`.
+- **8 `FAMILY_EVENTS`**: Pranzo della Domenica, Laurea/Compleanno di Venerdì, Padre "mister da
+  tribuna" (solo dopo una sconfitta, `ctx.risultato==='L'`), Auto di Famiglia (con costo reale sul
+  saldo se si sceglie un taxi), Pressioni per un Lavoro Vero (solo se `finanze.statoLavoro==='Nessuno'`
+  — la scelta di compromesso attiva davvero `statoLavoro='PartTime'`, riusando il sistema
+  economico esistente), Domenica coi Tifosi in Tribuna, Weekend Fuori con la Compagna (gated sulla
+  stessa finestra della pausa invernale usata per l'evento agente), Emergenza Familiare
+  Last-Minute.
+- Verificato: tutti e 8 senza errori, ciclo UI reale (scelta → `family.harmony`/`support`
+  aggiornati → esito → callback).
+
+## Rete sociale ed opportunità extracampo (SOCIAL_EVENTS)
+
+Richiesto con un task strutturato lean, con un'analisi preliminare che ha stabilito di **non**
+creare `state.relazioni.giocatori` come suggerito nel prompt, perché `state.persone` (Fase A del
+sistema "personaggi") è già esattamente quel registro (id stabile, affinità 0-100, storico eventi,
+`tratti[]` già riusabile come "opportunità sbloccate") — nessun secondo registro di persone.
+
+- Nuovi helper: `idConoscenza`/`registraConoscenza` (wrapper di `registraPersona` con
+  `ruolo:'conoscenza'`), `pescaGiocatoreCasuale(nomeSquadra)` (un giocatore reale a caso dalla rosa,
+  via `getRosaReale`/`rosaSenzaGiocatoreReale`), `contaConoscenze(s)`.
+- **10 eventi `social_*`** + 1 evento speciale `social_rete_consolidata` (soglia 6 conoscenze, flag
+  one-shot `reteConsolidataMostrata`), tutti in `EVENTS`: nuovo compagno, birra dopo la partita, il
+  veterano, "conosco uno" (allenatore/preparatore/osservatore/imprenditore o un giocatore reale,
+  pescato quando possibile), gruppo WhatsApp, torneo estivo, "ti ha visto giocare" (da
+  `squadraAppenaAffrontata`), vecchio allenatore, compagno che cambia squadra, telefonata
+  inaspettata.
+- **Cooldown**: nuovo Set `EVENTI_SOCIALI` con soglia dedicata (5 giornate, 2 dopo la rete
+  consolidata), stesso meccanismo già usato per `EVENTI_FINANZIARI` (esteso, non duplicato) in
+  `pickEvent()`.
+- **Bug trovato e corretto durante il testing**: un edit della richiesta precedente (aggiunta di
+  `reteConsolidataMostrata` allo stato di `startCareer()`) aveva rimosso per errore la parentesi di
+  chiusura `};` dell'oggetto stato, bloccando l'intero script (nessun errore in console perché il
+  parse falliva silenziosamente lato browser preview) — individuato con `node --check` sullo script
+  estratto dal file, corretto. Da quel momento in poi ogni modifica di questa sessione è stata
+  validata con `node --check` prima di aprire il browser.
+- Verificato: tutti e 10 gli eventi + lo speciale senza errori, ciclo UI reale (nuova conoscenza
+  registrata in `state.persone` con `ruolo:'conoscenza'`).
+
+## Gruppi sociali dello spogliatoio (GRUPPO_EVENTS)
+
+Estende la rete sociale appena costruita, stesso principio "nessun registro parallelo".
+
+- **`state.gruppoSociale`** (`{principale:null, secondari:[]}`) — unica struttura nuova, solo
+  l'appartenenza del protagonista; le persone che appartengono a un gruppo restano in
+  `state.persone` con un campo `.gruppo` aggiuntivo (stesso pattern di `squadraOrigine`/`fonte`).
+  Migrazione in `boot()`.
+- **`GRUPPI_SOCIALI`** (5 tipi: Veterani, Birra, Ambiziosi, Locali, Ex) + **`assegnaGruppoEmergente(s)`**:
+  pesi su età (`calcolaEta`), personalità dominante (`personalitaDistribuzione`) e ruolo — nessuna
+  formula complessa, idempotente (non ricalcola se già assegnato), chiamata lazy dentro l'`applica`
+  del primo evento di gruppo che capita invece che forzata a inizio carriera.
+- **10 eventi `gruppo_*`** aggiunti a `EVENTI_SOCIALI` (stesso cooldown): la birra, il veterano, il
+  torneo, un membro che cambia squadra, "il contatto" (allenatore/dirigente/imprenditore o un
+  giocatore reale), la cena, il gruppo si divide (litigio interno), nuovo compagno (con opzione
+  "presentalo a un altro gruppo" → ponte fra gruppi), gli ambiziosi/squadra che cerca, i
+  locali/attività extracampo (solo collegamento predisposto, nessuna nuova economia).
+- **Cambio squadra** (`accettaOfferta`): `state.persone` non si tocca mai; solo
+  `gruppoSociale.principale` si azzera e finisce in `secondari` — perdi l'accesso quotidiano al
+  gruppo ma mantieni i contatti già conosciuti.
+- Verificato: tutti e 10 gli eventi senza errori, assegnazione emergente del gruppo, reset al
+  cambio squadra (`principale:'veterani'`→`null`, `secondari:['veterani']`), ciclo UI reale.
+
+## Bug: partite da 50', subentro poco visibile, schieramento slegato dalle skill
+
+Tre richieste collegate:
+
+- **Bug reale trovato**: `finishMatch()` fissa sempre il fischio finale al **50'** (corretto, è la
+  durata regolamentare del calcio a 7, 2×25'), ma `beginMatchAsSub()` faceva entrare il giocatore
+  dalla panchina al minuto **65'** — dopo la fine della partita. Corretto a **28'** (con 2 momenti
+  residui, si arriva realisticamente vicino al 50' finale).
+- **Subentro più evidente**: nuovo badge dorato "Subentrato dalla panchina" (`#matchSubBadge`)
+  nell'header della partita, mostrato solo da `beginMatchAsSub()` e nascosto per le partite da
+  titolare (`beginMatch()`).
+- **Schieramento legato alle skill**: nuova `rischioPanchinaPerSkill(s)` confronta il proprio
+  overall (`overallPesato`, già usato da `simulaPartita()`) con gli altri giocatori reali dello
+  stesso ruolo nella rosa (`DB_SQUADRE`/`getRosaReale`): fra il 15% più scarso del ruolo → 50% di
+  rischio panchina; fra il 15-35% → 20%; altrimenti nessun rischio aggiuntivo. Riusa lo stesso
+  evento/flusso panchina→subentro già esistente (testo differenziato in base alla causa).
+- Verificato: overall minimo (20) → 50% rischio, overall massimo (95) → 0%; badge e minuto
+  verificati dal vivo con `beginMatchAsSub()`/`finishMatch()` (28'→38' dopo un momento→50' a fine
+  partita).
+
 ## Bug noti/limiti accettati
 
 - `GSO CAPRIOLOB` ha ancora `forza: 0.0` nei dati sorgente (piazzamento "riserva" nel file originale) —
@@ -1133,5 +1333,9 @@ tutte da un'identità stabile per persona.
 
 ---
 *Nota di processo: l'utente ha chiesto di aggiornare questo file ogni 5 suoi messaggi. Questo aggiornamento
-(2026-08-02, sesta volta nella stessa sessione) è stato richiesto esplicitamente ("esegui Fase F ed Fase G,
-RIEPILOGO.md aggiorna"); il conteggio del ciclo riparte da qui.*
+(2026-08-03) è stato richiesto esplicitamente ("aggiorna riepilogo.md"), dopo una sessione molto densa che ha
+introdotto: il bug fix giocatore-esistente-come-proprio-compagno, il logo del gioco, 40 nuovi MATCH_EVENTS
+per ruolo, la riduzione dello sponsor personale, +5 energia extra, soglia panchina al 50%, curva XP più
+ripida, relazioni coi compagni anche simulando, il sistema procuratore/agente, il sistema famiglia, la rete
+sociale, i gruppi sociali dello spogliatoio, e il bug fix su durata/subentro/schieramento delle partite; il
+conteggio del ciclo riparte da qui.*
