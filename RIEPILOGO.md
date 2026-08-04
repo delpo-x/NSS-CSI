@@ -1,5 +1,23 @@
 # Carriera CSI — Riepilogo progetto
 
+> **Aggiornamento 2026-08-04 (continua)**: quattro richieste dell'utente nella stessa giornata,
+> dopo l'integrazione del database Brescia qui sotto — **cartellino rosso/fischio arbitrale non più
+> casuali** (scattano solo dopo un contrasto fisico fallito, con un trigger `after_foul_risk`
+> dedicato invece del vecchio `team_losing` scollegato dalle scelte del giocatore), **minuto
+> d'ingresso dalla panchina variabile** (20'-40' invece di sempre 28'), **il gruppo sociale dello
+> spogliatoio può cambiare nel tempo** (un contatore di affinità per gruppo alimentato dalle scelte
+> ripetute, cambio automatico oltre una soglia di vantaggio netto) e un'**espansione della modalità
+> Telefono** in 3 direzioni concordate con l'utente — rispondere dal telefono agli eventi di
+> agente/famiglia invece di un popup, filtri per categoria nella lista contatti, una chat di gruppo
+> per il proprio gruppo sociale. Tutto riusando i motori già esistenti, vedi sezioni dedicate.
+>
+> **Aggiornamento 2026-08-04**: integrato il database territoriale contemporaneo bresciano
+> (`database_brescia_contemporanea_gameplay.xlsx`, 95 elementi: persone, sponsor/brand, vino,
+> musica, sport, media, gastronomia, dialetto, luoghi, eventi) come dataset unico ed estendibile
+> (`DB_BRESCIA`) pescato da 7 eventi-template generici basati su ruoli/rarità/modalità, non su
+> singoli nomi — vedi sezione dedicata per il dettaglio. Riusa reputazione/finanze/morale/energia/
+> relazioni già esistenti e il sistema investimenti (Epico → opportunità), nessuna nuova stat.
+>
 > Ultimo aggiornamento: 2026-08-02 (sessione lunga, più aggiornamenti), dopo (in aggiunta a tutto quanto
 > sotto): la formula dei punti attributo in creazione personaggio (ora +1 assoluto per punto), il
 > riordino della card "Lavoro" in hub, una revisione della cronaca di partita (eventi ◆ inline, cronaca
@@ -60,17 +78,54 @@ Vale per ogni schermata esistente e per ogni nuova UI aggiunta d'ora in poi — 
 toccate in una singola richiesta. Da tenere presente in particolare per: contrasto colore testo/sfondo
 (≥4.5:1 per il testo normale, ≥3:1 per il testo grande, criterio 1.4.3), stati interattivi (focus visibile
 su bottoni/scelte/link, criterio 2.4.7), semantica e leggibilità per screen reader (etichette non affidate
-al solo colore, criterio 1.4.1), dimensione target di tocco e navigabilità da tastiera. Non è ancora stato
-fatto un audit sistematico del file esistente rispetto a questo requisito: da verificare/correggere man
-mano che si toccano le varie schermate.
+al solo colore, criterio 1.4.1), dimensione target di tocco e navigabilità da tastiera.
+
+**Primo audit sistematico completato (2026-08-04)**, palette invariata (solo luminosità dei bottoni
+pieni ritoccata), esiti:
+- **Contrasto testo/sfondo (1.4.3)**: i bottoni pieni (`.btn` blu, `.btn.warning`, `.btn.danger`,
+  `.btn.green`) avevano testo bianco su gradiente troppo chiaro (2.7–4.1:1, sotto soglia AA). Stop
+  del gradiente scuriti mantenendo la stessa tinta (stessa hue, solo più profonda) finché anche il
+  punto più chiaro del gradiente supera 4.5:1. `.btn.gold` (testo scuro) era già conforme, non toccato.
+  Tutti i colori di testo/badge/label sulle superfici scure esistenti (`--text`, `--text-dim`,
+  `--gold`, `--ice`, ecc.) erano già conformi, nessuna modifica necessaria lì.
+- **Navigabilità da tastiera (2.1.1/2.4.7)**: le "card" cliccabili (`div` con `onclick`, non
+  `<button>`) — scelte di eventi/partita, allenamenti, territorio, formazione, telefono, banner
+  Coppa Leonessa, selezione squadra/giocatore in creazione — non erano raggiungibili né attivabili
+  da tastiera. Aggiunto `role="button"`/`role="radio"` + `tabindex="0"` (`tabindex="-1"` +
+  `aria-disabled` quando la card è disattivata) in ogni punto di generazione, più UN SOLO listener
+  `keydown` globale (Invio/Spazio → `.click()`) invece di ripetere la gestione tastiera in ogni sito.
+  Estesa la regola CSS `:focus-visible` già esistente per coprire anche `[role="button"]`/`[role="radio"]`.
+- **Etichette form (4.1.2/3.3.2)**: i campi di creazione carriera (nome, ruolo, data di nascita,
+  girone, squadra) avevano solo un'etichetta visiva (`div.label`) non associata programmaticamente.
+  Aggiunti `id` alle etichette e `aria-labelledby`/`aria-label` sui controlli corrispondenti, senza
+  toccare il markup visivo (nessuna modifica di layout).
+- **Uso del colore (1.4.1)**: già a posto da lavoro precedente (badge con icona ✓/✗, rischio scelte
+  con prefisso testuale [S]/[M]/[A] oltre al colore).
+- Verificato: `node --check` sullo script estratto, bot autonomo (20 carriere × 60 settimane, zero
+  errori/violazioni) per escludere regressioni nel motore, più verifica dal vivo in browser (selezione
+  squadra via mouse e via focus/Invio simulato, contrasto bottoni a schermo).
+- **Limite noto**: la verifica dell'attivazione da tastiera è stata fatta anche via browser di test
+  automatizzato, i cui eventi tasto sintetici non valorizzano `key`/`code`/`keyCode` (limite dello
+  strumento, non del codice) — il listener controlla comunque tutti e tre per compatibilità con
+  tastiere reali, stesso criterio che i `<button>` nativi usano di default.
 
 ## Struttura del file
 
-Tutto vive in `index.html`:
 - **HTML**: una serie di `<div class="screen" id="screen-XXX">` (create, hub, match, event, classifica,
   carriera, seasonend, market) mostrate/nascoste da `showScreen(id)`.
 - **CSS**: variabili custom in `:root` (tema navy/blu/oro).
 - **JS**: un unico `<script>` in fondo al file con tutta la logica di gioco.
+- **`data-squadre.js`** (2026-08-04, nuovo file): `DB_SQUADRE` (280 squadre reali, ~5511 giocatori,
+  vedi Strato 1) è stato spostato qui, fuori da `index REV2.html`, perché da solo pesava oltre 400KB su
+  una riga sola — il file di gioco era diventato scomodo da navigare. È **dati puri, zero logica**,
+  caricato con un secondo `<script src="data-squadre.js"></script>` messo PRIMA dello script principale
+  in `index REV2.html` (stesso approccio "un file apre tutto", nessun bundler/build step: funziona
+  ancora aprendo il file direttamente via `file://`). Il contenuto del file, tolto il prefisso
+  `const DB_SQUADRE = ` e il `;` finale, è JSON valido — scelta deliberata in vista di una futura
+  migrazione su Godot (menzionata dall'utente): quel giorno basterà quella singola modifica per avere
+  una risorsa `.json` leggibile nativamente, senza riscritture. Il bot di test (`tools/test-bot.js`)
+  è stato aggiornato per caricare anche questo file nel proprio contesto `vm` (altrimenti `DB_SQUADRE`
+  sarebbe `undefined` durante i test).
 
 ## Strato 1 — Dati reali (NON toccare senza motivo)
 
@@ -276,6 +331,10 @@ bug, corretto: vedi cronologia). Le partite di tutte le altre squadre restano in
   altri giocatori reali del proprio ruolo nella squadra attuale — non tiene conto di anzianità,
   rapporto col mister o andamento recente, che potrebbero in futuro affinare ulteriormente la % di
   rischio.
+- Database territoriale Brescia (`DB_BRESCIA`): i 6 elementi taggati solo "Coach Career" restano
+  inerti finché non esisterà una vera modalità Coach Career con eventi propri (oggi c'è solo la
+  simulazione di fine carriera). Nessun lavoro sui dati da rifare quando arriverà: basta far variare
+  `MODALITA_BRESCIA_CORRENTE` in base alla modalità attiva.
 - Sistema rigori: non esiste, nemmeno come struttura minima (scelta esplicita dell'utente, da fare solo
   quando si svilupperà davvero quel sistema).
 - Mercato invernale (pausa 21 dic-24 gen): niente trasferimenti, solo allenamento + rinnovo col club
@@ -903,6 +962,24 @@ architettura parallela. Procede a fasi con verifica in browser dopo ognuna, come
   `TRAININGS.apply`). I RECUPERO sono consumabili (si usano e spariscono dall'inventario). Nessuna usura:
   il progetto non aveva un sistema di durabilità, quindi il campo `durability` resta solo descrittivo,
   come da istruzione esplicita di non crearne uno nuovo. Nuova schermata "Shop", pulsante in hub.
+- **Correzioni su richiesta esplicita (2026-08-04)**: categoria GUANTI visibile solo per `state.role==='Portiere'`
+  (tab nascosta e acquisto bloccato per gli altri ruoli, i bonus presa/riflessi non hanno senso per un
+  giocatore di movimento) — filtro sia in `renderShop()` che difensivamente in `acquistaEquip()`.
+  "Fascia da capitano" (`AC_FASCIA`) non è più acquistabile (aveva un prezzo come un accessorio
+  qualsiasi, contraddiceva l'idea di leadership guadagnata): ora ha `guadagnabile:true` (niente
+  `price`, card mostra "Si guadagna sul campo, non si compra." finché non la possiedi) e viene
+  assegnata automaticamente da un nuovo traguardo (`ACHIEVEMENTS`, id `capitano`: rapporto compagni e
+  mister entrambi ≥75) tramite `assegnaFasciaCapitano()`, chiamata da `checkAchievements()` — stesso
+  hook già usato per gli altri traguardi, nessun nuovo ciclo di controllo. Se lo slot accessori è già
+  occupato da un altro oggetto non lo forza (entra comunque in inventario, si indossa a mano).
+  Rimossa anche la tab "Borsoni" (2 soli oggetti non giustificavano una categoria a sé): `BO_BASE`/
+  `BO_TRASF` sono ora `category:'ACCESSORI'` (visibili/acquistabili in quella tab), slot equipaggiamento
+  (`borsone`) invariato — restano un pezzo indossabile separato, cambia solo dove si comprano.
+  **Correzione successiva**: indossare la fascia spodestava l'accessorio già equipaggiato (condividevano
+  lo slot `accessori`, un solo oggetto per slot). `AC_FASCIA` ha ora un slot dedicato (`capitano`,
+  aggiunto a `state.equipaggiamento`/`SLOT_LABELS`), resta però `category:'ACCESSORI'` quindi si vede
+  ancora nella tab Accessori — solo lei può stare equipaggiata insieme a un altro accessorio, come
+  richiesto. Migrazione in `boot()` per i salvataggi con la fascia già nello slot `accessori`.
 - **Fase 6, formazione**: `DB_FORMAZIONE`, 12 contenuti (5 libri con titoli fittizi come richiesto —
   "Il gioco senza palla", "La mentalità del gruppo", ecc., autori fittizi —, 3 corsi, 2 mentor/ex
   allenatori, 2 esperienze formative). "Conoscenza tattica"/"leadership"/"mentalità" richieste dalla spec
@@ -1317,6 +1394,194 @@ Tre richieste collegate:
   verificati dal vivo con `beginMatchAsSub()`/`finishMatch()` (28'→38' dopo un momento→50' a fine
   partita).
 
+## Database territoriale contemporaneo (Brescia) — sponsor, media, cultura locale
+
+Integrazione del file `database_brescia_contemporanea_gameplay.xlsx` (fogli "Database Brescia",
+95 righe reali: persone, aziende/brand, vino, musica, sport, media, gastronomia, dialetto, luoghi,
+eventi), riusando i sistemi esistenti invece di crearne di nuovi:
+
+- **`DB_BRESCIA`** (nuovo array dati, prima di `EVENTS`): 95 elementi `{id, nome, categoria,
+  ruoli[], modalita[], rarita}`, `ruoli`/`modalita` normalizzati dal `GAMEPLAY_ROLE`/`MODE` del
+  foglio originale (split su `+`/`/`). Pensato per essere esteso ad altri territori in futuro:
+  basta un secondo `DB_*` con lo stesso schema, i template sotto lavorano solo per ruoli/rarità,
+  mai per nome — nessun elemento è hardcoded in un evento.
+- **7 eventi-template generici** (`brescia_sponsor`, `brescia_media`, `brescia_musica`,
+  `brescia_networking`, `brescia_gastronomia`, `brescia_dialetto`, `brescia_flavor`), aggiunti a
+  `EVENTS` e gestiti dallo stesso motore `pickEvent()`/`showEvent()` di sempre: ognuno pesca un
+  elemento idoneo da `DB_BRESCIA` in base a un set di `GAMEPLAY_ROLE` (es. SPONSOR/INVESTOR/
+  CLUB_OWNER/HOSPITALITY → `brescia_sponsor`) e lo inserisce nel testo. Un evento per elemento
+  sarebbe stato impossibile da mantenere con 95+ righe; un template per cluster di ruoli invece sì.
+- **Rarità → frequenza reale**: `rarityWeightBrescia`/`rarityCooldownBrescia` traducono
+  Comune/Raro/Epico/Iconico in un peso di estrazione e in un cooldown per-elemento (Comune 4
+  giornate, Raro 10, Epico 24, Iconico 52) — verificato con 3000 estrazioni simulate: gli elementi
+  Epici tornano molto più raramente di quelli Comuni, e un elemento appena usato non ricompare
+  prima del suo cooldown.
+- **MODE rispettato**: `MODALITA_BRESCIA_CORRENTE='Player Career'` (l'unica modalità di carriera
+  giocabile oggi: "Coach Career" non esiste come modalità autonoma con eventi propri, solo la
+  simulazione di fine carriera già esistente). I 6 elementi taggati solo `Coach Career` (Beretta,
+  Germani Brescia, Brescia Rugby, Feralpisalò, Atlantide Pallavolo Brescia, Millenium Brescia)
+  restano nel dataset ma non vengono mai pescati — verificato (`eligibleIncludesCoachOnly=false`).
+  Se nascerà una vera Coach Career, sono già pronti senza toccare i dati.
+- **Effetti solo su stat già esistenti**: `finanze.saldo`, `reputazione`, `morale`, `energia`,
+  `relazioni.compagni`/`procuratore`, `personalita`. Nessuna nuova statistica: follower/fanbase non
+  esistono nel gioco, il proxy più vicino (già usato altrove per SOCIAL_PROMOTION/MEDIA/HYPE) è
+  `reputazione`.
+- **Epico → riusa il sistema investimenti esistente**: un `brescia_sponsor` con elemento Epico (es.
+  Franciacorta, Berlucchi, Ca' del Bosco) non dà soldi subito ma genera una voce in
+  `state.opportunitaInvestimento` (lo stesso meccanismo già usato dagli eventi territoriali POI),
+  visibile nella schermata Investimenti già esistente senza alcuna modifica — verificato che
+  `renderInvestimenti()` la mostra correttamente.
+- **LOCATION/TRAVEL/IDENTITY non duplicati**: gli elementi territoriali (Lago d'Iseo, Monte Isola,
+  Franciacorta, Val Camonica, Val Trompia, Val Sabbia) corrispondono 1:1 alle aree già esistenti in
+  `TERRITORIO_AREE`/`DB_POI` (Fase 7): restano nel dataset ma nessun template li pesca, per non
+  costruire un secondo sistema di luoghi/viaggi in parallelo.
+- **Cooldown a livello di template**: nuovo `EVENTI_BRESCIA` (Set) + `COOLDOWN_EVENTO_BRESCIA=3`,
+  stesso meccanismo già usato da `EVENTI_FINANZIARI`/`EVENTI_SOCIALI` dentro `pickEvent()` — la
+  varietà reale (quale elemento compare) è già affidata alla rarità, il cooldown di template serve
+  solo a non ripetere lo stesso tipo di evento troppo a ridosso.
+- **`state.brescia = { usato:{}, pending:{} }`**: unica struttura nuova in state (aggiunta a
+  `startCareer()` + migrazione in `boot()`), solo per il cooldown per-elemento e per ricordare —
+  nella stessa giornata — quale elemento è stato pescato per un template (necessario perché
+  `condizione`/`testo`/`scelte` dello stesso evento vengono valutati in momenti diversi).
+- Verificato in browser: sintassi (`node --check`), 95 id univoci, filtro MODE, pesi di rarità,
+  cooldown per-elemento, memoizzazione stesso-giorno, un ciclo UI reale completo (evento→scelta→
+  esito→continua) sia per il ramo normale che per il ramo Epico→opportunità di investimento, e 400
+  estrazioni simulate di `pickEvent()` che confermano tutti e 7 i template raggiungibili dal flusso
+  reale. Nessun errore in console.
+- Foglio "Calciatori" del file Excel **non toccato**, come richiesto: resta solo fonte dati per
+  eventuali sviluppi futuri, non collegato al motore eventi.
+
+## Bug: cartellino rosso/arbitro a caso, subentro sempre al minuto 28'
+
+Tre problemi collegati, segnalati dall'utente dopo aver visto il cartellino rosso e il fischio
+arbitrale apparire come notifiche isolate, senza nesso con le proprie scelte:
+
+- **Cartellino rosso**: prima poteva scattare (8%) dopo QUALSIASI scelta ad alto rischio fallita,
+  anche un tiro alto o un dribbling sbagliato — non aveva senso (non sono falli). Ora
+  (`applyChoiceOutcome`) scatta solo se la scelta fallita era un contrasto fisico
+  (`choice.out==='recupero'`, `risk:'high'`), l'unico tipo di scelta il cui testo di gioco parla
+  già esplicitamente di "rischiare il cartellino". Probabilità alzata a 15% per compensare il
+  numero minore di occasioni idonee. Verificato con 2000 tiri falliti simulati: mai un cartellino;
+  con tiri di contrasto falliti: cartellino possibile.
+- **Evento arbitrale** (`errore_arbitrale`, "L'arbitro fischia contro di te..."): prima aveva
+  `trigger:'team_losing'`, scattava cioè solo perché la squadra era sotto nel punteggio, a
+  prescindere da cosa avesse fatto il giocatore. Nuovo trigger dedicato `after_foul_risk`, pushato
+  in `resolveChoice()` solo dopo un contrasto fisico ad alto rischio fallito — stessa identica
+  condizione del cartellino rosso, così l'evento è sempre conseguenza diretta di una scelta.
+  Verificato con un ciclo UI reale (contrasto fallito → evento arbitro → scelta "Resti composto" →
+  rapporto col mister +2).
+- **Minuto d'ingresso dalla panchina**: `beginMatchAsSub()` aveva `minute:28` fisso. Ora
+  `rand(20,40)` variabile a ogni subentro, con il messaggio "entri al X'" aggiornato di
+  conseguenza. Verificato su 200 subentri simulati: minimo 20', massimo 40'.
+
+## Il gruppo sociale dello spogliatoio può cambiare nel tempo
+
+Richiesta dell'utente: prima l'appartenenza a un gruppo (`assegnaGruppoEmergente`, vedi sezione
+dedicata) restava fissa per sempre una volta assegnata (cambiava solo cambiando squadra). Ora può
+mutare in base a scelte ripetute, senza alcun nuovo registro parallelo:
+
+- **`state.gruppoSociale.affinita`**: un contatore per gruppo (`{veterani, birra, ambiziosi,
+  locali, ex}`, aggiunto a `startCareer()` + migrazione in `boot()`), alimentato dalle scelte già
+  esistenti negli eventi `gruppo_*` quando vanno chiaramente in una direzione precisa (es. "Chiedi
+  di essere presentato" a un'altra squadra → +1 Ambiziosi; "Resti fedele alla tua squadra" → +1
+  Locali; "Ascolti con attenzione" il veterano → +1 Veterani). Non tutte le scelte contano: quelle
+  neutre o senza una direzione chiara (es. `gruppo_si_divide`) restano invariate.
+- **`rinforzaAffinitaGruppo(s, gruppoId)`** (nuova funzione, subito dopo `assegnaGruppoEmergente`):
+  incrementa il contatore del gruppo indicato; se un gruppo diverso dal principale accumula un
+  vantaggio netto di **3 punti**, l'appartenenza cambia — il vecchio principale diventa secondario
+  (stesso meccanismo già usato per il cambio squadra in `accettaOfferta`), il nuovo prende il suo
+  posto, e viene registrato in `legacy` ("Con il tempo ti sei avvicinato a un altro giro...").
+  Serve quindi una direzione sostenuta nel tempo (più eventi nella stessa direzione, non uno solo)
+  per cambiare gruppo, esattamente come richiesto.
+- Verificato: affinità che cresce scelta dopo scelta senza cambiare gruppo finché non supera la
+  soglia, cambio effettivo esattamente al terzo punto di vantaggio con voce in `legacy`, nessun
+  duplicato quando il nuovo principale era già in `secondari`, un ciclo UI reale completo.
+
+## Espansione modalità Telefono
+
+Richiesta dell'utente ("mi sembra un po' piatta"): prima il Telefono era solo un log read-only
+(lista contatti + storico messaggi di `state.persone`, nessuna interazione). Tre aggiunte, tutte
+concordate in anticipo con l'utente, che riusano il motore EVENTS/persone esistente:
+
+- **Rispondere dal telefono**: gli eventi `agent_*`/`family_*` (sempre rivolti a una persona fissa
+  e precisa, PROCURATORE/FAMIGLIA) non compaiono più come popup immediato in `postGiornataFlow()`.
+  Finiscono invece in `state.telefonoPendenti` (array `{eventId, personaId}`, nuovo campo in
+  `startCareer()` + migrazione in `boot()`) e compaiono nella lista contatti come "In attesa di una
+  tua risposta" con badge. Aprendo la conversazione, `renderTelefono()` mostra il messaggio con le
+  sue scelte come vere choice-card dentro il thread; `risolviTelefonoPendente()` applica la scelta
+  esattamente come farebbe `showEvent()` (stesso `sc.applica`/diario) e trascrive l'esito nella
+  conversazione. Tutti gli altri EVENTS (gruppo_*, social_*, brescia_*, dialoghi) restano popup
+  immediati come sempre — nessuna modifica al loro comportamento.
+  `pulisciTelefonoPendenti()` scarta in silenzio i pendenti la cui `condizione` non regge più (es.
+  rimasti in sospeso troppo a lungo), invece di mostrare scelte ormai senza senso.
+- **Filtri per categoria**: tab bar (`TELEFONO_TAB_RUOLI`, riusa i `p.ruolo` già esistenti) — Tutti
+  / Squadra (mister, compagno, rivale) / Agente & Famiglia (procuratore, famiglia) / Rete
+  (conoscenza, mentore, gruppo). Stesso pattern già usato dai tab di Formazione/Shop.
+  Le persone con `nome` non impostato (raro, es. campo mai popolato) sarebbero comunque mostrate
+  senza rompere nulla: nessun filtro le esclude a priori.
+- **Chat di gruppo**: nuovo ruolo persona `'gruppo'` (`GRUPPO_<id gruppo>`, creato al volo la prima
+  volta che serve). Nessuna modifica ai 10 eventi `gruppo_*`: un unico punto d'aggancio dentro
+  `showEvent()` — se `ev.id` inizia per `gruppo_` e `state.gruppoSociale.principale` è impostato,
+  l'esito della scelta viene anche trascritto nel thread del gruppo (`impatto:0`, è solo
+  trascrizione: l'eventuale spostamento di affinità/gruppo lo fa già `rinforzaAffinitaGruppo`
+  dentro `sc.applica`). Se cambi gruppo principale nel tempo, i nuovi messaggi vanno nel thread del
+  nuovo gruppo — corretto, è come cambiare gruppo WhatsApp. Il thread di gruppo non mostra la riga
+  "Affinità X%" nell'intestazione (fuorviante: sarebbe il default di `registraPersona`, non il vero
+  contatore di appartenenza).
+- **Bug trovato e corretto durante il test**: le choice-card dei messaggi pendenti usavano
+  `JSON.stringify(p.id)` dentro un attributo HTML già fra doppi apici — l'id veniva racchiuso in
+  doppi apici e rompeva l'attributo `onclick`, rendendo i pulsanti inerti. Corretto con l'id fra
+  apici singoli, come nel resto del file.
+- Verificato in browser: stato iniziale corretto su carriera nuova, tab bar e filtri funzionanti,
+  evento agente instradato al Telefono invece che a popup, scelta risolta dal thread con effetti
+  reali (saldo, affinità, diario) identici a un evento normale, pendente scaduto scartato in
+  silenzio, chat di gruppo creata e popolata automaticamente al primo evento `gruppo_*` risolto.
+  Nessun errore in console.
+
+## Bot di test autonomo (tools/)
+
+Richiesta dell'utente: un modo di verificare il gioco senza consumare un giro di conversazione ad
+ogni controllo. Aggiunti due file, esterni al gioco (`index REV2.html` resta l'unico file caricato
+dal browser, nessun `<script src>` in più):
+
+- `tools/test-bot.js`: carica lo `<script>` del gioco in un contesto Node isolato (`vm`, nessuna
+  dipendenza esterna) con un DOM finto minimo, orchestra N carriere simulate e scrive un log in
+  `tools/test-logs/`.
+- `tools/bot-helpers.js`: eseguito nello stesso contesto del gioco, guida partite/eventi/telefono
+  chiamando le funzioni reali (`beginMatch`, `resolveChoice`, `pickEvent`/`showEvent`,
+  `risolviTelefonoPendente`, ecc.) cliccando sempre la prima scelta disponibile, e verifica
+  invarianti sullo stato dopo ogni settimana (range 0-100, numeri non NaN, array sempre array...).
+
+**Due bug reali trovati al primo utilizzo** (non ipotetici: crash effettivi riprodotti), **entrambi
+ora corretti**:
+1. `showEvent()` (riga con `ev.id.startsWith('gruppo_')`, aggiunta nella sessione di espansione
+   del Telefono) andava in `TypeError` non appena il giocatore veniva messo in panchina e cliccava
+   una risposta — l'evento panchina (`eventoPanchina` dentro `beginMatch()`) è un oggetto inline
+   senza `id`. Un vero crash della UI, non solo un problema del bot. Corretto con
+   `ev.id && ev.id.startsWith(...)`.
+2. `TRAININGS` (i 4 allenamenti settimanali in hub/mercato invernale/fuori-stagione/mercato
+   estivo, 4 punti di rendering) non era filtrato per ruolo — un Portiere che sceglieva
+   "Allenamento tecnico"/"Preparazione atletica"/"Lavoro tattico di squadra" scriveva `NaN` in
+   `state.attr.tecnica`/`fisico`/ecc. (attributi generici che un Portiere non ha mai avuto,
+   `clamp(undefined+1,...)` = NaN). Trovato su 7 carriere Portiere su 40 simulate. Corretto
+   rendendo `apply`/`desc` di ciascun allenamento consapevoli del ruolo: per il Portiere le stesse
+   3 sedute (tecnica/fisico/tattico) ora toccano le sue skill reali (Presa+Distribuzione,
+   Riflessi+Uno contro uno, Posizionamento+Comunicazione) invece degli attributi generici.
+
+**Estensione della copertura oltre fine-stagione** (richiesta esplicita dell'utente): nuova
+`__botPlayOffSeason()` in `bot-helpers.js`, che guida l'intero fuori-stagione riusando le funzioni
+reali del gioco (`iniziaFuoriStagione`/`avanzaSettimanaFuoriStagione`/`aggiornaFuoriStagione`),
+incluse eventuali partite di Coppa Leonessa in corso (stesso `beginMatch()` del campionato) e il
+mercato estivo — scelta deliberatamente semplice lì: resta sempre alla squadra attuale
+(`restaAllaSquadra())`, seguire le trattative/cambio squadra è rimandato a un'estensione futura
+(supererebbe di molto la superficie da coprire: nuova rosa, nuovo calendario, nuovi compagni). Il
+ciclo principale ora prosegue automaticamente da una stagione alla successiva finché non esaurisce
+il numero di settimane richiesto (`--weeks`).
+
+- Verificato: dopo i due fix, **60 carriere × 120 settimane simulate in ~21 secondi — 253
+  stagioni completate, oltre 8500 partite giocate, zero eccezioni, zero violazioni di
+  invarianti**. Dettagli/uso in `tools/README.md`.
+
 ## Bug noti/limiti accettati
 
 - `GSO CAPRIOLOB` ha ancora `forza: 0.0` nei dati sorgente (piazzamento "riserva" nel file originale) —
@@ -1333,9 +1598,10 @@ Tre richieste collegate:
 
 ---
 *Nota di processo: l'utente ha chiesto di aggiornare questo file ogni 5 suoi messaggi. Questo aggiornamento
-(2026-08-03) è stato richiesto esplicitamente ("aggiorna riepilogo.md"), dopo una sessione molto densa che ha
-introdotto: il bug fix giocatore-esistente-come-proprio-compagno, il logo del gioco, 40 nuovi MATCH_EVENTS
-per ruolo, la riduzione dello sponsor personale, +5 energia extra, soglia panchina al 50%, curva XP più
-ripida, relazioni coi compagni anche simulando, il sistema procuratore/agente, il sistema famiglia, la rete
-sociale, i gruppi sociali dello spogliatoio, e il bug fix su durata/subentro/schieramento delle partite; il
-conteggio del ciclo riparte da qui.*
+(2026-08-04) è stato richiesto esplicitamente ("aggiorna riepilogo.md"), dopo una sessione che ha
+introdotto: l'integrazione del database territoriale contemporaneo bresciano (95 elementi, 7 eventi-template
+generici su ruoli/rarità/modalità), il fix di cartellino rosso/fischio arbitrale (ora conseguenza diretta di
+un contrasto fisico fallito, non più casuali), il minuto d'ingresso dalla panchina variabile (20'-40'), il
+gruppo sociale dello spogliatoio che può cambiare nel tempo in base a scelte ripetute, e l'espansione della
+modalità Telefono in 3 direzioni (rispondere agli eventi di agente/famiglia da lì, filtri per categoria,
+chat di gruppo); il conteggio del ciclo riparte da qui.*

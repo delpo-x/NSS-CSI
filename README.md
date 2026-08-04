@@ -1,54 +1,58 @@
-# Carriera CSI
+# Bot di test autonomo
 
-## Checklist manuale di verifica
+Simula intere carriere di "Carriera CSI" fuori dal browser (Node.js, nessuna dipendenza esterna:
+solo i moduli `fs`/`path`/`vm` già inclusi in Node) per trovare crash e stati incoerenti senza
+dover verificare a mano ogni modifica.
 
-### 1. Creazione e validazione player
-- [ ] Aprire la pagina e verificare che la schermata di creazione si carichi senza errori.
-- [ ] Verificare che nella scelta del girone vengano mostrati i gironi di Serie C senza duplicati.
-- [ ] Selezionare una squadra del girone e controllare che il picker lo evidenzi correttamente.
-- [ ] Inserire un nome valido (minimo 2, massimo 20 caratteri): deve passare.
-- [ ] Inserire un nome troppo corto o troppo lungo: deve apparire un messaggio di errore.
-- [ ] Inserire una data di nascita futura: deve bloccare il salvataggio con feedback UI.
-- [ ] Verificare che `Inizia carriera` non venga abilitato con dati mancanti.
+## Uso
 
-### 2. Allocatore attributi
-- [ ] Verificare che i punti iniziali siano 10.
-- [ ] Incrementare e decrementare un attributo e controllare che il totale punti si aggiorni.
-- [ ] Prova `Undo` e `Redo` dell’allocazione.
-- [ ] Cambiare ruolo: i set di attributi devono cambiare correttamente.
+```bash
+node tools/test-bot.js --careers 20 --weeks 34
+```
 
-### 3. JSON import/export
-- [ ] Usare `Export JSON`: deve scaricare un file JSON con lo stato corrente.
-- [ ] Cancellare il salvataggio locale e verificare il fallback.
-- [ ] Importare un file JSON valido: la schermata hub deve mostrare i dati corretti.
-- [ ] Importare un file JSON invalido: deve comparire un messaggio di errore.
+- `--careers N` — quante carriere simulare (default 10).
+- `--weeks N` — quante settimane al massimo per carriera (default 20; una stagione di Serie C dura
+  circa 34 giornate — il bot si ferma comunque da solo a fine stagione, vedi limiti sotto).
 
-### 4. Conferma azioni distruttive
-- [ ] Premere `Ricomincia carriera` e verificare che appaia la modale di conferma.
-- [ ] Premere `Esc` per chiudere la modale.
-- [ ] Verificare il focus sul pulsante di annullamento / conferma.
+Il risultato va in `tools/test-logs/<timestamp>.log` e in `tools/test-logs/latest.log` (stesso
+contenuto, nome fisso per rileggerlo senza cercare il file più recente). Le ultime righe (il
+riepilogo) vengono anche stampate a schermo.
 
-### 5. Accessibilità
-- [ ] Usare Tab per navigare fra i controlli principali.
-- [ ] Verificare che i pulsanti e i campi abbiano focus visibile.
-- [ ] Conoscere che il picker delle squadre supporta Enter/Space per selezione.
-- [ ] Verificare il contrasto dei testi su sfondo scuro.
+## Come funziona
 
-### 6. Caricamento dati e fallback
-- [ ] Verificare il messaggio “Caricamento squadre…” durante il fetch iniziale.
-- [ ] Se il file `data/squads.json` non risponde, verificare il fallback locale.
-- [ ] Controllare che il numero di squadre caricate sia coerente.
+Carica `data-squadre.js` (il database squadre, vedi RIEPILOGO.md) e lo `<script>` di
+`index REV2.html` dentro un contesto Node isolato (`vm.createContext`), con un DOM finto minimo
+(`tools/test-bot.js`) che non fa altro che non generare eccezioni — non renderizza nulla. Dentro
+quel contesto gira `tools/bot-helpers.js`, che guida il gioco chiamando le sue funzioni vere
+(`startCareer`, `beginMatch`, `resolveChoice`, `pickEvent`/`showEvent`, `risolviTelefonoPendente`,
+ecc.), cliccando sempre la prima scelta disponibile fra quelle proposte. Dopo ogni settimana
+verifica un set di invarianti sullo stato (barre 0-100, numeri non NaN, array sempre array,
+affinità delle persone in range, ecc.).
 
-### 7. Stato UI
-- [ ] Verificare la topbar nascosta in creazione e visibile nelle schermate successive.
-- [ ] Verificare l’animazione di fade-in iniziale.
-- [ ] Controllare che nessun pulsante inline `onclick` sia presente nel markup.
+Il gioco vero carica due file (`data-squadre.js` + `index REV2.html`, il primo `<script src>` in
+testa al secondo — nessun bundler, si apre ancora `index REV2.html` e basta): questi script sono
+solo strumenti di sviluppo, replicano lo stesso caricamento dentro Node invece che nel browser.
 
-## Note di sviluppo
-- La struttura finale è divisa in:
-  - [index.html](index.html)
-  - [src/css/styles.css](src/css/styles.css)
-  - [src/js/app.js](src/js/app.js)
-  - [data/squads.json](data/squads.json)
-- Il progetto è statico e non richiede build step.
-- Per anteprima locale: `python -m http.server 8080`.
+## Limiti noti (dichiarati, non nascosti)
+
+- Copre anche il fuori-stagione (mercato estivo, eventuale Coppa Leonessa in corso, nuova
+  stagione): a fine campionato il bot resta sempre alla squadra attuale (`restaAllaSquadra()`)
+  invece di seguire trattative di mercato — cambiare squadra a metà simulazione (nuova rosa, nuovo
+  calendario, nuovi compagni) è una superficie di test più ampia, lasciata per un'estensione
+  futura. Il resto del fuori-stagione (allenamento supplementare, avanzamento settimanale, Coppa)
+  è simulato per intero, più stagioni di fila se `--weeks` è abbastanza alto.
+- Le scelte sono casuali fra quelle disponibili, non "intelligenti": misura se il gioco resta
+  coerente e senza eccezioni, non se è divertente o bilanciato.
+- `Math.random()` non è seedabile in Node senza dipendenze esterne: `--seed` viene solo annotato
+  nel log per riferimento, non produce corse riproducibili bit-per-bit.
+
+## Storico dei bug trovati
+
+- **Corretto**: `showEvent()` andava in crash (`TypeError`) cliccando una risposta all'evento
+  "vai in panchina", perché quell'evento è un oggetto inline senza `id` e il controllo
+  `ev.id.startsWith('gruppo_')` non lo prevedeva. Guardia aggiunta (`ev.id && ...`).
+- **Corretto**: i 4 allenamenti settimanali (`TRAININGS`) non erano filtrati per ruolo — un
+  Portiere che sceglieva "Allenamento tecnico"/"Preparazione atletica"/"Lavoro tattico di
+  squadra" scriveva `NaN` in attributi generici (tecnica/fisico/ecc.) che lui non ha mai avuto.
+  Ora `apply`/`desc` scelgono le skill giuste in base al ruolo (equivalenti da portiere: Presa/
+  Distribuzione, Riflessi/Uno contro uno, Posizionamento/Comunicazione).
