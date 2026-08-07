@@ -217,6 +217,25 @@ function __botPlayOffSeason(log, maxSteps, result){
   }
 }
 
+// Guida l'intero mercato invernale (screen 'marketwinter'), diventato un loop settimana per
+// settimana (avanzaSettimanaInvernale) invece del vecchio popup singolo. Stessa semplificazione
+// deliberata gia' scelta per il mercato estivo (restaAllaSquadra in __botPlayOffSeason): qui si
+// "prosegue" ogni settimana senza mai accettare offerte/chiedere la rescissione, cosi' da
+// verificare che l'intero ciclo (offerte generate, eventuale evento "ai margini" pompato come
+// qualunque altro screen-event, chiusura automatica della finestra) regga, senza aprire la
+// superficie di test piu' ampia di precontratti/svincolo — lasciata per un'estensione dedicata.
+function __botPlayMercatoInvernale(log){
+  for(let i=0;i<20;i++){
+    const screen = __botPump(log, 20);
+    if(screen!=='marketwinter') return screen;
+    avanzaSettimanaInvernale();
+    const problems = __botCheckInvariants();
+    if(problems.length) log.push({step:'mercato-invernale-invariant', ok:false, detail: problems.join(' | ')});
+  }
+  log.push({step:'mercato-invernale', ok:false, detail:'limite di sicurezza raggiunto (possibile loop)'});
+  return 'marketwinter';
+}
+
 function __botPlayCareer(config){
   const log = [];
   const result = { config: config, weeksPlayed: 0, matchesPlayed: 0, seasonsCompleted: 0, errors: [], invariantViolations: [], stoppedReason: null };
@@ -251,12 +270,14 @@ function __botPlayCareer(config){
       __botAzioniExtra(log);
 
       beginMatch();
-      const afterBegin = __botPump(log, 400);
+      let afterBegin = __botPump(log, 400);
       if(afterBegin==='result'){
         result.matchesPlayed++;
         closeResult();
-        __botPump(log, 400);
-      } else if(afterBegin!=='seasonend' && __BOT_SCREEN_OK_PROSEGUI.indexOf(afterBegin)===-1){
+        afterBegin = __botPump(log, 400);
+      }
+      if(afterBegin==='marketwinter'){ afterBegin = __botPlayMercatoInvernale(log); }
+      if(afterBegin!=='seasonend' && __BOT_SCREEN_OK_PROSEGUI.indexOf(afterBegin)===-1){
         // Non necessariamente un bug (es. skipGiornata per condizione fisica bassa puo' atterrare
         // su schermi non ancora coperti esplicitamente qui), ma vale la pena annotarlo nel log.
         log.push({step:'match', ok:false, detail:'schermo non previsto dopo beginMatch(): '+afterBegin});

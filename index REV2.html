@@ -157,6 +157,9 @@
   .rel-row{ margin-bottom:10px; } .rel-row:last-child{ margin-bottom:0; }
   .rel-label{ display:flex; justify-content:space-between; font-size:12px; }
   .rel-label span:last-child{ color:var(--text-dim); font-family:'Oswald'; }
+  .rel-grid{ display:flex; gap:12px; }
+  .rel-grid .rel-row{ flex:1; margin-bottom:0; min-width:0; }
+  .rel-grid .rel-label{ flex-direction:column; gap:2px; }
 
   .pitch-header{ text-align:center; margin-bottom:16px; padding:18px 12px 12px; border-radius:18px; background:linear-gradient(180deg, rgba(14,31,56,0.9), rgba(8,18,31,0.94)); border:1px solid rgba(128,167,219,0.18); box-shadow:inset 0 1px 0 rgba(255,255,255,0.02), 0 20px 22px rgba(3,8,19,0.26); animation:floatUp .35s ease both; }
   .score-line{ font-family:'Oswald'; font-size:38px; font-weight:700; letter-spacing:0.03em; text-shadow:0 6px 18px rgba(18,151,216,0.12); }
@@ -371,12 +374,14 @@
 
     <div class="card" data-block="relazioni">
       <div class="label">Relazioni</div>
-      <div class="rel-row"><div class="rel-label"><span>Mister</span><span id="relMisterTxt">55%</span></div>
-        <div class="mini-bar-wrap"><div class="mini-bar-fill" id="relMisterBar" style="width:55%; background:var(--blue);"></div></div></div>
-      <div class="rel-row"><div class="rel-label"><span>Procuratore</span><span id="relProcTxt">50%</span></div>
-        <div class="mini-bar-wrap"><div class="mini-bar-fill" id="relProcBar" style="width:50%; background:var(--purple);"></div></div></div>
-      <div class="rel-row"><div class="rel-label"><span>Compagni</span><span id="relCompTxt">55%</span></div>
-        <div class="mini-bar-wrap"><div class="mini-bar-fill" id="relCompBar" style="width:55%; background:var(--ice);"></div></div></div>
+      <div class="rel-grid">
+        <div class="rel-row"><div class="rel-label"><span>Mister</span><span id="relMisterTxt">55%</span></div>
+          <div class="mini-bar-wrap"><div class="mini-bar-fill" id="relMisterBar" style="width:55%; background:var(--blue);"></div></div></div>
+        <div class="rel-row"><div class="rel-label"><span>Procuratore</span><span id="relProcTxt">50%</span></div>
+          <div class="mini-bar-wrap"><div class="mini-bar-fill" id="relProcBar" style="width:50%; background:var(--purple);"></div></div></div>
+        <div class="rel-row"><div class="rel-label"><span>Compagni</span><span id="relCompTxt">55%</span></div>
+          <div class="mini-bar-wrap"><div class="mini-bar-fill" id="relCompBar" style="width:55%; background:var(--ice);"></div></div></div>
+      </div>
     </div>
 
     <div id="finContratto" style="display:none;"></div>
@@ -392,7 +397,13 @@
       <div style="font-family:'Oswald'; font-size:18px; margin-top:8px;" id="hubOpponent">—</div>
     </div>
 
-    <div data-block="preparazione">
+    <div class="btn-stack" id="hubActions" data-block="azioni-partita" style="margin-top:16px;"></div>
+
+    <div class="btn-stack" id="coppaHubBtn" data-block="coppa" style="display:none; margin-top:10px;">
+      <button class="btn ghost" onclick="showScreen('coppa')">Coppa Leonessa</button>
+    </div>
+
+    <div data-block="preparazione" style="margin-top:16px;">
       <div class="label">Preparazione settimanale</div>
       <div class="card" id="trainingOptions"></div>
     </div>
@@ -401,12 +412,6 @@
       <div class="label">Lavoro</div>
       <div class="subtle" id="lavoroInfo" style="margin-bottom:8px;">—</div>
       <div class="btn-stack" id="lavoroOptions"></div>
-    </div>
-
-    <div class="btn-stack" id="hubActions" data-block="azioni-partita" style="margin-top:16px;"></div>
-
-    <div class="btn-stack" id="coppaHubBtn" data-block="coppa" style="display:none; margin-top:10px;">
-      <button class="btn ghost" onclick="showScreen('coppa')">Coppa Leonessa</button>
     </div>
 
     <div class="btn-stack" data-block="reset" style="margin-top:16px;">
@@ -436,6 +441,7 @@
       <div class="minute-tag"><span class="dot-live"></span><span id="matchMinute">0'</span></div>
       <div class="badge gold" id="matchSubBadge" style="display:none; margin-top:8px;">Subentrato dalla panchina</div>
     </div>
+    <canvas id="matchCanvas" width="440" height="200" style="width:100%; height:auto; display:block; border-radius:14px; margin-bottom:10px; background:#1c6b3a;"></canvas>
     <div class="commentary-log" id="commentaryLog"></div>
     <div id="matchAction"></div>
   </div>
@@ -692,6 +698,7 @@
   <div class="screen" id="screen-market">
     <h2 style="font-size:18px; margin-bottom:4px; color:#fff;">Mercato estivo</h2>
     <div class="subtle" style="margin-bottom:14px;" id="marketSessioneLabel">—</div>
+    <div id="marketInteresse"></div>
     <div id="marketOffers"></div>
     <div class="card">
       <div class="label">Squadra attuale</div>
@@ -710,14 +717,17 @@
 
   <!-- ===================== MERCATO INVERNALE ===================== -->
   <div class="screen" id="screen-marketwinter">
-    <h2 style="font-size:18px; margin-bottom:4px; color:#fff;">Sessione di riparazione invernale</h2>
-    <div class="subtle" style="margin-bottom:14px;" id="mwPauseLabel">Pausa invernale: una finestra per allenarti e provare a rinnovare le condizioni col club.</div>
+    <h2 style="font-size:18px; margin-bottom:4px; color:#fff;">Mercato invernale</h2>
+    <div class="subtle" style="margin-bottom:14px;" id="mwPauseLabel">Pausa invernale: una finestra per allenarti e valutare il tuo futuro.</div>
+    <div id="mwInteresse"></div>
+    <div id="mwOffers"></div>
     <div class="card">
       <div class="label">Squadra attuale</div>
       <div style="font-family:'Oswald'; font-size:16px;" id="mwTeam">—</div>
       <div class="subtle" id="mwContratto">—</div>
       <div class="btn-stack" style="margin-top:10px;">
         <button class="btn gold" id="btnRinnovoInvernale" onclick="chiediRinnovoInvernale()">Chiedi un rinnovo al procuratore</button>
+        <button class="btn ghost" id="btnSvincoloInvernale" onclick="chiediSvincoloInvernale()">Chiedi la rescissione del contratto</button>
       </div>
     </div>
     <div class="card">
@@ -725,7 +735,7 @@
       <div id="mwTraining"></div>
     </div>
     <div class="btn-stack">
-      <button class="btn" onclick="chiudiMercatoInvernale()">Torna in campo</button>
+      <button class="btn" onclick="avanzaSettimanaInvernale()">Prosegui alla settimana successiva</button>
     </div>
   </div>
 
@@ -951,6 +961,7 @@ const ACHIEVEMENTS = [
   {id:'promosso', icon:'🏆', label:'Scalata', desc:'Prima promozione di carriera', cond:s=>s.promozioniCarriera>=1},
   {id:'serieA', icon:'⭐', label:'Il grande salto', desc:'Arrivi a giocare in Serie A', cond:s=>s.lega==='A'},
   {id:'capitano', icon:'👑', label:'Fascia da capitano', desc:'Rapporto con compagni e mister entrambi oltre 75: te la sei guadagnata sul campo', cond:s=>s.relazioni.compagni>=75 && s.relazioni.mister>=75},
+  {id:'coppa_campione', icon:'🏆', label:'Re di Coppa', desc:'Vinci la Coppa Leonessa', cond:s=>s.coppaTorneo && s.coppaTorneo.fase==='campione'},
 ];
 
 /* --- REGEN --- */
@@ -1090,6 +1101,42 @@ function compensoSportivo(lega, overall) {
   return Math.round(base + (top - base) * ((ovr - 50) / 46));
 }
 
+/* ====== RILEVAMENTO DERBY (per il bonus marketing) ======
+   DB_SQUADRE non ha un campo comune/località per squadra: rilevare un vero derby geografico
+   richiederebbe dati che non abbiamo e non vogliamo inventare (stessa cautela già usata per i
+   POI del Territorio, solo luoghi reali verificabili). Due segnali, senza aggiungere dati nuovi:
+   1) "rivale esterno" già attivo contro quella squadra (state.persone, esiste già per altri
+      eventi) — un big match personale, il segnale più affidabile perché nato dal gioco stesso.
+   2) euristica sul nome squadra: se togliendo le sigle/parole generiche di club (GSO/CSI/FC/...)
+      resta una parola in comune con il nome della TUA squadra, è probabile che condividano lo
+      stesso paese. Meno affidabile (falsi positivi/negativi possibili sui nomi sponsor), quindi
+      resta un segnale secondario, non l'unico. */
+const DERBY_STOPWORDS = new Set(['GSO','USO','CSI','ASD','FC','F.C.','AC','A.C.','US','U.S.','GS','G.S.',
+  'POL','POL.','TEAM','REAL','UNITED','UTD','CITY','SPORTING','AUDAX','LIONS','GALAXY','JOLLY','AMICI',
+  'OR','OR.','ORAT','ORAT.','ORATORIO','ATLETICO','VIRTUS','JUVENTUS','DEL','DELLA','DI','LA','IL','I',
+  'BAR','SR','BS','OUT','C.','P.','NEW','OLD','5','7']);
+function paroleLuogoSquadra(nomeSquadra){
+  return (nomeSquadra||'').toUpperCase().split(/[\s.']+/).filter(w=> w.length>=4 && !DERBY_STOPWORDS.has(w));
+}
+function condividonoNome(nomeA, nomeB){
+  const paroleA = paroleLuogoSquadra(nomeA);
+  const paroleB = new Set(paroleLuogoSquadra(nomeB));
+  return paroleA.some(w=>paroleB.has(w));
+}
+function isPartitaDerby(mySquadra, oppSquadra){
+  if(!oppSquadra || oppSquadra===mySquadra) return false;
+  if(trovaRivaleEsterno(state, oppSquadra)) return true;
+  return condividonoNome(mySquadra, oppSquadra);
+}
+// Marketing accreditato ogni 4 giornate (applyPagamentoMensile): il bonus vale se fra quelle 4
+// giornate di campionato c'è stato almeno un derby, non solo l'ultima partita giocata.
+function derbyDelMese(){
+  const mySquadra = teamName();
+  return state.registroPartite
+    .filter(p=> p.contesto==='campionato' && p.stagione===state.stagione && p.giornata > state.giornata-4)
+    .some(p=> isPartitaDerby(mySquadra, p.opp));
+}
+
 /* ====== SISTEMA ECONOMICO: MARKETING CLUB ====== */
 function calcolaMarketing(lega, posizioneClassifica, famaTotale, isDerby) {
   const baseMarketing = { C: 200, B: 700, A: 2000 }[lega] || 200;
@@ -1155,7 +1202,7 @@ function applyPagamentoMensile(){
   f.compensoSportivo = comp;
   const posIdx = state.classifica.findIndex(t=>t.me);
   const pos = posIdx>=0 ? posIdx+1 : Math.ceil(state.classifica.length/2);
-  f.marketing = calcolaMarketing(state.lega, pos, state.reputazione);
+  f.marketing = calcolaMarketing(state.lega, pos, state.reputazione, derbyDelMese());
   const bc = f.budgetClub;
   bc.spesoIngaggi += comp + sal + state.contratto.stipendio*4;
   bc.crisi = bc.spesoIngaggi >= bc.limiteIngaggi*0.75;
@@ -1493,6 +1540,7 @@ function startCareer(){
     mercatoSessione: 0, allenamentoFattoMercato: false, ultimoAllenamentoMercato: null,
     offSeasonData: null, mercatoEstivoConcluso: false, allenamentoFattoFuoriStagione: false, ultimoAllenamentoFuoriStagione: null,
     mercatoInvernaleFatto: false, allenamentoFattoInvernale: false, ultimoAllenamentoInvernale: null, allenamentoSnapshotInvernale: null, rinnovoInvernaleFatto: false,
+    offSeasonInvernaleData: null, offerteInvernali: [], svincolatoInvernale: false, interesseClub: [],
     nuovaStagioneBanner: false,
     eventiUltimaGiornata: {},
     // Sistema territoriale: quante volte si è vissuta un'esperienza in ogni POI (usato per far
@@ -1772,7 +1820,8 @@ function postCoppaMatch(){
   if(state.offSeasonData) state.offSeasonData = formatDataISO(aggiungiSettimana(parseDataISO(state.offSeasonData)));
   save();
   if(state.coppa.prossimi.length > 0){ renderHub(); showScreen('hub'); return; }
-  finalizzaGironeCoppa();
+  if(COPPA_BRACKET_ROUNDS.includes(state.coppa.tipo)) finalizzaTurnoBracket();
+  else finalizzaGironeCoppa();
 }
 function finalizzaGironeCoppa(){
   const tipo = state.coppa.tipo;
@@ -1793,34 +1842,173 @@ function finalizzaGironeCoppa(){
   } else {
     state.coppaPrincipale.qualificati = qualificaConMiglioriSeconde(state.coppaPrincipale.gironi, 19).qualificati;
     const qualificato = state.coppaPrincipale.qualificati.some(sq => sq.nome === myTeam);
-    state.coppaTorneo = {
-      fase: qualificato ? 'trentaduesimi' : 'eliminato_principale',
-      qualificatoPrincipale: true,
-      qualificatoTrentaduesimi: qualificato
-    };
-    addDiario(qualificato
-      ? 'La tua squadra ha superato il girone della Fase Principale e accede ai 32esimi di Coppa Leonessa!'
-      : 'La tua squadra è stata eliminata nel girone della Fase Principale di Coppa Leonessa.');
+    if(qualificato){
+      addDiario('La tua squadra ha superato il girone della Fase Principale e accede ai 32esimi di Coppa Leonessa!');
+      iniziaTurnoBracket('trentaduesimi', state.coppaPrincipale.qualificati);
+    } else {
+      state.coppaTorneo = { fase: 'eliminato_principale', qualificatoPrincipale: true, qualificatoTrentaduesimi: false };
+      addDiario('La tua squadra è stata eliminata nel girone della Fase Principale di Coppa Leonessa.');
+    }
   }
+  dopoEsitoCoppa();
+}
+// Comune a fine-girone e fine-turno del tabellone: se è stata messa in coda una nuova partita
+// (fase successiva) si torna in hub a giocarla; altrimenti si riprende il conto delle settimane di
+// fuori-stagione (o lo si avvia, se la Coppa è partita subito a fine campionato).
+function dopoEsitoCoppa(){
   save();
   if(state.coppa){
-    // procediAFasePrincipale() qui sopra può aver già messo in coda le partite della fase
-    // successiva (qualificato dal preliminare): si continua a giocarle dall'hub, come sempre.
     renderHub(); showScreen('hub');
   } else if(state.offSeasonData){
-    // Torneo di Coppa Leonessa concluso del tutto (eliminato, o arrivato ai 32esimi) durante
-    // l'attesa del fuori-stagione (avviata dalla soglia di aprile in aggiornaFuoriStagione, o già
-    // in corso perché il campionato era finito dopo quella soglia): si riprende il conto
-    // settimanale invece di tornare all'hub, che a campionato già concluso non avrebbe più nulla
-    // da proporre come partita.
     aggiornaFuoriStagione();
   } else {
-    // Percorso storico: Coppa fatta partire subito a fine stagione, fuori-stagione non ancora
-    // avviato (il giocatore non ha ancora cliccato "Prosegui fuori stagione"). Si inizializza qui
-    // invece di tornare all'hub, che con la giornata già oltre calendario.length sarebbe un
-    // vicolo cieco (nessuna partita di campionato residua da proporre).
     iniziaFuoriStagione();
   }
+}
+
+/* ---------- Coppa Leonessa: tabellone a eliminazione diretta dai 32esimi in poi ----------
+   64 squadre qualificate dalla Fase Principale (vedi sopra) giocano gare secche a eliminazione
+   diretta: 32esimi (64→32) · sedicesimi (32→16) · ottavi (16→8) · quarti (8→4) · semifinale (4→2)
+   · finale (2→1). Stesso motore/stessa UI delle altre partite di Coppa (beginMatch/skipGiornata/
+   simulaPartita con contesto:'coppa', via state.coppa.prossimi[0]): qui cambia solo come si
+   costruisce il prossimo avversario e cosa succede a fine partita (elimina o passa il turno,
+   invece di aggiornare una classifica di girone). Le partite altrui di un turno si simulano tutte
+   subito (a differenza del girone, qui non c'è nulla da mettere in coda: sono gare singole, non un
+   mini-campionato), esattamente come le "altre squadre" di un girone si simulavano già subito. */
+const COPPA_BRACKET_ROUNDS = ['trentaduesimi','sedicesimi','ottavi','quarti','semifinale','finale'];
+const COPPA_BRACKET_LABEL = { trentaduesimi:'Trentaduesimi di finale', sedicesimi:'Sedicesimi di finale',
+  ottavi:'Ottavi di finale', quarti:'Quarti di finale', semifinale:'Semifinale', finale:'Finale' };
+// Preposizione corretta per "eliminato ___ <turno>": "ai" (trentaduesimi/sedicesimi/quarti),
+// "agli" (ottavi, comincia per vocale), "in" (semifinale/finale, singolari).
+const COPPA_BRACKET_PREP = { trentaduesimi:'ai', sedicesimi:'ai', ottavi:'agli', quarti:'ai', semifinale:'in', finale:'in' };
+function coppaEliminatoLabel(round){
+  return `${COPPA_BRACKET_PREP[round]} ${COPPA_BRACKET_LABEL[round].toLowerCase()}`;
+}
+function prossimoTurnoBracket(round){
+  const i = COPPA_BRACKET_ROUNDS.indexOf(round);
+  return (i>=0 && i<COPPA_BRACKET_ROUNDS.length-1) ? COPPA_BRACKET_ROUNDS[i+1] : null;
+}
+// Pareggio in una gara secca fra le "altre" squadre del tabellone (mai la mia): resta deciso ai
+// supplementari simulati sulla sola forza reale, non ha senso calcolare rigori dettagliati per
+// partite che il giocatore non gioca mai davvero.
+function decidiVincitoreCoppa(forzaA, forzaB){
+  let r = simSquadra(forzaA, forzaB), tentativi = 0;
+  while(r.mieiGol === r.oppGol && tentativi < 10){ r = simSquadra(forzaA, forzaB); tentativi++; }
+  if(r.mieiGol === r.oppGol) return forzaA >= forzaB ? {mieiGol:r.mieiGol+1, oppGol:r.oppGol} : {mieiGol:r.mieiGol, oppGol:r.oppGol+1};
+  return r;
+}
+/* ---------- Rigori (solo per la gara secca del GIOCATORE in Coppa Leonessa) ----------
+   Prima un pareggio andava ai "supplementari" con la stessa formula usata per le sfide simulate fra
+   le altre squadre (decidiVincitoreCoppa, solo forza reale) — corretto per partite che il giocatore
+   non gioca mai, ma per la SUA gara secca ignorava del tutto le sue skill. Qui i miei tiri usano
+   davvero l'attributo tiro e la forma del giocatore (calcChance-style, ma un rigore è sempre lo
+   stesso tipo di conclusione: niente rischio/avversario diretto come nelle scelte di gioco); i
+   tiri della squadra avversaria restano sulla sua forza reale, come ovunque nel motore. Nessun
+   nuovo stato persistente: la sequenza si genera e si racconta tutta insieme in un'unica chiamata,
+   non un ticker interattivo — coerente con skipGiornata/simulaPartita che risolvono la partita in
+   un colpo solo, e riusabile identico anche quando la gara è stata giocata dal vivo (finishMatch). */
+function chanceRigoreMio(){
+  const base = 55 + (state.attr.tiro-50)*0.5 + (state.forma-50)*0.15;
+  return clamp(Math.round(base), 40, 92);
+}
+function chanceRigoreAvversario(forzaOpp){
+  return clamp(Math.round(50 + (forzaOpp-60)*0.6), 35, 88);
+}
+function simulaRigori(forzaOpp){
+  const chanceMia = chanceRigoreMio(), chanceOpp = chanceRigoreAvversario(forzaOpp);
+  const tira = chance => rand(1,100) <= chance;
+  const rounds = []; let mieiGol=0, oppGol=0;
+  for(let i=0; i<5; i++){
+    const mioGol = tira(chanceMia); if(mioGol) mieiGol++;
+    const oppGolTiro = tira(chanceOpp); if(oppGolTiro) oppGol++;
+    rounds.push({mioGol, oppGolTiro});
+    // Interrompe prima del 5° tiro se il risultato è già acquisito (regola reale dei rigori).
+    const residui = 5-(i+1);
+    if(mieiGol > oppGol+residui || oppGol > mieiGol+residui) break;
+  }
+  let spareggio = 0;
+  while(mieiGol === oppGol && spareggio < 10){
+    const mioGol = tira(chanceMia), oppGolTiro = tira(chanceOpp);
+    if(mioGol) mieiGol++; if(oppGolTiro) oppGol++;
+    rounds.push({mioGol, oppGolTiro, spareggio:true});
+    spareggio++;
+  }
+  if(mieiGol === oppGol){ mieiGol += (chanceMia >= chanceOpp) ? 1 : 0; if(mieiGol===oppGol) oppGol++; } // limite di sicurezza, in pratica mai raggiunto
+  return { mieiGol, oppGol, rounds };
+}
+function iniziaTurnoBracket(round, squadrePartecipanti, storicoPrecedente){
+  const myTeam = teamName();
+  const squadre = shuffle(squadrePartecipanti.map(sq => ({nome:sq.nome, serie:sq.serie, forza:sq.forza})));
+  const coppie = [];
+  for(let i=0; i<squadre.length; i+=2) coppie.push([squadre[i], squadre[i+1]]);
+  const miaCoppia = coppie.find(c => c[0].nome===myTeam || c[1].nome===myTeam);
+  const mioAvversario = miaCoppia[0].nome===myTeam ? miaCoppia[1] : miaCoppia[0];
+  const vincitoriAltri = [];
+  coppie.forEach(c => {
+    if(c===miaCoppia) return;
+    const r = decidiVincitoreCoppa(c[0].forza, c[1].forza);
+    vincitoriAltri.push(r.mieiGol > r.oppGol ? c[0] : c[1]);
+  });
+  // storico: i turni già giocati e vinti in questo tabellone, per poterli mostrare in "Coppa"
+  // anche dopo che iniziaTurnoBracket() sovrascrive state.coppaBracket per il turno successivo.
+  state.coppaBracket = { round, vincitoriAltri, storico: storicoPrecedente || [] };
+  state.coppa = { tipo: round, girone: null, prossimi: [creaSquadraCoppa(mioAvversario)], altreSfide: [], giocate: [], schemaVersion:2 };
+}
+function applyResultToCoppaBracket(oppName, myGoals, oppGoals){
+  let vinta = myGoals > oppGoals, rigori = null;
+  if(myGoals === oppGoals){
+    const opp = state.coppa.prossimi[0];
+    rigori = simulaRigori(opp.forza);
+    vinta = rigori.mieiGol > rigori.oppGol;
+    addLog(`Si va ai rigori: ${teamName()} ${rigori.mieiGol} - ${rigori.oppGol} ${opp.nome}. ${vinta ? `${teamName()} passa il turno` : `${opp.nome} elimina ${teamName()}`}.`, true);
+  }
+  state.coppa.giocate.push({opp: oppName, mieiGol: myGoals, oppGol: oppGoals, vinta, rigori});
+  state.coppa.prossimi.shift();
+}
+// Dispatcher unico per i 3 punti che chiudevano una partita di Coppa (skipGiornata/simulaPartita/
+// finishMatch): decide se aggiornare la classifica di girone o il tabellone a eliminazione,
+// invece di far scegliere la funzione giusta a ciascun chiamante.
+function applyResultToCoppa(oppName, myGoals, oppGoals){
+  if(COPPA_BRACKET_ROUNDS.includes(state.coppa.tipo)) applyResultToCoppaBracket(oppName, myGoals, oppGoals);
+  else applyResultToCoppaGirone(oppName, myGoals, oppGoals);
+}
+function coppaFaseLabel(tipo){
+  if(tipo==='preliminare') return 'Fase Preliminare';
+  if(tipo==='principale') return 'Fase Principale';
+  return COPPA_BRACKET_LABEL[tipo] || 'Coppa Leonessa';
+}
+function finalizzaTurnoBracket(){
+  const round = state.coppa.tipo;
+  const risultato = state.coppa.giocate[0];
+  const vinta = risultato.vinta;
+  const storico = [...(state.coppaBracket.storico||[]), { round, opp:risultato.opp, mieiGol:risultato.mieiGol, oppGol:risultato.oppGol, vinta, rigori:risultato.rigori }];
+  state.coppa = null;
+  if(!vinta){
+    addDiario(`Eliminato ${coppaEliminatoLabel(round)} di Coppa Leonessa da ${risultato.opp}${risultato.rigori?` (dopo i rigori, ${risultato.rigori.mieiGol}-${risultato.rigori.oppGol})`:''}.`);
+    state.coppaTorneo = { fase: 'eliminato_'+round, qualificatoPrincipale:true, qualificatoTrentaduesimi:true, percorsoBracket: storico };
+    state.coppaBracket = null;
+    dopoEsitoCoppa();
+    return;
+  }
+  const mieTeam = creaSquadraCoppa({nome: teamName(), serie: state.lega, forza: getForzaSquadra(teamName())||58});
+  const vincitoriTurno = [...state.coppaBracket.vincitoriAltri, mieTeam];
+  const prossimo = prossimoTurnoBracket(round);
+  if(!prossimo){
+    addDiario(`🏆 Vinci la Coppa Leonessa! Battuta ${risultato.opp} in finale${risultato.rigori?` dopo i rigori (${risultato.rigori.mieiGol}-${risultato.rigori.oppGol})`:''}.`);
+    registraLegacy('coppa', `Campione di Coppa Leonessa (stagione ${state.stagione}).`);
+    state.coppaTorneo = { fase:'campione', qualificatoPrincipale:true, qualificatoTrentaduesimi:true, percorsoBracket: storico };
+    state.coppaBracket = null;
+    state.reputazione = clamp(state.reputazione+15, 0, 100);
+    // checkAchievements() gira normalmente dentro finishMatch()/simulaPartita(), PRIMA che questa
+    // funzione imposti fase:'campione' (che arriva più tardi, da closeResult()→postCoppaMatch()):
+    // altrimenti il traguardo "Re di Coppa" si sbloccherebbe solo alla partita successiva.
+    checkAchievements();
+    dopoEsitoCoppa();
+    return;
+  }
+  addDiario(`Passi il turno: ${COPPA_BRACKET_LABEL[prossimo]} di Coppa Leonessa, ${vincitoriTurno.length} squadre ancora in corsa.`);
+  iniziaTurnoBracket(prossimo, vincitoriTurno, storico);
+  dopoEsitoCoppa();
 }
 
 function addDiario(text){
@@ -2385,11 +2573,12 @@ function renderHub(){
 
   const coppaAttiva = !!(state.coppa && state.coppa.prossimi.length);
   if(coppaAttiva){
-    const faseLabel = state.coppa.tipo==='preliminare' ? 'Preliminare' : 'Fase Principale';
-    const numeroPartita = state.coppa.giocate.length + 1;
-    const totalePartite = state.coppa.giocate.length + state.coppa.prossimi.length;
+    const faseLabel = coppaFaseLabel(state.coppa.tipo);
     const dataCoppa = state.offSeasonData ? ` · ${formattaDataIT(parseDataISO(state.offSeasonData))}` : '';
-    document.getElementById('hubGiornata').textContent = `Coppa · ${faseLabel} · Partita ${numeroPartita}/${totalePartite}${dataCoppa}`;
+    const etichettaPartita = COPPA_BRACKET_ROUNDS.includes(state.coppa.tipo)
+      ? `Coppa · ${faseLabel} · gara secca`
+      : `Coppa · ${faseLabel} · Partita ${state.coppa.giocate.length+1}/${state.coppa.giocate.length+state.coppa.prossimi.length}`;
+    document.getElementById('hubGiornata').textContent = `${etichettaPartita}${dataCoppa}`;
     document.getElementById('hubOpponent').textContent = `vs ${state.coppa.prossimi[0].nome}`;
   } else {
     document.getElementById('hubGiornata').textContent = `Giornata ${state.giornata}/${state.calendario.length} · ${formattaDataIT(dataGiornata(state.stagione, state.giornata))}`;
@@ -3722,7 +3911,7 @@ function skipGiornata(motivo){
     const opp = state.coppa.prossimi[0];
     const r = simSquadra(getForzaSquadra(teamName())||58, opp.forza);
     addDiario(`Coppa Leonessa: ${teamName()} ${r.mieiGol}-${r.oppGol} ${opp.nome} (tu assente, ${motivo}).`);
-    applyResultToCoppaGirone(opp.nome, r.mieiGol, r.oppGol);
+    applyResultToCoppa(opp.nome, r.mieiGol, r.oppGol);
     registraPartita({opp: opp.nome, mieiGol: r.mieiGol, oppGol: r.oppGol, contesto:'coppa'});
     if(motivo==='infortunio' && state.infortunio){
       state.infortunio.giornateRestanti--;
@@ -3827,7 +4016,7 @@ function simulaPartita(){
   state.carriera.gol += playerGol; state.carriera.assist += playerAssist; state.carriera.partiteVoti.push(rating);
   state.stagioneStats.gol += playerGol; state.stagioneStats.assist += playerAssist; state.stagioneStats.voti.push(rating);
 
-  if(coppaAttiva) applyResultToCoppaGirone(opp.nome, r.mieiGol, r.oppGol);
+  if(coppaAttiva) applyResultToCoppa(opp.nome, r.mieiGol, r.oppGol);
   else applyResultToClassifica(opp.nome, r.mieiGol, r.oppGol);
   registraPartita({opp: opp.nome, mieiGol:r.mieiGol, oppGol:r.oppGol, playerGol, playerAssist, voto:rating, contesto});
   const prefisso = coppaAttiva ? 'Coppa Leonessa' : `G${state.giornata}`;
@@ -3912,13 +4101,17 @@ function beginMatch(){
     gkMomenti: state.role==='Portiere' ? shuffle(GK_MOMENTS_POOL).slice(0,4) : null,
     compagni: sceglieCompagni(teamName()) };
   const etichettaMatch = coppaAttiva
-    ? ` · Coppa Leonessa (partita ${state.coppa.giocate.length+1}/${state.coppa.giocate.length+state.coppa.prossimi.length})`
+    ? (COPPA_BRACKET_ROUNDS.includes(state.coppa.tipo)
+        ? ` · Coppa Leonessa (${coppaFaseLabel(state.coppa.tipo)}, gara secca)`
+        : ` · Coppa Leonessa (partita ${state.coppa.giocate.length+1}/${state.coppa.giocate.length+state.coppa.prossimi.length})`)
     : ` · Giornata ${state.giornata}/${state.calendario.length}`;
   document.getElementById('matchTeams').textContent = `${teamName()} vs ${opp.nome}${etichettaMatch}`;
   document.getElementById('matchScore').textContent = '0 - 0';
   document.getElementById('matchSubBadge').style.display = 'none';
   document.getElementById('commentaryLog').innerHTML = '';
   addLog(`Fischio d'inizio! ${teamName()} ospita ${opp.nome}.`, false);
+  avviaCanvasPartita();
+  emitMatchEvent({ type:'whistle', outcome:'kickoff', actor:{role:'self', name:state.name, team:'home'} });
   state.energia = clamp(state.energia-15,0,100);
   showScreen('match');
   // Evento di partita opzionale a inizio gara (match_start): non blocca mai il flusso, è solo
@@ -3950,6 +4143,8 @@ function beginMatchAsSub(){
   document.getElementById('matchSubBadge').style.display = 'inline-block';
   document.getElementById('commentaryLog').innerHTML = '';
   addLog(`Il mister ti chiama dalla panchina: entri al ${minutoIngresso}', tempo per lasciare il segno.`, false);
+  avviaCanvasPartita();
+  emitMatchEvent({ type:'whistle', outcome:'substitution_in', actor:{role:'self', name:state.name, team:'home'} });
   state.energia = clamp(state.energia-8,0,100);
   showScreen('match');
   nextMoment();
@@ -3958,6 +4153,406 @@ function addLog(text, isEvent){
   const log = document.getElementById('commentaryLog');
   const div = document.createElement('div'); div.className = 'commentary'+(isEvent?' event':'');
   div.textContent = text; log.prepend(div);
+}
+/* ---------- EVENT FORMAT STANDARD (vedi MATCH_VIEWER_DESIGN.md) ----------
+   emitMatchEvent() struttura in JSON gli stessi esiti che il motore già calcola, in aggiunta
+   (mai al posto) del testo di addLog(): il viewer 2D futuro leggerà state.matchTemp.events,
+   ma se non esiste/non è ancora costruito il gioco continua a funzionare identico a prima —
+   nessun punto del motore dipende dalla riuscita di questa emissione.
+   Le zone origin/destination sono di default per tipo di scelta (ZONE_DEFAULT_PER_OUT), non
+   ancora quelle precise della singola situazione narrata in ogni MOMENTS/MATCH_EVENTS: taggare
+   zona per zona ogni scenario è rimandato all'implementazione dell'EventInterpreter (sez.5 del
+   design doc), per non dover toccare qui decine di eventi prima di aver validato lo schema. */
+const ZONE_DEFAULT_PER_OUT = {
+  // destination 'goal_line' (non più null): senza una destinazione la clip 'shot' non aveva nulla
+  // verso cui interpolare e la palla restava ferma in area per tutta l'animazione — non era una
+  // rifinitura mancante, era un tiro che visivamente non si muoveva mai.
+  goal:     { origin:'box',             destination:'goal_line' },
+  assist:   { origin:'midfield_center', destination:'box' },
+  recupero: { origin:'midfield_center', destination:null },
+  possesso: { origin:'own_half',        destination:null }
+};
+function emitMatchEvent(partial){
+  const m = state.matchTemp;
+  if(!m) return null;
+  if(!m.events) m.events = [];
+  const evt = Object.assign({
+    id: 'evt_' + String(m.events.length).padStart(5,'0'),
+    minute: m.minute,
+    target: null,
+    origin: null,
+    destination: null,
+    risk: null,
+    involvesCard: null,
+    involvesInjury: false,
+    scoreAfter: { home: m.myGoals, away: m.oppGoals }
+  }, partial);
+  evt.animation = interpretMatchEvent(evt);
+  m.events.push(evt);
+  if(matchAnimMgr && evt.animation && (evt.animation.clip || evt.animation.timeline)) matchAnimMgr.enqueue(evt);
+  return evt;
+}
+/* ---------- SISTEMA DI COORDINATE (vedi MATCH_VIEWER_DESIGN.md sez.2) ----------
+   Zone nominali → rettangolo in coordinate normalizzate 0-1, indipendenti da pixel e da un
+   motore di rendering specifico (stesso identico dato varrebbe in Godot). Il motore emette solo
+   il nome della zona (vedi ZONE_DEFAULT_PER_OUT sopra); risolvere il nome in coordinate è
+   responsabilità esclusiva di questo layer, mai del motore partita. */
+const ZONES = {
+  own_box:         { xRange:[0.00,0.16], yRange:[0.20,0.80] },
+  own_half:        { xRange:[0.00,0.50], yRange:[0.00,1.00] },
+  midfield_center: { xRange:[0.35,0.65], yRange:[0.30,0.70] },
+  midfield_left:   { xRange:[0.35,0.65], yRange:[0.00,0.30] },
+  midfield_right:  { xRange:[0.35,0.65], yRange:[0.70,1.00] },
+  flank_left:      { xRange:[0.50,0.90], yRange:[0.00,0.22] },
+  flank_right:     { xRange:[0.50,0.90], yRange:[0.78,1.00] },
+  box:             { xRange:[0.84,1.00], yRange:[0.20,0.80] },
+  box_near_post:   { xRange:[0.88,1.00], yRange:[0.20,0.42] },
+  box_far_post:    { xRange:[0.88,1.00], yRange:[0.58,0.80] },
+  corner:          { xRange:[0.98,1.00], yRange:[0.00,0.06] },
+  goal_line:       { xRange:[0.99,1.00], yRange:[0.35,0.65] },
+  // Distinta da goal_line: un tiro fuori non deve avere la stessa destinazione di un gol, altrimenti
+  // le due animazioni sarebbero visivamente indistinguibili. Fuori dallo specchio della porta, non
+  // sovrapposta alla fascia centrale (0.35-0.65) usata da goal_line.
+  goal_line_wide:  { xRange:[0.97,1.00], yRange:[0.05,0.20] }
+};
+function zonaCoordinate(nomeZona){
+  const z = ZONES[nomeZona];
+  if(!z) return null;
+  return { x: (z.xRange[0]+z.xRange[1])/2, y: (z.yRange[0]+z.yRange[1])/2 };
+}
+/* ---------- Animation Library (vedi MATCH_VIEWER_DESIGN.md sez.4) ----------
+   Proprietaria di TUTTE le clip: ogni clip è un modulo indipendente con la propria durata e la
+   propria funzione run(t, animation) che calcola il frame corrente — nessuna logica di esecuzione
+   vive fuori da qui. L'AnimationManager (sotto) non sa cosa sia un "easing" o un "track_ball": si
+   limita a chiamare clip.run() e leggere il risultato. Aggiungere una clip nuova (es. un cross con
+   arco diverso, un tuffo del portiere) vuol dire aggiungere una voce qui, senza toccare manager,
+   interpreter o motore. eventClipMap è l'unico punto che sa "che tipo di evento usa quale clip" —
+   dato, non un if/switch che cresce nel tempo. tackle/foul/card/injury/whistle/possession non
+   hanno ancora una clip (solo indicatore, niente coreografia): clipForEvent() restituisce null e
+   il resto della pipeline lo gestisce già come "nessuna animazione" senza casi speciali. */
+const EASINGS = {
+  linear: t => t,
+  easeOutQuad: t => 1 - (1-t)*(1-t),
+  easeInOutQuad: t => t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2,
+  // Per un tiro: parte lenta, accelera bruscamente — lo scatto del colpo, non il rallentamento in
+  // arrivo di easeOutQuad (adatto invece a un passaggio che si "posa" sul compagno).
+  easeInCubic: t => t*t*t
+};
+function clamp01(x){ return x<0 ? 0 : (x>1 ? 1 : x); }
+function lerpPunto(origin, dest, te){
+  if(!origin) return null;
+  const d = dest || origin;
+  return { x: origin.x + (d.x-origin.x)*te, y: origin.y + (d.y-origin.y)*te };
+}
+const AnimationLibrary = {
+  eventClipMap: { shot:'shot', pass_short:'pass_short', pass_long:'pass_long', tackle:'tackle' },
+  clips: {
+    // Prova di estendibilità: contrasto fisico, prima senza coreografia. La palla non si sposta
+    // (il contrasto avviene sul posto), ma occupa comunque l'AnimationManager per una durata reale
+    // — a differenza di un evento senza clip (whenDrained sincrono), qui il gating aspetta davvero.
+    tackle: {
+      durationMs: 400,
+      run(t, animation){ return { ballPos: animation.originXY }; }
+    },
+    pass_short: {
+      durationMs: 600,
+      run(t, animation){ return { ballPos: lerpPunto(animation.originXY, animation.destinationXY, EASINGS.easeOutQuad(t)) }; }
+    },
+    pass_long: {
+      durationMs: 1100,
+      // Prima identica a pass_short (solo più lenta): un lancio lungo/cross in linea retta non è
+      // credibile quanto un passaggio corto. Aggiunge un arco laterale, perpendicolare alla
+      // direzione origine→destinazione, che cresce e torna a zero a metà volo (sin(π·t)) — la
+      // palla si scosta dalla linea retta e ci ritorna esattamente a destinazione, qualunque sia
+      // l'orientamento del passaggio (non solo lungo l'asse x). Contenuto qui: nessun'altra clip
+      // ne è affetta.
+      run(t, animation){
+        const origin = animation.originXY, dest = animation.destinationXY || origin;
+        if(!origin) return {};
+        const base = lerpPunto(origin, dest, EASINGS.easeInOutQuad(t));
+        const dx = dest.x-origin.x, dy = dest.y-origin.y;
+        const len = Math.hypot(dx,dy) || 1;
+        const perp = { x: -dy/len, y: dx/len };
+        const arco = 0.06 * Math.sin(Math.PI*t);
+        return { ballPos: { x: base.x + perp.x*arco, y: base.y + perp.y*arco } };
+      }
+    },
+    shot: {
+      durationMs: 800,
+      // variantField dichiara quale campo dell'evento va letto come variante — l'EventInterpreter
+      // lo legge genericamente da qui, non deve conoscere per nome quali clip esistono.
+      variantField: 'outcome',
+      variants: { goal:{followup:'goal_celebration'}, saved:{followup:'save'}, off_target:{} },
+      // playerPos distinto da ballPos: chi calcia non entra in porta insieme al pallone, si ferma
+      // all'85% del percorso (fuori/sul bordo area) mentre la palla prosegue fino a destinazione.
+      run(t, animation){
+        const te = EASINGS.easeInCubic(t);
+        return {
+          ballPos: lerpPunto(animation.originXY, animation.destinationXY, te),
+          playerPos: lerpPunto(animation.originXY, animation.destinationXY, Math.min(te, 0.85))
+        };
+      }
+    },
+    save: {
+      durationMs: 500,
+      run(t, animation){ return {}; } // nessun ballPos: il portiere non è ancora disegnato (MVP)
+    },
+    goal_celebration: {
+      durationMs: 1200, interruptible: true,
+      run(t, animation){ return {}; } // puramente estetico, non sposta nulla nell'MVP
+    }
+  },
+  clipForEvent(evt){ return this.eventClipMap[evt.type] || null; },
+  get(clipId){ return clipId ? (this.clips[clipId] || null) : null; },
+  followupFor(clipId, variant){
+    const clip = this.get(clipId);
+    if(!clip || !clip.variants || !variant) return null;
+    const v = clip.variants[variant];
+    return v ? (v.followup || null) : null;
+  }
+};
+/* ---------- EventInterpreter (vedi MATCH_VIEWER_DESIGN.md sez.3) ----------
+   Unico punto che "capisce" gli eventi di gioco e li traduce in un'intenzione di animazione
+   (AnimationRequest): chiede a AnimationLibrary quale clip usare, risolve le zone in coordinate.
+   Non conosce la struttura interna delle clip (non legge track_ball/variants direttamente) e non
+   gestisce tempo/coda (quello è l'AnimationManager): qui c'è solo la trasformazione dati→dati. */
+function interpretMatchEvent(evt){
+  const clipId = AnimationLibrary.clipForEvent(evt);
+  const clipDef = AnimationLibrary.get(clipId);
+  const variant = (clipDef && clipDef.variantField && evt[clipDef.variantField]) ? evt[clipDef.variantField] : null;
+  return {
+    clip: clipId,                           // null = nessuna coreografia nell'MVP, solo indicatore
+    variant,
+    originXY: zonaCoordinate(evt.origin),
+    destinationXY: zonaCoordinate(evt.destination),
+    followup: AnimationLibrary.followupFor(clipId, variant)
+  };
+}
+/* ---------- Timeline (interna all'AnimationManager) ----------
+   Sequenza ordinata di step eseguiti uno dopo l'altro. Non è un nuovo stadio della pipeline
+   (EventInterpreter → AnimationManager → AnimationLibrary resta invariata): è creata e avanzata
+   ESCLUSIVAMENTE dall'AnimationManager, mai vista da motore o EventInterpreter. Ogni step ha un
+   `type`: 'clip' esegue una clip di AnimationLibrary per la sua durationMs (unico tipo usato in
+   questa fase); 'pause'/'callback' sono già previsti nella forma dati per fasi successive, non
+   implementati/testati ora — nessuna nuova animazione in questo passo, solo l'infrastruttura.
+   Le clip restano indipendenti: la Timeline non sa COME una clip anima (non tocca easing/track),
+   sa solo quanto dura e quando passare alla successiva. */
+function creaTimeline(steps){
+  return {
+    steps: steps || [],
+    index: 0,
+    elapsed: 0,
+    stepDurationMs(step){
+      if(!step) return 0;
+      if(step.type==='clip'){ const clip = AnimationLibrary.get(step.clipId); return clip ? clip.durationMs : 0; }
+      if(step.type==='pause'){ return step.durationMs || 0; }
+      return 0;
+    },
+    currentStep(){ return this.steps[this.index] || null; },
+    isDone(){ return this.index >= this.steps.length; },
+    // Avanza di deltaMs; se lo step corrente è una clip la esegue e restituisce il suo frame
+    // (es. {ballPos}), altrimenti null. Passa automaticamente allo step successivo quando quello
+    // corrente esaurisce la sua durata — è questo il "aspetta il completamento della clip
+    // precedente" richiesto, senza che l'AnimationManager debba saperlo gestire lui stesso.
+    tick(deltaMs, animation){
+      if(this.isDone()) return null;
+      const step = this.currentStep();
+      this.elapsed += deltaMs;
+      const durationMs = this.stepDurationMs(step);
+      let frame = null;
+      if(step.type==='clip'){
+        const clip = AnimationLibrary.get(step.clipId);
+        if(clip && typeof clip.run==='function'){
+          const t = durationMs>0 ? clamp01(this.elapsed/durationMs) : 1;
+          frame = clip.run(t, animation);
+        }
+      } else if(step.type==='callback' && typeof step.fn==='function'){
+        step.fn(animation);
+      }
+      if(this.elapsed >= durationMs){ this.index++; this.elapsed = 0; }
+      return frame;
+    }
+  };
+}
+// Retrocompatibilità col formato evento invariato: evt.animation.clip (stringa singola, come oggi)
+// diventa una Timeline di un solo step. Un futuro evt.animation.timeline (array di step) sarebbe
+// già supportato qui senza toccare EventInterpreter — stesso campo `animation`, lettura diversa.
+function timelineStepsDaEvento(evt){
+  const anim = evt.animation;
+  if(!anim) return [];
+  if(Array.isArray(anim.timeline)) return anim.timeline;
+  if(anim.clip) return [{ type:'clip', clipId: anim.clip }];
+  return [];
+}
+/* ---------- AnimationManager (vedi MATCH_VIEWER_DESIGN.md sez.8) ----------
+   Si limita a: ricevere una richiesta (enqueue), tenerla in coda, eseguirla (delegando
+   l'avanzamento alla Timeline dell'item corrente, senza sapere COSA fa una clip, solo che
+   restituisce un frame), notificare il completamento (onDone/whenDrained). Nessuna conoscenza di
+   easing/track/interpolazione: quella logica vive interamente in AnimationLibrary. Il followup
+   (es. goal_celebration dopo un gol) è solo dato informativo in questo step: essendo
+   "interruptible" per design, non deve mai bloccare onDone — verrà davvero eseguito solo quando
+   esisterà un PlayerRenderer capace di mostrarlo in parallelo, non prima. */
+function creaAnimationManager(){
+  return {
+    queue: [],
+    current: null,       // { evt, onDone, timeline }
+    paused: false,
+    // Mappa id→{x,y} di tutte le posizioni correnti sul campo, non solo palla+attore. 'ball' e
+    // 'actor' sono le due chiavi che il motore usa oggi (aggiornate dai campi frame.ballPos/
+    // frame.playerPos per non dover riscrivere le clip esistenti); una clip futura può aggiungere
+    // qualunque altra entità (es. 'gk') restituendo frame.entities:{gk:{...}} senza che questo
+    // manager o il renderer debbano conoscerne il nome in anticipo.
+    entities: {},
+    drainCallback: null,  // callback in attesa che la coda si svuoti (vedi whenDrained)
+    enqueue(evt, onDone){ this.queue.push({ evt, onDone: onDone || null }); },
+    isIdle(){ return !this.current && this.queue.length===0; },
+    pause(){ this.paused = true; },
+    resume(){ this.paused = false; },
+    // Gating: il motore chiama questo invece di procedere subito, per aspettare che l'animazione
+    // in corso (se c'è) finisca prima di mostrare l'esito/la prossima scelta. Se la coda è già
+    // vuota (nessuna clip da giocare per l'evento appena emesso, es. possesso/tackle nell'MVP) la
+    // callback parte subito, sincrona: nessun ritardo percepito quando non c'è nulla da animare.
+    whenDrained(fn){
+      if(this.isIdle()){ fn(); return; }
+      this.drainCallback = fn;
+    },
+    // Da chiamare da un ticker esterno (in futuro requestAnimationFrame/app.ticker) con i ms
+    // trascorsi dall'ultimo tick. Nessun timer interno: così è testabile a passi fissi.
+    tick(deltaMs){
+      if(this.paused) return;
+      if(!this.current){
+        const next = this.queue.shift();
+        if(!next) return;
+        const timeline = creaTimeline(timelineStepsDaEvento(next.evt));
+        this.current = Object.assign({ timeline }, next);
+        const startXY = next.evt.animation ? next.evt.animation.originXY : null;
+        this.entities = { ball: startXY, actor: startXY };
+      }
+      const cur = this.current;
+      const frame = cur.timeline.tick(deltaMs, cur.evt.animation) || {};
+      if(frame.ballPos) this.entities.ball = frame.ballPos;
+      this.entities.actor = frame.playerPos || this.entities.ball;
+      if(frame.entities) Object.assign(this.entities, frame.entities);
+      if(cur.timeline.isDone()){
+        this.current = null;
+        if(cur.onDone) cur.onDone(cur.evt);
+        // Notifica il gating PRIMA di accodare il followup: il followup (es. goal_celebration)
+        // è dichiaratamente "interruptible" e non deve mai ritardare la riapertura delle scelte
+        // — gira dopo, non prima, di whenDrained().
+        if(this.isIdle() && this.drainCallback){ const fn = this.drainCallback; this.drainCallback = null; fn(); }
+        const followupId = cur.evt.animation && cur.evt.animation.followup;
+        if(followupId && AnimationLibrary.get(followupId)){
+          const anim = cur.evt.animation;
+          this.enqueue({ animation: { clip: followupId, originXY: anim.destinationXY || anim.originXY, destinationXY: null } });
+        }
+      }
+    }
+  };
+}
+/* ---------- CameraManager / FieldRenderer / BallRenderer / PlayerRenderer (vedi sez.9) ----------
+   Primo canvas reale, ora diviso per responsabilità: CameraManager è l'UNICO punto che converte
+   coordinate normalizzate in pixel (in Godot diventerebbe l'unico punto da riscrivere); Field/Ball/
+   PlayerRenderer disegnano solo quello che gli viene passato, zero logica di gioco. Tutto quello
+   che sta sopra (motore, emitMatchEvent, EventInterpreter, AnimationManager) resta identico e
+   continua a funzionare da solo (bot compreso) se questo blocco non esiste o fallisce: nessuna
+   funzione qui sotto è chiamata da codice non-grafico, e ogni accesso al canvas è protetto da
+   `typeof requestAnimationFrame==='function'` — in Node (bot) quel controllo è sempre falso, quindi
+   il bot non tocca mai canvas/getContext (che nel suo DOM finto non esistono).
+   Semplificazione dichiarata per l'MVP: non esiste ancora una posizione separata per il giocatore
+   rispetto alla palla — PlayerRenderer disegna nella stessa posizione interpolata della palla.
+   Corretto per pass/tiro (il protagonista è dove calcia), da raffinare quando servirà mostrare
+   anche chi riceve mentre la palla è ancora in volo. */
+let matchAnimMgr = null;
+let matchCanvasRafId = null;
+const CameraManager = {
+  // Stato interno per una futura telecamera dinamica (seguire la palla, zoom in area): finché
+  // zoom resta 1 il risultato di toPixel() è identico a prima, qualunque sia target — nessun
+  // cambiamento visivo oggi. setTarget/setZoom non sono ancora chiamati da nessun ticker: sono
+  // il punto d'innesto per quando servirà, senza toccare toPixel() né i suoi chiamanti.
+  state: { zoom: 1, target: { x:0.5, y:0.5 } },
+  setTarget(xy){ if(xy) this.state.target = xy; },
+  setZoom(z){ this.state.zoom = z > 0 ? z : 1; },
+  toPixel(xy, w, h){
+    const margin = 10;
+    const z = this.state.zoom;
+    const t = this.state.target;
+    const nx = t.x + (xy.x - t.x)/z;
+    const ny = t.y + (xy.y - t.y)/z;
+    return { x: margin + nx*(w-2*margin), y: margin + ny*(h-2*margin) };
+  }
+};
+const FieldRenderer = {
+  draw(ctx, w, h){
+    ctx.fillStyle = '#1c6b3a'; ctx.fillRect(0,0,w,h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 2;
+    const m = 10;
+    ctx.strokeRect(m, m, w-2*m, h-2*m);
+    ctx.beginPath(); ctx.moveTo(w/2, m); ctx.lineTo(w/2, h-m); ctx.stroke();
+    ctx.beginPath(); ctx.arc(w/2, h/2, Math.min(w,h)*0.12, 0, Math.PI*2); ctx.stroke();
+    const boxW = (w-2*m)*0.16, boxH = (h-2*m)*0.6, boxY = m + (h-2*m-boxH)/2;
+    ctx.strokeRect(m, boxY, boxW, boxH);
+    ctx.strokeRect(w-m-boxW, boxY, boxW, boxH);
+  }
+};
+function disegnaPallino(ctx, xy, w, h, colore, raggio, etichetta){
+  if(!xy) return;
+  const p = CameraManager.toPixel(xy, w, h);
+  ctx.beginPath(); ctx.arc(p.x, p.y, raggio, 0, Math.PI*2);
+  ctx.fillStyle = colore; ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1; ctx.stroke();
+  if(etichetta){
+    ctx.fillStyle = '#fff'; ctx.font = '9px Inter, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(etichetta, p.x, p.y - raggio - 3);
+  }
+}
+const BallRenderer = {
+  draw(ctx, xy, w, h){ disegnaPallino(ctx, xy, w, h, '#fff', 5, null); }
+};
+const PlayerRenderer = {
+  draw(ctx, xy, w, h, etichetta){ disegnaPallino(ctx, xy, w, h, '#2f7ddb', 9, etichetta); }
+};
+function renderMatchCanvas(){
+  const canvas = document.getElementById('matchCanvas');
+  if(!canvas || !canvas.getContext) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  FieldRenderer.draw(ctx, w, h);
+  const mgr = matchAnimMgr;
+  const entities = mgr && mgr.entities ? mgr.entities : {};
+  const ballPos = entities.ball || { x:0.5, y:0.5 };
+  const evt = mgr && mgr.current ? mgr.current.evt : null;
+  // Tutte le entità "giocatore" (oggi solo 'actor', in futuro anche altre, es. 'gk') disegnate
+  // prima, sotto; la palla sopra per ultima — a parità di coordinate resterebbe altrimenti
+  // nascosta dal cerchio più grande del giocatore. Iterare le chiavi di `entities` invece di
+  // leggere un singolo campo fisso è ciò che permette a una clip futura di aggiungere un'altra
+  // entità visibile senza toccare questa funzione.
+  Object.keys(entities).forEach(id=>{
+    if(id==='ball') return;
+    const pos = entities[id];
+    if(!pos) return;
+    const etichetta = id==='actor' ? (evt && evt.actor ? evt.actor.name.split(' ')[0] : state.name.split(' ')[0]) : null;
+    PlayerRenderer.draw(ctx, pos, w, h, etichetta);
+  });
+  BallRenderer.draw(ctx, ballPos, w, h);
+}
+function avviaCanvasPartita(){
+  if(typeof requestAnimationFrame !== 'function') return; // Node/bot: nessun canvas, mai toccato
+  matchAnimMgr = creaAnimationManager();
+  if(matchCanvasRafId) cancelAnimationFrame(matchCanvasRafId);
+  let ultimoTs = null;
+  function frame(ts){
+    if(document.getElementById('screen-match').classList.contains('active')){
+      if(ultimoTs!==null) matchAnimMgr.tick(ts-ultimoTs);
+      ultimoTs = ts;
+      renderMatchCanvas();
+    } else { ultimoTs = null; }
+    matchCanvasRafId = requestAnimationFrame(frame);
+  }
+  matchCanvasRafId = requestAnimationFrame(frame);
+}
+function fermaCanvasPartita(){
+  if(typeof cancelAnimationFrame === 'function' && matchCanvasRafId) cancelAnimationFrame(matchCanvasRafId);
+  matchCanvasRafId = null; matchAnimMgr = null;
 }
 const MOMENTS = [
   { testo:(opp)=>`Ricevi palla al limite dell'area di ${opp.nome}.`, choices:[
@@ -4535,6 +5130,76 @@ const MATCH_EVENTS = [
       {label:"Batti i pugni a terra, vuoi rifarti subito", applica:s=>{ s.personalita.individualista++; s.forma=clamp(s.forma+1,0,100); s.morale=clamp(s.morale-2,0,100); }, esito:"La rabbia ti tiene concentrato, ma un po' teso."},
       {label:"Chiami i difensori a stringersi vicino a te", applica:s=>{ s.personalita.trascinatore++; s.relazioni.compagni=clamp(s.relazioni.compagni+3,0,100); }, esito:"Il reparto arretrato si compatta intorno a te."}
     ]},
+  // --- Eventi di colore TACTICAL/PHYSICAL/PROVINCIAL_LIFE (vedi TODO aperti in RIEPILOGO.md): le
+  // tre categorie previste dal brief narrativo originario ma mai popolate. Stesso motore
+  // MATCH_EVENTS/pickMatchEvent di tutti gli eventi sopra, applica/esito diretto su stato già
+  // esistente (forma/energia/morale/reputazione/relazioni.mister/compagni/personalita), come
+  // ENVIRONMENTAL/TEAM/PSYCHOLOGICAL già in questo file — nessuna nuova meccanica, nessun sistema
+  // meteo/pubblico persistente: sono intermezzi narrativi con un piccolo trade-off, non uno stato
+  // che si accumula partita dopo partita. terzo_tempo usa un trigger nuovo, 'match_end', agganciato
+  // in finishMatch() esattamente come 'match_start' lo è in beginMatch() — stesso pattern, un solo
+  // punto nuovo nel motore.
+  { id:'campo_pesante', category:'PHYSICAL', trigger:'match_start', weight:0.22, cooldown:5,
+    testo:"Il terreno è pesante per la pioggia dei giorni scorsi: la palla rallenta e le gambe si affaticano prima del previsto.",
+    scelte:[
+      {label:"Giochi più diretto per accorciare i tempi", applica:s=>{ s.forma=clamp(s.forma-2,0,100); s.personalita.individualista++; }, esito:"Rinunci alla costruzione, punti dritto in avanti fin dai primi minuti."},
+      {label:"Gestisci l'energia con ordine", applica:s=>{ s.forma=clamp(s.forma+1,0,100); s.personalita.ragionatore++; }, esito:"Dosi le forze: sai che il campo pesante si farà sentire nel finale."}
+    ]},
+  { id:'pioggia_battente', category:'PHYSICAL', trigger:'match_start', weight:0.18, cooldown:6,
+    testo:"Piove forte fin dal fischio d'inizio: la visibilità è ridotta e il pallone scivola sull'erba bagnata.",
+    scelte:[
+      {label:"Resti concentrato, ignori il meteo", applica:s=>{ s.morale=clamp(s.morale+1,0,100); s.personalita.ragionatore++; }, esito:"Non ti fai distrarre dalle condizioni, la testa resta sulla partita."},
+      {label:"Ti lasci innervosire dal maltempo", applica:s=>{ s.morale=clamp(s.morale-3,0,100); }, esito:"Il nervosismo per la pioggia si fa sentire nei primi minuti."}
+    ]},
+  { id:'freddo_intenso', category:'PHYSICAL', trigger:'match_start', weight:0.18, cooldown:6,
+    testo:"Fa un freddo pungente: i muscoli faticano a scaldarsi anche dopo il riscaldamento.",
+    scelte:[
+      {label:"Ti scaldi con qualche movimento extra", applica:s=>{ s.forma=clamp(s.forma+2,0,100); s.energia=clamp(s.energia-3,0,100); }, esito:"Qualche scatto in più prima del fischio e i muscoli rispondono meglio."},
+      {label:"Risparmi energie, ti scaldi in corsa", applica:s=>{ s.energia=clamp(s.energia+2,0,100); }, esito:"Preferisci non sprecare energie: ci penserà la partita a scaldarti."}
+    ]},
+  { id:'pubblico_avversario', category:'PROVINCIAL_LIFE', trigger:'match_start', weight:0.22, cooldown:5,
+    testo:"Gli spalti avversari sono già caldi: qualche fischio ti accoglie appena tocchi il primo pallone.",
+    scelte:[
+      {label:"Rispondi zittendo il pubblico con una giocata", applica:s=>{ s.morale=clamp(s.morale+2,0,100); s.personalita.individualista++; }, esito:"Provi a mettere subito a tacere gli spalti con i piedi."},
+      {label:"Non dai peso ai cori, resti concentrato", applica:s=>{ s.personalita.ragionatore++; }, esito:"Lasci correre, non è la prima trasferta difficile della carriera."}
+    ]},
+  { id:'borracce_dimenticate', category:'PROVINCIAL_LIFE', trigger:'match_start', weight:0.14, cooldown:8,
+    testo:"Il magazziniere si accorge solo ora di aver dimenticato le borracce negli spogliatoi: caos prima del fischio d'inizio.",
+    scelte:[
+      {label:"Vai tu stesso a recuperarle di corsa", applica:s=>{ s.relazioni.compagni=clamp(s.relazioni.compagni+3,0,100); s.energia=clamp(s.energia-3,0,100); s.personalita.trascinatore++; }, esito:"Torni giusto in tempo, la squadra apprezza il gesto."},
+      {label:"Lasci che se ne occupi qualcun altro", applica:s=>{ s.personalita.ragionatore++; }, esito:"Non è un tuo problema: ti concentri sul riscaldamento."}
+    ]},
+  { id:'presidente_bordocampo', category:'PROVINCIAL_LIFE', trigger:'match_start', weight:0.18, cooldown:6,
+    testo:"Il presidente del club si è presentato a bordocampo per l'occasione: ti osserva con attenzione dalla panchina.",
+    scelte:[
+      {label:"Ti carichi per l'occasione", applica:s=>{ s.morale=clamp(s.morale+3,0,100); s.reputazione=clamp(s.reputazione+1,0,100); s.personalita.individualista++; }, esito:"Sentire che qualcuno di importante ti guarda ti dà una scarica in più."},
+      {label:"Provi a ignorarlo, giochi come sempre", applica:s=>{ s.personalita.ragionatore++; }, esito:"Non cambi routine per nessuno, nemmeno per il presidente."}
+    ]},
+  { id:'cambio_modulo', category:'TACTICAL', trigger:'team_losing', weight:0.3, cooldown:5,
+    testo:"Il mister urla dalla panchina un cambio di modulo per provare a riaprire la partita.",
+    scelte:[
+      {label:"Ti adatti subito alle nuove indicazioni", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister+3,0,100); s.personalita.ragionatore++; }, esito:"Recepisci il cambio e ti muovi come richiesto."},
+      {label:"Continui a interpretarla a modo tuo", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister-3,0,100); s.personalita.individualista++; }, esito:"Il mister nota che non hai seguito le indicazioni."}
+    ]},
+  { id:'marcatura_a_uomo', category:'TACTICAL', trigger:'team_winning', weight:0.3, cooldown:5,
+    conditions: s=>s.role!=='Portiere',
+    testo:"Il mister ti chiede di marcare a uomo il giocatore avversario più pericoloso, per blindare il vantaggio.",
+    scelte:[
+      {label:"Segui l'indicazione alla lettera", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister+3,0,100); s.personalita.ragionatore++; }, esito:"Ti applichi sul compito difensivo assegnato."},
+      {label:"Preferisci restare libero di attaccare", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister-2,0,100); s.personalita.individualista++; }, esito:"Ignori parzialmente la richiesta, preferisci badare al tuo gioco."}
+    ]},
+  { id:'pressing_alto_ordine', category:'TACTICAL', trigger:'team_drawing', weight:0.3, cooldown:5,
+    testo:"Il mister chiede di alzare il pressing per provare a sbloccarla.",
+    scelte:[
+      {label:"Ti butti nel pressing con convinzione", applica:s=>{ s.energia=clamp(s.energia-3,0,100); s.relazioni.mister=clamp(s.relazioni.mister+2,0,100); s.personalita.trascinatore++; }, esito:"Alzi il ritmo insieme alla squadra, si sente la spinta."},
+      {label:"Gestisci le energie, non affondi il colpo", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister-2,0,100); s.personalita.ragionatore++; }, esito:"Preferisci non strafare, il mister avrebbe voluto di più."}
+    ]},
+  { id:'terzo_tempo', category:'PROVINCIAL_LIFE', trigger:'match_end', weight:0.3, cooldown:5,
+    testo:"Dopo il triplice fischio, le due squadre si ritrovano per il terzo tempo: panini e bibite nello spogliatoio comune.",
+    scelte:[
+      {label:"Ti fermi a socializzare con gli avversari", applica:s=>{ s.reputazione=clamp(s.reputazione+2,0,100); s.morale=clamp(s.morale+2,0,100); s.personalita.trascinatore++; }, esito:"Scambi due parole con gli avversari, il clima è disteso."},
+      {label:"Saluti in fretta e vai via", applica:s=>{ s.energia=clamp(s.energia+2,0,100); s.personalita.ragionatore++; }, esito:"Non hai voglia di trattenerti oltre, preferisci tornare a casa."}
+    ]},
 ];
 function pickMatchEvent(triggersAttivi, ctx){
   const eligible = MATCH_EVENTS.filter(ev=>{
@@ -4647,25 +5312,38 @@ function pescaCompagno(primo, secondo, pesoPrimo){
 }
 function applyChoiceOutcome(choice, success){
   const m = state.matchTemp;
+  const zona = ZONE_DEFAULT_PER_OUT[choice.out] || { origin:'midfield_center', destination:null };
   if(success){
-    if(choice.out==='goal'){ m.myGoals++; m.myPlayerGoals++; addLog(`GOL! ${state.name} la mette dentro!`, true); }
+    if(choice.out==='goal'){ m.myGoals++; m.myPlayerGoals++; const txt=`GOL! ${state.name} la mette dentro!`; addLog(txt, true);
+      emitMatchEvent({ type:'shot', outcome:'goal', success:true, risk:choice.risk, origin:zona.origin, destination:zona.destination,
+        actor:{role:'self', name:state.name, team:'home'}, text:txt }); }
     else if(choice.out==='assist'){ m.myGoals++; m.myPlayerAssists++;
       const beneficiario = pescaCompagno(m.compagni.attacco, m.compagni.centrocampo, 0.6);
-      addLog(`Assist perfetto di ${state.name} per ${beneficiario.nome}, che non sbaglia: gol della squadra!`, true);
+      const txt = `Assist perfetto di ${state.name} per ${beneficiario.nome}, che non sbaglia: gol della squadra!`;
+      addLog(txt, true);
       const idAtt = idPersonaCompagno(beneficiario.nome, teamName());
       registraPersona(idAtt, { nome:beneficiario.nome, ruolo:'compagno' });
-      registraEventoPersona(idAtt, { tipo:'assist', testo:`Gli fai un assist decisivo contro ${m.opp.nome}.`, impatto:2 }); }
+      registraEventoPersona(idAtt, { tipo:'assist', testo:`Gli fai un assist decisivo contro ${m.opp.nome}.`, impatto:2 });
+      emitMatchEvent({ type: choice.risk==='high' ? 'pass_long' : 'pass_short', outcome:'goal', success:true, risk:choice.risk,
+        origin:zona.origin, destination:zona.destination,
+        actor:{role:'self', name:state.name, team:'home'}, target:{role:'teammate', name:beneficiario.nome, team:'home'}, text:txt }); }
     else if(choice.out==='recupero'){
       const compagnoDif = pescaCompagno(m.compagni.difesa, m.compagni.portiere, 0.7);
-      addLog(`Ottimo intervento difensivo di ${state.name}, chiudi lo spazio insieme a ${compagnoDif.nome}.`, true);
+      const txt = `Ottimo intervento difensivo di ${state.name}, chiudi lo spazio insieme a ${compagnoDif.nome}.`;
+      addLog(txt, true);
       const idDif = idPersonaCompagno(compagnoDif.nome, teamName());
       registraPersona(idDif, { nome:compagnoDif.nome, ruolo:'compagno' });
-      registraEventoPersona(idDif, { tipo:'recupero', testo:`Chiudete insieme un'azione pericolosa di ${m.opp.nome}.`, impatto:1 }); }
-    else { addLog(`Giocata pulita di ${state.name}, l'azione continua con ordine.`, false); }
+      registraEventoPersona(idDif, { tipo:'recupero', testo:`Chiudete insieme un'azione pericolosa di ${m.opp.nome}.`, impatto:1 });
+      emitMatchEvent({ type:'tackle', outcome:'won', success:true, risk:choice.risk, origin:zona.origin,
+        actor:{role:'self', name:state.name, team:'home'}, target:{role:'teammate', name:compagnoDif.nome, team:'home'}, text:txt }); }
+    else { const txt = `Giocata pulita di ${state.name}, l'azione continua con ordine.`; addLog(txt, false);
+      emitMatchEvent({ type:'possession', outcome:'kept', success:true, risk:choice.risk, origin:zona.origin,
+        actor:{role:'self', name:state.name, team:'home'}, text:txt }); }
   } else {
     if(choice.risk==='high'){
       m.highRiskFails++;
-      if(Math.random()<0.4){ m.oppGoals++; addLog(`Palla persa in una zona pericolosa: ${m.opp.nome} ne approfitta e segna.`, true);
+      if(Math.random()<0.4){ m.oppGoals++; const txt = `Palla persa in una zona pericolosa: ${m.opp.nome} ne approfitta e segna.`;
+        addLog(txt, true);
         // Un pallone regalato in una zona pericolosa incrina un po' la fiducia di chi doveva
         // ripulire quella situazione: primo caso di affinità che scende per una tua scelta,
         // non solo per eventi RELATIONSHIP dedicati.
@@ -4673,23 +5351,42 @@ function applyChoiceOutcome(choice, success){
         const idDel = idPersonaCompagno(deluso.nome, teamName());
         registraPersona(idDel, { nome:deluso.nome, ruolo:'compagno' });
         registraEventoPersona(idDel, { tipo:'delusione', testo:`Subite gol dopo un pallone perso da te in una zona pericolosa.`, impatto:-3 });
+        emitMatchEvent({ type:'turnover', outcome:'goal_conceded', success:false, risk:choice.risk, origin:zona.origin,
+          actor:{role:'self', name:state.name, team:'home'}, target:{role:'opponent', name:m.opp.nome, team:'away'}, text:txt });
       }
-      else { addLog(`Scelta non riuscita, ${m.opp.nome} riorganizza la propria difesa.`, false); }
+      else { const txt = `Scelta non riuscita, ${m.opp.nome} riorganizza la propria difesa.`; addLog(txt, false);
+        emitMatchEvent({ type: choice.out==='recupero' ? 'tackle' : (choice.out==='goal' ? 'shot' : 'possession'),
+          outcome: choice.out==='recupero' ? 'lost' : (choice.out==='goal' ? 'off_target' : 'lost'),
+          success:false, risk:choice.risk, origin:zona.origin, destination: choice.out==='goal' ? 'goal_line_wide' : null,
+          actor:{role:'self', name:state.name, team:'home'}, text:txt }); }
       // Il cartellino rosso prima poteva scattare dopo QUALSIASI scelta ad alto rischio fallita,
       // anche un tiro o un dribbling: non aveva senso (un tiro alto non è un fallo). Ora scatta
       // solo se la scelta fallita era un contrasto fisico (out:'recupero'), l'unico tipo di
       // scelta che nel testo del gioco parla esplicitamente di "rischiare il cartellino" — è
       // quindi sempre conseguenza diretta di una scelta del giocatore, mai un evento a sé.
-      if(choice.out==='recupero' && !m.cartellinoRosso && Math.random()<0.15){ m.cartellinoRosso = true; addLog(`Intervento troppo duro: l'arbitro estrae il cartellino rosso per ${state.name}! Salterà la prossima gara.`, true); }
-    } else { addLog(`Scelta non riuscita, ${m.opp.nome} riorganizza la propria difesa.`, false); }
+      if(choice.out==='recupero' && !m.cartellinoRosso && Math.random()<0.15){ m.cartellinoRosso = true;
+        const txt = `Intervento troppo duro: l'arbitro estrae il cartellino rosso per ${state.name}! Salterà la prossima gara.`;
+        addLog(txt, true);
+        emitMatchEvent({ type:'card', involvesCard:'red', success:false, origin:zona.origin,
+          actor:{role:'self', name:state.name, team:'home'}, text:txt }); }
+    } else { const txt = `Scelta non riuscita, ${m.opp.nome} riorganizza la propria difesa.`; addLog(txt, false);
+      emitMatchEvent({ type: choice.out==='goal' ? 'shot' : 'possession', outcome: choice.out==='goal' ? 'off_target' : 'lost',
+        success:false, risk:choice.risk, origin:zona.origin, destination: choice.out==='goal' ? 'goal_line_wide' : null,
+        actor:{role:'self', name:state.name, team:'home'}, text:txt }); }
   }
   document.getElementById('matchScore').textContent = `${m.myGoals} - ${m.oppGoals}`;
 }
 function resolveChoice(choice, chance){
   const m = state.matchTemp; m.attempts++;
+  // Svuota subito le scelte cliccabili: senza questo, durante l'attesa dell'animazione (sotto)
+  // le vecchie choice-card restano nel DOM con l'onclick ancora attivo e un doppio click
+  // rilancerebbe resolveChoice() una seconda volta sullo stesso momento.
+  document.getElementById('matchAction').innerHTML = '';
   const success = rand(1,100) <= chance;
   if(success) m.successes++;
+  const oppGoalsPrima = m.oppGoals;
   applyChoiceOutcome(choice, success);
+  const golSubitoOra = m.oppGoals > oppGoalsPrima;
   const trattoMomento = PERSONALITA_OUT_MAP[choice.out];
   if(trattoMomento) state.personalita[trattoMomento]++;
   if(success) m.consecutiveFails = 0; else m.consecutiveFails = (m.consecutiveFails||0)+1;
@@ -4707,7 +5404,10 @@ function resolveChoice(choice, chance){
     // Contrasto fisico fallito (out:'recupero', risk:'high'): l'unico tipo di scelta a cui il
     // gioco associa esplicitamente un rischio disciplinare (vedi applyChoiceOutcome). Da qui
     // scatta l'evento dell'arbitro, invece che a caso in base al risultato della partita.
-    if(choice.out==='recupero' && choice.risk==='high') triggersAttivi.push('after_foul_risk');
+    // Esclude il caso in cui la stessa palla persa sia già finita in gol avversario: un'azione
+    // non può essere insieme "palla persa, gol subito in ripartenza" e "arbitro ferma il gioco
+    // per un fallo sullo stesso contatto" (sequenza contraddittoria segnalata dall'utente).
+    if(choice.out==='recupero' && choice.risk==='high' && !golSubitoOra) triggersAttivi.push('after_foul_risk');
   }
   if(m.cartellinoRosso && !m.cartellinoEventoUsato){ triggersAttivi.push('after_yellow_card'); m.cartellinoEventoUsato = true; }
   if(m.myGoals>m.oppGoals) triggersAttivi.push('team_winning');
@@ -4715,11 +5415,22 @@ function resolveChoice(choice, chance){
   else triggersAttivi.push('team_drawing');
 
   const ev = pickMatchEvent(triggersAttivi, m);
-  if(ev){
-    showMatchEvent(ev, ()=>nextMoment());
-  } else {
-    document.getElementById('matchAction').innerHTML = '<div class="btn ghost" role="button" tabindex="0" onclick="nextMoment()" style="text-align:center; cursor:pointer;">Continua ▸</div>';
+  if(ev && ev.id==='errore_arbitrale'){
+    emitMatchEvent({ type:'foul', success:false, origin:'midfield_center',
+      actor:{role:'self', name:state.name, team:'home'}, text: typeof ev.testo==='function' ? ev.testo(m.opp) : ev.testo });
   }
+  // Gating: mostrare l'esito/la prossima scelta solo quando l'animazione dell'evento appena
+  // emesso (se ne ha una) è finita — così il ritmo delle scelte è sincronizzato con quello che si
+  // vede sul campo. Se matchAnimMgr non esiste (bot Node) o la coda è già vuota (evento senza
+  // clip nell'MVP), whenDrained() esegue subito, sincrono: nessun ritardo percepito.
+  const mostraEsito = ()=>{
+    if(ev){
+      showMatchEvent(ev, ()=>nextMoment());
+    } else {
+      document.getElementById('matchAction').innerHTML = '<div class="btn ghost" role="button" tabindex="0" onclick="nextMoment()" style="text-align:center; cursor:pointer;">Continua ▸</div>';
+    }
+  };
+  if(matchAnimMgr) matchAnimMgr.whenDrained(mostraEsito); else mostraEsito();
 }
 function finishMatch(){
   const m = state.matchTemp;
@@ -4735,6 +5446,8 @@ function finishMatch(){
   m.myGoals += myExtra; m.oppGoals += oppExtra;
   addLog(`Triplice fischio: ${teamName()} ${m.myGoals} - ${m.oppGoals} ${m.opp.nome}.`, true);
   document.getElementById('matchScore').textContent = `${m.myGoals} - ${m.oppGoals}`;
+  emitMatchEvent({ type:'whistle', outcome:'full_time', actor:{role:'self', name:state.name, team:'home'} });
+  fermaCanvasPartita();
 
   const successRate = m.attempts? m.successes/m.attempts : 0.5;
   // Prima il voto partiva da una base già "sufficiente" (5.5) ed era quasi impossibile scendere
@@ -4763,6 +5476,7 @@ function finishMatch(){
     state.infortunio = {tipo, giornateRestanti: giornate};
     m.infortunioEsito = `Infortunio (${tipo}): fuori per ${giornate} giornata/e.`;
     addDiario(`${m.contesto==='coppa'?'Coppa Leonessa':'G'+state.giornata}: infortunio ${tipo}, stop di ${giornate} giornata/e.`);
+    emitMatchEvent({ type:'injury', involvesInjury:true, actor:{role:'self', name:state.name, team:'home'}, text:m.infortunioEsito });
   }
   if(m.cartellinoRosso){
     state.squalifica += 1; state.cartelliniStagione += 1; state.reputazione = clamp(state.reputazione-4,0,100);
@@ -4770,7 +5484,7 @@ function finishMatch(){
   }
 
   const prefissoDiario = m.contesto==='coppa' ? 'Coppa Leonessa' : `G${state.giornata}`;
-  if(m.contesto==='coppa'){ applyResultToCoppaGirone(m.opp.nome, m.myGoals, m.oppGoals); }
+  if(m.contesto==='coppa'){ applyResultToCoppa(m.opp.nome, m.myGoals, m.oppGoals); }
   else { applyResultToClassifica(m.opp.nome, m.myGoals, m.oppGoals); }
   registraPartita({opp: m.opp.nome, mieiGol: m.myGoals, oppGol: m.oppGoals, playerGol: m.myPlayerGoals, playerAssist: m.myPlayerAssists, voto: rating, contesto: m.contesto});
   addDiario(`${prefissoDiario}: ${teamName()} ${m.myGoals}-${m.oppGoals} ${m.opp.nome}${m.myPlayerGoals?` (tu: ${m.myPlayerGoals} gol)`:''}${m.myPlayerAssists?` (${m.myPlayerAssists} assist)`:''}.`);
@@ -4794,10 +5508,30 @@ function finishMatch(){
   }
   state.matchTemp.esitoFinale = esito;
   save();
-  setTimeout(()=> showScreen('result'), 200);
+  // Evento di partita opzionale a fine gara (match_end), stesso pattern di 'match_start' in
+  // beginMatch(): non blocca mai il flusso, è solo un intermezzo prima della schermata risultato.
+  // La schermata 'match' è ancora attiva a questo punto (showScreen('result') non ancora chiamata),
+  // quindi showMatchEvent() può ancora scrivere in #matchAction.
+  const evEnd = pickMatchEvent(['match_end'], m);
+  if(evEnd){ setTimeout(()=> showMatchEvent(evEnd, ()=> showScreen('result')), 200); }
+  else { setTimeout(()=> showScreen('result'), 200); }
+}
+// Percorso fisiologico legato all'età: nessuna curva nuova, riusa etaMultiplier() (già esistente
+// per il valore di mercato) anche per la velocità di crescita — stesso concetto di "giovane in
+// formazione → picco 24-29 → calo da 30 in su", una sola fonte di verità invece di due curve
+// scollegate. Sopra i 30 aggiunge anche un rischio di calo di un attributo casuale a ogni level up
+// (il fisico che comincia a cedere), crescente con l'età sulle stesse fasce di etaMultiplier.
+function probabilitaCaloAttributo(eta){
+  if(eta==null || eta<30) return 0;
+  if(eta<=32) return 0.10;
+  if(eta<=35) return 0.25;
+  return 0.40;
 }
 function addXP(amount){
-  state.xp += amount; const gained = [];
+  const eta = calcolaEta(state);
+  const multiplier = eta!=null ? etaMultiplier(eta) : 1;
+  state.xp += Math.round(amount * multiplier);
+  const gained = [];
   while(state.xp >= state.xpNext){
     state.xp -= state.xpNext; state.livello++;
     // Curva di livellaggio più ripida: 1.22 invece di 1.15, così l'XP richiesta ai livelli alti
@@ -4809,6 +5543,16 @@ function addXP(amount){
     const k = keys[rand(0,keys.length-1)] || attrKeys[0];
     state.attr[k] = clamp(state.attr[k]+2,0,99);
     gained.push(`Livello ${state.livello} raggiunto! ${attrLabels[k]} +2.`);
+
+    const probCalo = probabilitaCaloAttributo(eta);
+    if(probCalo>0 && Math.random()<probCalo){
+      const calabili = attrKeys.filter(k2=>state.attr[k2]>20);
+      if(calabili.length){
+        const kCalo = calabili[rand(0,calabili.length-1)];
+        state.attr[kCalo] = clamp(state.attr[kCalo]-1,0,99);
+        gained.push(`Il fisico comincia a farsi sentire: ${attrLabels[kCalo]} -1.`);
+      }
+    }
   }
   document.getElementById('levelUpCard').innerHTML = gained.length
     ? `<div class="card" style="border-color:var(--gold);"><div class="label" style="color:var(--gold);">Level up</div>` + gained.map(g=>`<div style="font-size:13px; margin-top:4px;">${g}</div>`).join('') + `</div>` : '';
@@ -4856,6 +5600,7 @@ function postGiornataFlow(ctx){
   payStipendio(ctx);
   applyLavoroSettimanale();
   applyRiflessoReputazioneSuRelazioni();
+  aggiornaInteresseClub();
   const giornataAppenaGiocata = state.giornata - 1;
   if(giornataAppenaGiocata>0 && giornataAppenaGiocata%4===0) applyPagamentoMensile();
   checkAchievements(); save();
@@ -4882,24 +5627,168 @@ function postGiornataFlow(ctx){
 }
 
 /* ---------- MERCATO INVERNALE ----------
-   A differenza del mercato estivo (iniziaFuoriStagione/avviaNuovaStagione), qui NON si tocca stagione,
-   giornata, calendario o classifica: è solo un intermezzo con allenamento supplementare e un
-   tentativo di rinnovo col club attuale. Niente trasferimenti: il calendario è costruito una
-   volta a stagione intorno alla squadra del giocatore, spostarlo a metà stagione richiederebbe
-   ricostruirlo e falserebbe classifica/risultati già giocati — semplificazione accettata. */
+   Prima era un intermezzo unico (un solo popup, niente offerte, niente trasferimenti): ora si
+   avanza settimana per settimana come il mercato estivo (stesso pattern offSeasonData/
+   avanzaSettimanaFuoriStagione, qui offSeasonInvernaleData/avanzaSettimanaInvernale), un sabato
+   alla volta dal 21 dicembre al 24 gennaio (finestraPausaInvernale). Ogni settimana: offerte reali
+   generate con la STESSA formula del mercato estivo (generaListaOfferte, legata al rendimento
+   stagionale — chi sta giocando bene riceve proposte, chi no quasi mai), rischio di restare "ai
+   margini" (riusa rischioPanchinaPerSkill, lo stesso segnale già usato per la panchina in
+   campionato) mostrato come evento narrativo (showEvent, stesso motore del resto del gioco), e la
+   possibilità di chiedere la rescissione (svincolo).
+   Un'offerta accettata è un trasferimento IMMEDIATO, non un precontratto per l'estate: il
+   giocatore passa subito al nuovo club (vedi trasferisciSubitoInvernale). Il vecchio limite
+   tecnico ("il calendario è costruito una volta a stagione") resta vero ma non blocca più nulla:
+   invece di ricostruire da zero l'intera stagione, si rigenera SOLO la parte di calendario/
+   classifica ancora da giocare per il nuovo club (stesso numero di partite residue di prima, per
+   non alterare la lunghezza della stagione), lasciando intatta la cronologia già giocata con la
+   vecchia squadra. Semplificazione dichiarata: la classifica del nuovo girone riparte da 0 punti
+   per tutte le squadre (non riflette i risultati reali già maturati dagli avversari fino a qui) —
+   stesso identico modo in cui buildTierSeason() genera SEMPRE una classifica nuova, qui applicato
+   a metà stagione invece che all'inizio. Lo svincolo resta un dispositivo narrativo/finanziario
+   temporaneo: se non arriva un trasferimento entro la fine della finestra, il club reintegra il
+   giocatore in rosa (a condizioni riviste) invece di lasciare lo stato rotto. */
 function apriMercatoInvernale(){
   state.mercatoInvernaleFatto = true;
+  const pausa = finestraPausaInvernale(state.stagione);
+  state.offSeasonInvernaleData = formatDataISO(pausa.inizio);
+  state.offerteInvernali = [];
+  state.svincolatoInvernale = false;
+  state.rinnovoInvernaleFatto = false;
+  state.allenamentoFattoInvernale = false; state.ultimoAllenamentoInvernale = null; state.allenamentoSnapshotInvernale = null;
   save();
-  renderMercatoInvernale();
-  showScreen('marketwinter');
+  aggiornaMercatoInvernale();
+}
+// Rischio di restare ai margini questa settimana: riusa lo stesso segnale già validato per la
+// panchina in campionato (rischioPanchinaPerSkill), più probabile se già in bilico, quasi certo se
+// il giocatore ha chiesto la rescissione (nessun club investe tempo su chi vuole andarsene).
+function chanceAiMarginiInvernale(){
+  if(state.svincolatoInvernale) return 1;
+  return rischioPanchinaPerSkill(state) > 0 ? 0.5 : 0.12;
+}
+function eventoAiMarginiInvernale(){
+  return { testo: state.svincolatoInvernale
+      ? "Senza un accordo per continuare, ti alleni ai margini del gruppo: il mister ti tiene fuori dai piani fino a quando la situazione non si chiarisce."
+      : "Il mister ti fa capire che nel girone di ritorno potresti trovare meno spazio del previsto.",
+    scelte:[
+      {label:"Lavori sodo per riconquistare spazio", applica:s=>{ s.forma=clamp(s.forma+2,0,100); s.morale=clamp(s.morale-1,0,100); s.personalita.ragionatore++; }, esito:"Ti alleni con più intensità per farti trovare pronto quando tornerai in campo."},
+      {label:"Chiedi spiegazioni al mister", applica:s=>{ s.relazioni.mister=clamp(s.relazioni.mister-2,0,100); s.personalita.individualista++; }, esito:"Il confronto è teso, ma almeno le cose sono dette chiaramente."}
+    ]};
+}
+function aggiornaMercatoInvernale(){
+  const pausa = finestraPausaInvernale(state.stagione);
+  const d = parseDataISO(state.offSeasonInvernaleData);
+  if(d.getTime() > pausa.fine.getTime()){
+    // Finestra chiusa: un eventuale svincolo non risolto si sistema in avviaNuovaStagione(). Si
+    // torna al normale flusso post-giornata che aveva aperto il mercato invernale.
+    renderHub(); showScreen('hub');
+    return;
+  }
+  aggiornaInteresseClub();
+  generateOffersInvernali();
+  save();
+  if(rand(1,100) <= Math.round(chanceAiMarginiInvernale()*100)){
+    showEvent(eventoAiMarginiInvernale(), ()=>{ renderMercatoInvernale(); showScreen('marketwinter'); });
+  } else {
+    renderMercatoInvernale();
+    showScreen('marketwinter');
+  }
+}
+function avanzaSettimanaInvernale(){
+  state.offSeasonInvernaleData = formatDataISO(aggiungiSettimana(parseDataISO(state.offSeasonInvernaleData)));
+  state.allenamentoFattoInvernale = false; state.ultimoAllenamentoInvernale = null; state.allenamentoSnapshotInvernale = null;
+  save();
+  aggiornaMercatoInvernale();
+}
+function negoziaOffertaInvernale(idx){
+  const o = state.offerteInvernali[idx];
+  if(o.rounds>=MAX_ROUND_NEGOZIAZIONE) return;
+  const r = esitoNegoziazione(o);
+  o.rounds++;
+  if(r.esito==='ritirata') state.offerteInvernali.splice(idx,1);
+  addDiario(r.messaggio);
+  save(); renderMercatoInvernale();
+}
+// Trasferimento immediato: stesso trattamento già usato per un'offerta estiva accettata (Coppa
+// Leonessa in corso chiusa, gruppo sociale principale retrocesso a secondario), più la parte nuova
+// specifica del mid-season — rigenerare solo la porzione di calendario/classifica ancora da
+// giocare, lasciando intatta la cronologia già maturata con la vecchia squadra.
+function trasferisciSubitoInvernale(o){
+  const vecchiaSquadra = teamName();
+  if(state.coppa || state.coppaTorneo){
+    state.coppa = null; state.coppaTorneo = null;
+    addDiario(`Il trasferimento a ${o.squadra} chiude anticipatamente il tuo percorso in Coppa Leonessa con ${vecchiaSquadra}.`);
+  }
+  if(state.gruppoSociale && state.gruppoSociale.principale){
+    if(!state.gruppoSociale.secondari.includes(state.gruppoSociale.principale)) state.gruppoSociale.secondari.push(state.gruppoSociale.principale);
+    state.gruppoSociale.principale = null;
+  }
+  const giornateGiaGiocate = state.giornata - 1;
+  const partiteResidueNecessarie = Math.max(0, state.calendario.length - giornateGiaGiocate);
+  const nuovaStagione = buildTierSeason(o.tier, o.squadra);
+  // Tante partite residue quante ne mancavano prima del trasferimento (stessa lunghezza di
+  // stagione), ripetendo il round-robin generato se il nuovo girone ha meno avversari del vecchio.
+  const fixtureResidue = [];
+  for(let i=0; i<partiteResidueNecessarie; i++) fixtureResidue.push(nuovaStagione.calendario[i % nuovaStagione.calendario.length]);
+  state.calendario = [...state.calendario.slice(0, giornateGiaGiocate), ...fixtureResidue];
+  state.classifica = nuovaStagione.classifica;
+  state.contratto = {squadra:o.squadra, stipendio:o.stipendio, stagioniResidue:o.durata};
+  state.lega = o.tier;
+  state.finanze.stipendio = o.stipendio;
+  state.svincolatoInvernale = false;
+  delete state.contratto.stipendioPreSvincolo;
+  addDiario(`Trasferimento immediato: firmi con ${o.squadra} (${LEAGUES[o.tier].label}) e passi subito al nuovo club, €${o.stipendio}/sett.`);
+}
+function accettaOffertaInvernale(idx){
+  const o = state.offerteInvernali[idx];
+  trasferisciSubitoInvernale(o);
+  state.offerteInvernali = [];
+  save(); renderMercatoInvernale();
+}
+function rifiutaOffertaInvernale(idx){ state.offerteInvernali.splice(idx,1); save(); renderMercatoInvernale(); }
+function chiediSvincoloInvernale(){
+  if(state.svincolatoInvernale) return;
+  state.svincolatoInvernale = true;
+  state.contratto.stipendioPreSvincolo = state.contratto.stipendio;
+  state.contratto.stipendio = 0;
+  state.finanze.stipendio = 0;
+  state.reputazione = clamp(state.reputazione-4,0,100);
+  state.relazioni.mister = clamp(state.relazioni.mister-6,0,100);
+  addDiario(`Chiedi la rescissione del contratto con ${teamName()}: resti svincolato, ti alleni a parte in attesa di una nuova sistemazione.`);
+  save(); renderMercatoInvernale();
 }
 function renderMercatoInvernale(){
   const pausa = finestraPausaInvernale(state.stagione);
-  document.getElementById('mwPauseLabel').textContent = `Pausa dal ${formattaDataIT(pausa.inizio)} al ${formattaDataIT(pausa.fine)}: una finestra per allenarti e provare a rinnovare le condizioni col club.`;
+  const dataCorrente = parseDataISO(state.offSeasonInvernaleData);
+  document.getElementById('mwPauseLabel').textContent = `Pausa dal ${formattaDataIT(pausa.inizio)} al ${formattaDataIT(pausa.fine)} · settimana del ${formattaDataIT(dataCorrente)}.`;
+  renderInteresseClub('mwInteresse');
   document.getElementById('mwTeam').textContent = teamName();
-  document.getElementById('mwContratto').textContent = `${LEAGUES[state.lega].label} · €${state.contratto.stipendio}/sett. · ${state.contratto.stagioniResidue} stagion${state.contratto.stagioniResidue>1?'i':'e'} residue`;
-  document.getElementById('btnRinnovoInvernale').disabled = state.rinnovoInvernaleFatto === true;
+  document.getElementById('mwContratto').textContent = state.svincolatoInvernale
+    ? `Svincolato · in attesa di una nuova sistemazione`
+    : `${LEAGUES[state.lega].label} · €${state.contratto.stipendio}/sett. · ${state.contratto.stagioniResidue} stagion${state.contratto.stagioniResidue>1?'i':'e'} residue`;
+  document.getElementById('btnRinnovoInvernale').disabled = state.rinnovoInvernaleFatto === true || state.svincolatoInvernale === true;
   document.getElementById('btnRinnovoInvernale').textContent = state.rinnovoInvernaleFatto ? 'Rinnovo già richiesto' : 'Chiedi un rinnovo al procuratore';
+  const btnSvincolo = document.getElementById('btnSvincoloInvernale');
+  btnSvincolo.disabled = state.svincolatoInvernale === true;
+  btnSvincolo.textContent = state.svincolatoInvernale ? 'Già svincolato' : 'Chiedi la rescissione del contratto';
+
+  const offerBox = document.getElementById('mwOffers'); offerBox.innerHTML = '';
+  if(!state.offerteInvernali.length){
+    offerBox.innerHTML = `<div class="card"><div class="subtle">Nessuna proposta questa settimana.</div></div>`;
+  } else {
+    state.offerteInvernali.forEach((o,idx)=>{
+      const el = document.createElement('div'); el.className = 'offer-card';
+      el.innerHTML = `
+        <div class="row"><div class="offer-team">${o.squadra}</div><div class="badge ${o.tier===state.lega?'blue':'gold'}">${LEAGUES[o.tier].label}</div></div>
+        <div class="offer-detail">€${o.stipendio}/sett. · contratto ${o.durata} stagion${o.durata>1?'i':'e'} · trasferimento immediato${o.rounds>0?` · trattativa ${o.rounds}/${MAX_ROUND_NEGOZIAZIONE}`:''}</div>
+        <div class="btn-row">
+          <button class="btn green small" onclick="accettaOffertaInvernale(${idx})">Firma e trasferisciti subito</button>
+          <button class="btn gold small" onclick="negoziaOffertaInvernale(${idx})" ${o.rounds>=MAX_ROUND_NEGOZIAZIONE?'disabled':''}>Tratta</button>
+          <button class="btn ghost small" onclick="rifiutaOffertaInvernale(${idx})">Rifiuta</button>
+        </div>`;
+      offerBox.appendChild(el);
+    });
+  }
 
   const trainBox = document.getElementById('mwTraining'); trainBox.innerHTML = '';
   if(state.allenamentoFattoInvernale){
@@ -4938,7 +5827,7 @@ function scegliAllenamentoInvernale(id){
   save(); renderMercatoInvernale();
 }
 function chiediRinnovoInvernale(){
-  if(state.rinnovoInvernaleFatto) return;
+  if(state.rinnovoInvernaleFatto || state.svincolatoInvernale) return;
   state.rinnovoInvernaleFatto = true;
   const chance = clamp(35 + (state.relazioni.procuratore-50)*0.5 + (state.reputazione-50)*0.3, 10, 75);
   if(rand(1,100) <= chance){
@@ -4951,9 +5840,6 @@ function chiediRinnovoInvernale(){
     addDiario(`${teamName()} non concede aumenti a gennaio: si continua con le condizioni attuali.`);
   }
   save(); renderMercatoInvernale();
-}
-function chiudiMercatoInvernale(){
-  renderHub(); showScreen('hub');
 }
 
 /* ---------- CLASSIFICA / CARRIERA ---------- */
@@ -5032,6 +5918,15 @@ function renderTabellaGirone(girone, mioTeam){
     girone.map((sq,i)=>`<tr${sq.nome===mioTeam?' class="me"':''}><td>${i+1}</td><td>${sq.nome}</td><td class="center">${sq.pt}</td><td class="center">${sq.g}</td><td class="center">${sq.gf-sq.gs}</td></tr>`).join('') +
     `</tbody></table>`;
 }
+function renderStoricoBracket(storico){
+  if(!storico || !storico.length) return '';
+  return `<div class="label" style="margin-top:14px;">Tabellone a eliminazione diretta</div>` +
+    storico.map(t=>{
+      const esito = t.vinta ? 'Vinta' : 'Persa';
+      const rig = t.rigori ? ` (rigori ${t.rigori.mieiGol}-${t.rigori.oppGol})` : '';
+      return `<div class="row" style="margin-bottom:4px;"><span class="subtle">${COPPA_BRACKET_LABEL[t.round]} vs ${t.opp}</span><span${t.vinta?' class="badge green"':' class="badge red"'}>${esito} ${t.mieiGol}-${t.oppGol}${rig}</span></div>`;
+    }).join('');
+}
 function renderCoppa(){
   const status = document.getElementById('coppaStatus');
   const content = document.getElementById('coppaContent');
@@ -5046,18 +5941,28 @@ function renderCoppa(){
 
   if(state.coppa){
     const prossimo = state.coppa.prossimi[0];
-    const numeroPartita = state.coppa.giocate.length + 1;
-    const totalePartite = state.coppa.giocate.length + state.coppa.prossimi.length;
-    status.textContent = (state.coppa.tipo === 'preliminare' ? 'Fase Preliminare' : 'Fase Principale') + ` — girone in corso (partita ${numeroPartita}/${totalePartite})`;
-    let html = (prossimo
-      ? `Prossimo avversario di girone: <b>${prossimo.nome}</b>. Si gioca dall'hub ("Scendi in campo" o "Simula partita").`
-      : 'Girone completato, risultato in fase di calcolo.');
-    if(state.coppa.tipo === 'principale'){
-      html += `<div class="label" style="margin-top:14px;">Fase Principale</div>` + renderTabellaGirone(ordinaGirone(state.coppa.girone), mioTeam);
-      const gironePrelim = state.coppaPrelim && trovaGironeSquadra(state.coppaPrelim.gironi, mioTeam);
-      html += sezionePreliminare(gironePrelim);
+    const bracket = COPPA_BRACKET_ROUNDS.includes(state.coppa.tipo);
+    let html;
+    if(bracket){
+      status.textContent = `${coppaFaseLabel(state.coppa.tipo)} — gara secca`;
+      html = (prossimo
+        ? `Avversario: <b>${prossimo.nome}</b>. Gara secca (pareggio → rigori), si gioca dall'hub ("Scendi in campo" o "Simula partita").`
+        : 'Partita completata, risultato in fase di calcolo.')
+        + renderStoricoBracket(state.coppaBracket && state.coppaBracket.storico);
     } else {
-      html += renderTabellaGirone(ordinaGirone(state.coppa.girone), mioTeam);
+      const numeroPartita = state.coppa.giocate.length + 1;
+      const totalePartite = state.coppa.giocate.length + state.coppa.prossimi.length;
+      status.textContent = coppaFaseLabel(state.coppa.tipo) + ` — girone in corso (partita ${numeroPartita}/${totalePartite})`;
+      html = (prossimo
+        ? `Prossimo avversario di girone: <b>${prossimo.nome}</b>. Si gioca dall'hub ("Scendi in campo" o "Simula partita").`
+        : 'Girone completato, risultato in fase di calcolo.');
+      if(state.coppa.tipo === 'principale'){
+        html += `<div class="label" style="margin-top:14px;">Fase Principale</div>` + renderTabellaGirone(ordinaGirone(state.coppa.girone), mioTeam);
+        const gironePrelim = state.coppaPrelim && trovaGironeSquadra(state.coppaPrelim.gironi, mioTeam);
+        html += sezionePreliminare(gironePrelim);
+      } else {
+        html += renderTabellaGirone(ordinaGirone(state.coppa.girone), mioTeam);
+      }
     }
     content.innerHTML = html;
     return;
@@ -5067,22 +5972,24 @@ function renderCoppa(){
 
   const t = state.coppaTorneo;
   const gironePrelim = state.coppaPrelim && trovaGironeSquadra(state.coppaPrelim.gironi, mioTeam);
+  const gironePrincipaleHtml = ()=> {
+    const gironePrincipale = trovaGironeSquadra(state.coppaPrincipale.gironi, mioTeam);
+    return `<div class="label" style="margin-top:14px;">Fase Principale</div>` + renderTabellaGirone(gironePrincipale, mioTeam) + sezionePreliminare(gironePrelim);
+  };
 
   if(t.fase === 'eliminato_preliminare'){
     status.textContent = 'Eliminato in fase preliminare';
     content.innerHTML = 'La tua squadra non ha superato il girone preliminare (passano i primi e le 47 migliori seconde).' + renderTabellaGirone(gironePrelim, mioTeam);
   } else if(t.fase === 'eliminato_principale'){
     status.textContent = 'Eliminato in Fase Principale';
-    const gironePrincipale = trovaGironeSquadra(state.coppaPrincipale.gironi, mioTeam);
-    content.innerHTML = 'La tua squadra ha superato la fase preliminare ma non il girone di Fase Principale (passano i primi e le 19 migliori seconde).'
-      + `<div class="label" style="margin-top:14px;">Fase Principale</div>` + renderTabellaGirone(gironePrincipale, mioTeam)
-      + sezionePreliminare(gironePrelim);
-  } else if(t.fase === 'trentaduesimi'){
-    status.textContent = 'Qualificato ai 32esimi di Coppa Leonessa!';
-    const gironePrincipale = trovaGironeSquadra(state.coppaPrincipale.gironi, mioTeam);
-    content.innerHTML = 'La tua squadra ha superato il girone di Fase Principale e accede ai 32esimi.'
-      + `<div class="label" style="margin-top:14px;">Fase Principale</div>` + renderTabellaGirone(gironePrincipale, mioTeam)
-      + sezionePreliminare(gironePrelim);
+    content.innerHTML = 'La tua squadra ha superato la fase preliminare ma non il girone di Fase Principale (passano i primi e le 19 migliori seconde).' + gironePrincipaleHtml();
+  } else if(t.fase === 'campione'){
+    status.textContent = '🏆 Campione di Coppa Leonessa!';
+    content.innerHTML = 'Hai vinto il tabellone a eliminazione diretta della Coppa Leonessa, dai 32esimi alla finale.' + renderStoricoBracket(t.percorsoBracket) + gironePrincipaleHtml();
+  } else if(t.fase && t.fase.startsWith('eliminato_') && COPPA_BRACKET_ROUNDS.includes(t.fase.slice('eliminato_'.length))){
+    const round = t.fase.slice('eliminato_'.length);
+    status.textContent = `Eliminato ${coppaEliminatoLabel(round)} di Coppa Leonessa`;
+    content.innerHTML = `La tua corsa nel tabellone a eliminazione diretta si ferma qui.` + renderStoricoBracket(t.percorsoBracket) + gironePrincipaleHtml();
   } else {
     status.textContent = 'Coppa Leonessa';
     content.innerHTML = '';
@@ -5094,34 +6001,55 @@ function renderCoppa(){
        leghe, "primi 2 su/ultimi 2 giù"). Ora rispecchia le regole CSI vere:
        - Serie C -> B: promuove solo le prime due del girone.
        - Serie A -> B: retrocedono solo le ultime due del girone.
-       - Serie B: promuovono il primo classificato di ogni girone + le 14 migliori seconde
-         (a livello di TUTTI i gironi B); retrocedono l'ultimo di ogni girone + le 14 peggiori
-         penultime. Dato che il motore segue solo il girone del giocatore (non l'intera Serie B),
-         l'appartenenza alle "migliori/peggiori 14" è approssimata in base al rendimento
-         (punti a partita) della propria stagione: più il rendimento è alto/basso, più
-         probabile è finire fra le squadre premiate/penalizzate a livello nazionale. --- */
+       - Serie B: promuovono il primo classificato di ogni girone + le 4 migliori seconde
+         (a livello di TUTTI i gironi B); retrocedono l'ultimo di ogni girone + le 4 peggiori
+         penultime. --- */
+// Simula gli altri gironi di Serie B (tutti tranne il proprio, che è quello davvero giocato dal
+// giocatore) per costruire la classifica nazionale di seconde/penultime — stesso motore già usato
+// per i gironi della Coppa Leonessa (creaSquadraCoppa/simulaGironeRoundRobin), nessun nuovo sistema.
+// I gironi B reali sono 8 da 14 squadre: 4 squadre del database (OSZ RONCO 2017, ATLETICO SAIANO,
+// USO MONTICELLI, TORRICELLA B) sono finite in due mini-gironi residuali ("Girone N"/"O", 3+1
+// squadre) per un limite dell'importazione dati, non gironi B veri — escluse qui (soglia sulla
+// dimensione, non i nomi, per non dipendere da lettere specifiche) invece che contate come se
+// fossero due gironi ufficiali in più.
+function simulaAltriGironiB(mioGirone){
+  const gironiMap = {};
+  Object.values(DB_SQUADRE).filter(sq => sq.serie==='B').forEach(sq=>{
+    (gironiMap[sq.girone] = gironiMap[sq.girone] || []).push(sq);
+  });
+  Object.keys(gironiMap).forEach(nome=>{ if(gironiMap[nome].length<10) delete gironiMap[nome]; });
+  delete gironiMap[mioGirone];
+  return Object.values(gironiMap).map(squadre => simulaGironeRoundRobin(squadre.map(creaSquadraCoppa)));
+}
 function calcolaEsitoStagione(){
   const pos = state.classifica.findIndex(t=>t.me)+1;
   const total = state.classifica.length;
-  const mieEntry = state.classifica.find(t=>t.me);
-  const puntiPartita = mieEntry.g ? mieEntry.pt/mieEntry.g : 0;
   let esito = 'confermato';
   if(state.lega==='C'){
     if(pos<=2) esito='promosso';
   } else if(state.lega==='A'){
     if(pos>=total-1) esito='retrocesso';
-  } else { // Serie B
-    if(pos===1) esito='promosso';
-    else if(pos===2){
-      const rendimento = clamp((puntiPartita-1.3)/1.2, 0, 1);
-      if(Math.random() < rendimento) esito='promosso';
-    }
-    if(esito==='confermato'){
-      if(pos===total) esito='retrocesso';
-      else if(pos===total-1){
-        const rendimento = clamp((1.3-puntiPartita)/1.2, 0, 1);
-        if(Math.random() < rendimento) esito='retrocesso';
-      }
+  } else if(pos===1){
+    esito='promosso';
+  } else if(pos===total){
+    esito='retrocesso';
+  } else if(pos===2 || pos===total-1){
+    // Confine fra promozione/retrocessione decisa dal rendimento: serve la classifica nazionale
+    // delle seconde/penultime di TUTTI i gironi B, quindi si simulano gli altri solo in questo
+    // caso (nessuno spreco quando la posizione è già inequivocabile).
+    const altriGironi = simulaAltriGironiB(getGironeSquadra(teamName()));
+    if(pos===2){
+      const mioSecondo = state.classifica[1];
+      const seconde = altriGironi.filter(g=>g.length>=2).map(g=>g[1]);
+      seconde.push(mioSecondo);
+      seconde.sort((x,y)=>(y.pt-x.pt)||((y.gf-y.gs)-(x.gf-x.gs)));
+      if(seconde.slice(0,4).includes(mioSecondo)) esito='promosso';
+    } else {
+      const mioPenultimo = state.classifica[total-2];
+      const penultime = altriGironi.filter(g=>g.length>=2).map(g=>g[g.length-2]);
+      penultime.push(mioPenultimo);
+      penultime.sort((x,y)=>(x.pt-y.pt)||((x.gf-x.gs)-(y.gf-y.gs)));
+      if(penultime.slice(0,4).includes(mioPenultimo)) esito='retrocesso';
     }
   }
   if(esito==='promosso'){ state.lega = nextTier(state.lega); state.promozioniCarriera++; }
@@ -5171,8 +6099,11 @@ function renderSeasonEnd(){
   else { badge.textContent = 'Confermato in categoria'; badge.className='badge gold'; card.className='card center-text'; }
 
   const coppaBanner = document.getElementById('coppaBanner');
+  // Questo banner (schermata fine-stagione) può mostrare solo gli esiti raggiungibili in modo
+  // sincrono da iniziaCoppaLeonessa() qui sopra (girone preliminare/principale appena costruiti):
+  // il tabellone a eliminazione diretta (32esimi in poi) si gioca in turni successivi dall'hub,
+  // quindi i suoi esiti (eliminato_trentaduesimi...campione) si vedono solo in screen-coppa.
   const COPPA_ESITI = {
-    trentaduesimi: { icon:'🏆', titolo:'Ai 32esimi di Coppa Leonessa!', sub:'Hai superato il girone di Fase Principale.' },
     eliminato_principale: { icon:'⚔️', titolo:'Coppa Leonessa: eliminato', sub:'Uscito nel girone di Fase Principale.' },
     eliminato_preliminare: { icon:'📋', titolo:'Coppa Leonessa: eliminato', sub:'Niente qualificazione dal girone preliminare.' }
   };
@@ -5238,28 +6169,102 @@ function generaNotiziaMercato(deadlineDay){
   const prefisso = deadlineDay ? '📅 Deadline Day — ' : '📰 ';
   addDiario(prefisso + rumor.testo(state));
 }
-function generateOffers(){
-  const avgVoto = state.stagioneStats.voti.length ? state.stagioneStats.voti.reduce((a,b)=>a+b,0)/state.stagioneStats.voti.length : 6;
-  const goodSeason = avgVoto>=6.3 || (state.stagioneStats.gol+state.stagioneStats.assist)>=6;
-  const n = goodSeason ? rand(1,2) : (Math.random()<0.35 ? 1 : 0);
+function formaRecente(){
+  return state.stagioneStats.voti.length ? state.stagioneStats.voti.reduce((a,b)=>a+b,0)/state.stagioneStats.voti.length : 6;
+}
+/* ---------- INTERESSE DEI CLUB NEL TEMPO ----------
+   Prima ogni offerta nasceva scollegata, generata da zero ad ogni finestra di mercato. Ora
+   l'interesse dei club si costruisce settimana per settimana (chiamata da postGiornataFlow durante
+   il campionato, da aggiornaFuoriStagione durante l'estate, da aggiornaMercatoInvernale durante la
+   finestra invernale): cresce col buon rendimento, decade altrimenti, ed è alimentato anche
+   dall'influenza dell'agente (state.agent.influence, esistente ma finora usato solo dagli
+   AGENT_EVENTS narrativi — qui diventa concreto: un agente più introdotto fa emergere più
+   interesse e apre più facilmente porte a un livello superiore). Un'offerta concreta è la naturale
+   conseguenza di un interesse maturato (>=60), non un evento a sé stante — vedi generaListaOfferte(). */
+function aggiornaInteresseClub(){
+  if(!state.interesseClub) state.interesseClub = [];
+  const avgVoto = formaRecente();
+  const buonRendimento = avgVoto>=6.3 || (state.stagioneStats.gol+state.stagioneStats.assist)>=6;
+  const influenzaAgente = state.agent ? state.agent.influence : 40;
+  state.interesseClub.forEach(ic=>{
+    ic.livello = clamp(ic.livello + (buonRendimento ? rand(4,10) : -rand(3,8)), 0, 100);
+  });
+  state.interesseClub = state.interesseClub.filter(ic=>ic.livello>0 && ic.squadra!==teamName());
+  const chanceNuovo = clamp((buonRendimento?18:6) + (influenzaAgente-50)*0.3, 2, 40);
+  if(state.interesseClub.length<4 && rand(1,100)<=chanceNuovo){
+    let tier = state.lega;
+    if(state.lega!=='A' && avgVoto>=7.0 && rand(1,100)<=20+(influenzaAgente-50)*0.3) tier = nextTier(state.lega);
+    const usedNames = new Set([teamName(), ...state.interesseClub.map(ic=>ic.squadra)]);
+    const pool = LEAGUES[tier].pool.filter(n=>!usedNames.has(n));
+    if(pool.length){
+      const squadra = pool[rand(0,pool.length-1)];
+      state.interesseClub.push({squadra, tier, livello: rand(15,30)});
+    }
+  }
+}
+// Estratta da generateOffers() perché il mercato invernale riusa esattamente la stessa formula,
+// solo scritta in un campo diverso (offerteInvernali invece di offerteCorrenti). Ora attinge prima
+// di tutto ai club il cui interesse (state.interesseClub) è maturo, con una piccola probabilità
+// residua di un'offerta "dal nulla" per non perdere del tutto la sorpresa di prima.
+function generaListaOfferte(){
+  const avgVoto = formaRecente();
   const base = Math.round(valoreMercato(state) / 25);
   const offers = [];
   const usedNames = new Set([teamName()]);
-  for(let i=0;i<n;i++){
+  (state.interesseClub||[]).filter(ic=>ic.livello>=60).forEach(ic=>{
+    if(usedNames.has(ic.squadra)) return;
+    usedNames.add(ic.squadra);
+    const fattore = ic.tier===state.lega ? 1 : 1.35;
+    const stipendio = Math.round(base * fattore * (0.95+Math.random()*0.35));
+    offers.push({squadra:ic.squadra, tier:ic.tier, stipendio, durata:rand(1,2), rounds:0});
+    // L'offerta concreta consuma l'interesse maturato: si riparte da un livello più basso (il club
+    // resta comunque un contatto noto), non da zero.
+    ic.livello = 30;
+  });
+  const goodSeason = avgVoto>=6.3 || (state.stagioneStats.gol+state.stagioneStats.assist)>=6;
+  if(offers.length<2 && rand(1,100)<=(goodSeason?20:8)){
     let tier = state.lega;
-    if(state.ultimoEsitoLega==='promosso' && Math.random()<0.5) tier = state.lega;
-    else if(state.lega!=='A' && avgVoto>=7.2 && Math.random()<0.25) tier = nextTier(state.lega);
+    if(state.lega!=='A' && avgVoto>=7.2 && Math.random()<0.25) tier = nextTier(state.lega);
     const pool = LEAGUES[tier].pool.filter(n2=>!usedNames.has(n2));
-    if(!pool.length) continue;
-    const squadra = pool[rand(0,pool.length-1)];
-    usedNames.add(squadra);
-    const fattore = tier===state.lega ? 1 : 1.35;
-    const stipendio = Math.round(base * fattore * (0.9+Math.random()*0.3));
-    const durata = rand(1,2);
-    offers.push({squadra, tier, stipendio, durata, trattata:false});
+    if(pool.length){
+      const squadra = pool[rand(0,pool.length-1)];
+      const fattore = tier===state.lega ? 1 : 1.35;
+      const stipendio = Math.round(base * fattore * (0.9+Math.random()*0.3));
+      offers.push({squadra, tier, stipendio, durata:rand(1,2), rounds:0});
+    }
   }
-  state.offerteCorrenti = offers;
+  return offers;
 }
+/* ---------- TRATTATIVA MULTI-ROUND ----------
+   Prima un solo tentativo (o +20% stipendio, o il club si irrigidisce/ritira). Ora fino a
+   MAX_ROUND_NEGOZIAZIONE round: ogni round in più è più difficile (il club si stanca), ma
+   l'interesse maturato del club (se presente) rende più probabile un margine, e l'agente
+   (state.agent.trust, finora usato solo dagli AGENT_EVENTS narrativi) pesa quanto la relazione col
+   procuratore — entrambi gli assi esistenti diventano concreti invece di restare solo narrativi. */
+const MAX_ROUND_NEGOZIAZIONE = 3;
+function chanceNegoziazione(o){
+  const interesse = (state.interesseClub||[]).find(ic=>ic.squadra===o.squadra);
+  const bonusInteresse = interesse ? (interesse.livello-50)*0.3 : 0;
+  const bonusAgente = state.agent ? (state.agent.trust-50)*0.4 : 0;
+  const penalitaRound = o.rounds * 12;
+  return clamp(42 + (state.relazioni.procuratore-50)*0.5 + (state.reputazione-50)*0.25 + bonusAgente + bonusInteresse - penalitaRound, 5, 88);
+}
+function esitoNegoziazione(o){
+  const chance = chanceNegoziazione(o);
+  if(rand(1,100)<=chance){
+    const aumento = Math.round(o.stipendio * (0.10 + Math.random()*0.10));
+    o.stipendio += aumento;
+    return {esito:'aumento', messaggio:`Il procuratore strappa un aumento dalla ${o.squadra}: nuova proposta €${o.stipendio}/sett.`};
+  }
+  const rischioRitiro = 15 + o.rounds*15;
+  if(rand(1,100)<=rischioRitiro){
+    return {esito:'ritirata', messaggio:`La ${o.squadra} ritira la proposta dopo l'ennesima richiesta.`};
+  }
+  state.relazioni.procuratore = clamp(state.relazioni.procuratore-2,0,100);
+  return {esito:'fermo', messaggio:`La ${o.squadra} non cede oltre sulla proposta.`};
+}
+function generateOffers(){ state.offerteCorrenti = generaListaOfferte(); }
+function generateOffersInvernali(){ state.offerteInvernali = generaListaOfferte(); }
 
 /* ---------- FUORI STAGIONE: dalla fine del campionato alla prossima stagione, si avanza
    settimana per settimana (avanzaSettimanaFuoriStagione), non più a "sessioni" fisse.
@@ -5301,6 +6306,7 @@ function aggiornaFuoriStagione(){
   }
   if(inFinestraMercatoEstivo(d) && !state.mercatoEstivoConcluso){
     state.mercatoSessione = (state.mercatoSessione||0) + 1;
+    aggiornaInteresseClub();
     generateOffers();
     const deadlineDay = isDeadlineDayMercato(d);
     // Voce di mercato: sempre nell'ultima settimana (Deadline Day, il momento più concitato),
@@ -5349,10 +6355,22 @@ function renderFuoriStagioneQuiete(){
     trainBox.appendChild(el);
   });
 }
+// Condivisa fra mercato estivo e invernale: mostra i club con interesse ancora sotto soglia (quelli
+// maturi diventano offerte vere, vedi generaListaOfferte) come segnale di ciò che sta montando,
+// invece di lasciare interesseClub un dato puramente invisibile.
+function renderInteresseClub(elId){
+  const box = document.getElementById(elId);
+  if(!box) return;
+  const lista = (state.interesseClub||[]).filter(ic=>ic.livello<60);
+  box.innerHTML = lista.length ? `<div class="card"><div class="label">Club che ti osservano</div>` +
+    lista.map(ic=>`<div class="row" style="margin-top:4px;"><span class="subtle">${ic.squadra} (${LEAGUES[ic.tier].label})</span><span class="badge ${ic.livello>=35?'gold':'blue'}">interesse ${ic.livello}%</span></div>`).join('') +
+    `</div>` : '';
+}
 function renderMarket(){
   const dataMercato = parseDataISO(state.offSeasonData);
   const etichettaDeadline = isDeadlineDayMercato(dataMercato) ? ' · 📅 Deadline Day' : '';
   document.getElementById('marketSessioneLabel').textContent = `Mercato estivo · ${formattaDataIT(dataMercato)}${etichettaDeadline}`;
+  renderInteresseClub('marketInteresse');
   const box = document.getElementById('marketOffers'); box.innerHTML = '';
   if(!state.offerteCorrenti.length){
     box.innerHTML = `<div class="card"><div class="subtle">Nessuna offerta questa settimana. Il tuo procuratore continuerà a lavorare per la prossima.</div></div>`;
@@ -5361,10 +6379,10 @@ function renderMarket(){
       const el = document.createElement('div'); el.className = 'offer-card';
       el.innerHTML = `
         <div class="row"><div class="offer-team">${o.squadra}</div><div class="badge ${o.tier===state.lega?'blue':'gold'}">${LEAGUES[o.tier].label}</div></div>
-        <div class="offer-detail">€${o.stipendio}/sett. · contratto ${o.durata} stagion${o.durata>1?'i':'e'}${o.trattata?' · trattata':''}</div>
+        <div class="offer-detail">€${o.stipendio}/sett. · contratto ${o.durata} stagion${o.durata>1?'i':'e'}${o.rounds>0?` · trattativa ${o.rounds}/${MAX_ROUND_NEGOZIAZIONE}`:''}</div>
         <div class="btn-row">
           <button class="btn green small" onclick="accettaOfferta(${idx})">Accetta</button>
-          <button class="btn gold small" onclick="negoziaOfferta(${idx})" ${o.trattata?'disabled':''}>Tratta</button>
+          <button class="btn gold small" onclick="negoziaOfferta(${idx})" ${o.rounds>=MAX_ROUND_NEGOZIAZIONE?'disabled':''}>Tratta</button>
           <button class="btn ghost small" onclick="rifiutaOfferta(${idx})">Rifiuta</button>
         </div>`;
       box.appendChild(el);
@@ -5403,14 +6421,11 @@ function renderMarket(){
 }
 function negoziaOfferta(idx){
   const o = state.offerteCorrenti[idx];
-  const chance = clamp(40 + (state.relazioni.procuratore-50)*0.6 + (state.reputazione-50)*0.3, 10, 85);
-  if(rand(1,100)<=chance){
-    o.stipendio = Math.round(o.stipendio*1.2); o.trattata = true;
-    addDiario(`Il procuratore strappa un aumento dalla ${o.squadra}: nuova offerta €${o.stipendio}/sett.`);
-  } else {
-    if(Math.random()<0.3){ addDiario(`La ${o.squadra} ritira l'offerta dopo la richiesta di aumento.`); state.offerteCorrenti.splice(idx,1); }
-    else { state.relazioni.procuratore = clamp(state.relazioni.procuratore-3,0,100); addDiario(`La ${o.squadra} non cede sull'offerta iniziale.`); o.trattata = true; }
-  }
+  if(o.rounds>=MAX_ROUND_NEGOZIAZIONE) return;
+  const r = esitoNegoziazione(o);
+  o.rounds++;
+  if(r.esito==='ritirata') state.offerteCorrenti.splice(idx,1);
+  addDiario(r.messaggio);
   save(); renderMarket();
 }
 function accettaOfferta(idx){
@@ -5449,6 +6464,18 @@ function restaAllaSquadra(){
 }
 function avviaNuovaStagione(){
   state.offerteCorrenti = [];
+  // Uno svincolo invernale non risolto (nessun trasferimento accettato entro la fine della
+  // finestra) non può restare aperto a ridosso della ripresa del campionato: il club reintegra il
+  // giocatore in rosa, ma a condizioni riviste al ribasso rispetto a prima della richiesta, non
+  // alle condizioni piene originarie.
+  if(state.svincolatoInvernale){
+    const stipendioBase = state.contratto.stipendioPreSvincolo || state.contratto.stipendio || 80;
+    state.contratto.stipendio = Math.round(stipendioBase * 0.9);
+    state.finanze.stipendio = state.contratto.stipendio;
+    addDiario(`Nessuna offerta concreta entro la fine del mercato di gennaio: ${teamName()} ti reintegra in rosa, ma a condizioni riviste (€${state.contratto.stipendio}/sett.).`);
+  }
+  state.svincolatoInvernale = false;
+  delete state.contratto.stipendioPreSvincolo;
   state.stagione++; state.giornata = 1;
   const season = buildTierSeason(state.lega, teamName());
   state.calendario = season.calendario; state.classifica = season.classifica;
@@ -5512,6 +6539,13 @@ function avviaNuovaStagione(){
     if(!state.eventiMatchUltimaGiornata) state.eventiMatchUltimaGiornata={};
     if(!state.coppa || !state.coppa.altreSfide) { if(state.coppa) state.coppa.altreSfide = []; }
     riparaGironeCoppaAttivo();
+    // Migrazione: prima del tabellone a eliminazione diretta, "ai 32esimi" era uno stato finale
+    // statico (state.coppaTorneo.fase==='trentaduesimi'). Un salvataggio fermo lì riprende ora dal
+    // primo turno vero del tabellone, invece di restare bloccato su un traguardo che non esiste più.
+    if(state.coppaTorneo && state.coppaTorneo.fase==='trentaduesimi' && state.coppaPrincipale && state.coppaPrincipale.qualificati && state.coppaPrincipale.qualificati.length){
+      state.coppaTorneo = null;
+      iniziaTurnoBracket('trentaduesimi', state.coppaPrincipale.qualificati);
+    }
     // Migrazione: il ruolo "Mezzala" è stato rinominato in "Ala" (stessi attributi/pesi, solo
     // etichetta diversa) — i salvataggi vecchi vanno rinominati per restare coerenti con select,
     // ROLE_BASE/ROLE_WEIGHTS/ROLE_VALUE_MULT e ruoloDBtoInterno, che ora usano solo "Ala".
@@ -5526,6 +6560,10 @@ function avviaNuovaStagione(){
     if(state.ultimoAllenamentoInvernale===undefined) state.ultimoAllenamentoInvernale=null;
     if(state.allenamentoSnapshotInvernale===undefined) state.allenamentoSnapshotInvernale=null;
     if(state.rinnovoInvernaleFatto===undefined) state.rinnovoInvernaleFatto=false;
+    if(state.offSeasonInvernaleData===undefined) state.offSeasonInvernaleData=null;
+    if(state.offerteInvernali===undefined) state.offerteInvernali=[];
+    if(state.svincolatoInvernale===undefined) state.svincolatoInvernale=false;
+    if(state.interesseClub===undefined) state.interesseClub=[];
     if(state.territorio===undefined) state.territorio = { visite: {}, fattaSettimana: false, ultimaEsperienza: null, eventiUltimaVolta: {}, eventiUsati: [] };
     if(state.territorio.eventiUltimaVolta===undefined) state.territorio.eventiUltimaVolta = {};
     if(state.territorio.eventiUsati===undefined) state.territorio.eventiUsati = [];

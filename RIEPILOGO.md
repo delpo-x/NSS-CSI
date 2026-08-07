@@ -1,5 +1,164 @@
 # Carriera CSI — Riepilogo progetto
 
+> **Aggiornamento 2026-08-07 (approfondimento trattative/mercato)**: su richiesta esplicita
+> dell'utente ("mix" di tre direzioni), il sistema di offerte/trattative — prima 0-2 offerte casuali
+> a settimana, trattativa a un colpo solo (+20% stipendio o il club si irrigidisce/ritira) — è stato
+> approfondito su tre assi che si intrecciano:
+> 1. **Interesse dei club nel tempo** — nuovo `state.interesseClub` (array `{squadra, tier,
+>    livello}` 0-100), aggiornato ogni settimana da `aggiornaInteresseClub()` (chiamata da
+>    `postGiornataFlow` durante il campionato, `aggiornaFuoriStagione` in estate,
+>    `aggiornaMercatoInvernale` a gennaio): cresce col buon rendimento (stesso segnale già usato per
+>    le offerte, ora esposto in `formaRecente()`), decade altrimenti, tetto di 4 club tracciati.
+>    `generaListaOfferte()` ora attinge PRIMA ai club con interesse maturo (≥60, che consumandosi
+>    scende a 30 invece di sparire — restano un contatto noto), con una piccola probabilità residua
+>    di un'offerta "dal nulla" per non perdere del tutto l'elemento sorpresa. Visibile in entrambe le
+>    schermate mercato (`renderInteresseClub()`, card "Club che ti osservano" per gli interessi non
+>    ancora maturi).
+> 2. **Trattativa multi-round** — da un tentativo secco a fino a `MAX_ROUND_NEGOZIAZIONE` (3) round:
+>    `chanceNegoziazione(o)`/`esitoNegoziazione(o)` sostituiscono la vecchia formula inline in
+>    `negoziaOfferta`/`negoziaOffertaInvernale`. Ogni round è più difficile (il club si irrigidisce,
+>    -12 di chance a round), ma un club con interesse maturo è più flessibile (bonus fino a ±15) e il
+>    rischio di ritiro dell'offerta cresce con i round già tentati (15%+15%/round) invece di essere
+>    fisso al 30%.
+> 3. **Ruolo dell'agente reso concreto** — `state.agent.trust`/`state.agent.influence` esistevano già
+>    (sistema AGENT_EVENTS, narrativo) ma non influenzavano mai le formule di mercato. Ora
+>    `agent.influence` alimenta quantità/qualità dell'interesse generato (club di categoria superiore
+>    più raggiungibili con un agente introdotto), `agent.trust` alimenta la chance di negoziazione
+>    insieme alla relazione col procuratore — due assi già esistenti diventano concreti invece di
+>    restare solo narrativi, nessun terzo sistema parallelo introdotto.
+> Verificato: sintassi, bot (0 errori), e dal vivo in browser — interesse cresciuto nel tempo con
+> agente molto introdotto, maturazione in offerta concreta con consumo dell'interesse a 30, tetto dei
+> 3 round rispettato (4° tentativo bloccato), chance/stipendio che si muovono round dopo round come
+> atteso, ritiro dell'offerta osservato con statistiche basse (46/80 su prove ripetute).
+>
+> **Aggiornamento 2026-08-07 (continua — trasferimento immediato)**: su richiesta esplicita
+> dell'utente, il mercato invernale non usa più il precontratto differito descritto qui sotto
+> (rimosso — `state.precontrattoInvernale` non esiste più): un'offerta accettata ora sposta
+> **subito** il giocatore al nuovo club, non a giugno. Nuova `trasferisciSubitoInvernale(o)`: stesso
+> trattamento già usato per un'offerta estiva accettata (Coppa Leonessa in corso chiusa, gruppo
+> sociale principale retrocesso a secondario), più la parte nuova specifica del trasferimento a
+> stagione in corso — invece di ricostruire l'intera stagione da zero (avrebbe cancellato la
+> cronologia già giocata), si rigenera **solo** la porzione di calendario/classifica ancora da
+> giocare (`buildTierSeason` per il nuovo club, tante partite residue quante ne mancavano prima —
+> stessa lunghezza di stagione, ciclando il round-robin se il nuovo girone ha meno avversari), e si
+> lasciano intatte le partite già giocate con la vecchia squadra. Semplificazione dichiarata: la
+> classifica del nuovo girone riparte da 0 punti per tutte le squadre (non riflette i risultati reali
+> già maturati dagli avversari) — stesso identico comportamento di `buildTierSeason()` già usato a
+> inizio stagione, qui applicato a metà stagione. Il vecchio limite tecnico ("il calendario è
+> costruito una volta a stagione, spostarlo richiederebbe ricostruirlo") risulta quindi superato, non
+> più vero: si è scelto di ricostruire solo la coda del calendario invece di tutta la stagione,
+> mantenendo `state.giornata`/lunghezza calendario coerenti e a rischio pressoché nullo per il resto
+> del motore (season-end, Coppa, ecc. continuano a leggere `state.calendario.length` come sempre).
+> Verificato dal vivo: trasferimento a metà stagione (giornata 11/26) — squadra/lega/contratto
+> cambiati subito, calendario invariato in lunghezza, partite già giocate (giornate 1-10) intatte,
+> nuova classifica con 14 squadre e il giocatore incluso, prossimo avversario ricalcolato sul nuovo
+> girone, partita giocabile normalmente col nuovo club. Bot invariato (continua a non accettare mai
+> offerte, stessa semplificazione già scelta per il mercato estivo).
+>
+> **Aggiornamento 2026-08-07 (mercato invernale settimanale)**: il mercato invernale non è più un
+> popup unico ma un vero ciclo settimana per settimana (un sabato alla volta dal 21 dicembre al 24
+> gennaio, `finestraPausaInvernale`), stesso pattern già usato per il mercato estivo
+> (`offSeasonData`/`avanzaSettimanaFuoriStagione`, qui `offSeasonInvernaleData`/
+> `avanzaSettimanaInvernale`). Ogni settimana: **offerte reali** generate con la stessa identica
+> formula del mercato estivo (`generaListaOfferte()`, estratta da `generateOffers()` — legata alla
+> media voto/gol+assist stagionali: chi sta giocando bene riceve proposte, chi no quasi mai, come
+> richiesto); rischio di restare **"ai margini"** mostrato come evento narrativo (`showEvent`, stesso
+> motore del resto del gioco), che riusa `rischioPanchinaPerSkill()` — più probabile se già a rischio
+> panchina in campionato, garantito se svincolato; possibilità di **rimanere svincolato**
+> (`chiediSvincoloInvernale`): stipendio azzerato subito, reputazione/rapporto col mister colpiti,
+> "ai margini" garantito ogni settimana finché la situazione non si risolve.
+> **Vincolo tecnico preesistente rispettato** (documentato nei TODO: "il calendario è costruito una
+> volta a stagione, spostarlo a metà stagione richiederebbe ricostruirlo"): un'offerta accettata a
+> gennaio non sposta subito il giocatore, diventa un **precontratto** (`state.precontrattoInvernale`)
+> valido dalla stagione successiva — come nel calcio reale, si firma a gennaio per un trasferimento
+> ufficiale in estate. Si applica in `avviaNuovaStagione()`, l'unico punto in cui il calendario viene
+> comunque ricostruito da zero: zero rischio per classifica/risultati della stagione in corso. Se la
+> finestra si chiude senza un precontratto e il giocatore aveva chiesto la rescissione, il club lo
+> reintegra in rosa a condizioni riviste (-10% sullo stipendio pre-svincolo) invece di lasciare lo
+> stato rotto. Un'offerta estiva accettata in seguito sostituisce comunque un precontratto invernale.
+> Bot aggiornato (`__botPlayMercatoInvernale` in `tools/bot-helpers.js`): prima il bot lasciava la
+> nuova schermata multi-settimana del tutto inesplorata (considerata "schermo ok, nessuna azione"),
+> ora la scorre fino alla chiusura — stessa semplificazione già scelta per il mercato estivo
+> (prosegue sempre, non accetta offerte/non chiede rescissioni: superficie più ampia lasciata a
+> un'estensione futura dedicata del bot). Verificato: sintassi (motore + bot-helpers), bot (25
+> carriere/40 settimane, 0 errori, 30 stagioni completate — il mercato invernale attraversato più
+> volte), e dal vivo in browser: offerta generata e accettata con stagione in corso invariata,
+> progressione settimanale corretta fino a chiusura automatica della finestra, precontratto ancora
+> presente dopo la chiusura, richiesta di svincolo con effetto immediato, evento "ai margini"
+> garantito e risolto, reintegro automatico a condizioni riviste in `avviaNuovaStagione()`.
+>
+> **Aggiornamento 2026-08-07 (sistema rigori)**: chiuso il TODO aperto "Sistema rigori: non esiste,
+> nemmeno come struttura minima". Prima un pareggio nella gara secca di Coppa Leonessa (tabellone a
+> eliminazione diretta) andava sempre ai "supplementari", risolti solo sulla forza reale delle due
+> squadre — ignorava del tutto le skill del giocatore anche quando la gara secca era proprio la sua.
+> Nuove `chanceRigoreMio()` (attributo tiro + forma del giocatore, niente rischio/avversario diretto
+> come nelle scelte di gioco: un rigore è sempre lo stesso tipo di conclusione) e
+> `chanceRigoreAvversario(forza)` (forza reale, come ovunque nel motore) alimentano `simulaRigori()`:
+> sequenza di 5 tiri a testa con interruzione anticipata a risultato acquisito (regola reale dei
+> rigori) e oltranza in caso di parità. Sostituisce `decidiVincitoreCoppa()` **solo** nella gara del
+> giocatore (`applyResultToCoppaBracket`) — le sfide fra le altre squadre del tabellone, mai giocate
+> dal giocatore, restano ai supplementari simulati come prima (nessun rigori dettagliato per gare che
+> nessuno vede). Propagato a log/diario/storico tabellone/testo Coppa (`renderStoricoBracket`,
+> `renderCoppa`), rinominando il campo `supplementari`→`rigori` (ora un oggetto con punteggio, non un
+> booleano). Nessun nuovo stato persistente, nessuna nuova UI: la sequenza si genera e si racconta
+> tutta insieme in un'unica chiamata sincrona, riusabile identica sia quando la gara è simulata
+> (skipGiornata/simulaPartita) sia quando è giocata dal vivo (finishMatch). Verificato: sintassi, bot
+> (0 errori), 200 rigori simulati senza mai un pareggio irrisolto né sequenze anomale, casi limite
+> (attributi a 0/100, forza avversaria a 0/100) sempre entro i range attesi, ed entrambi i rami
+> (qualificazione ed eliminazione ai rigori) verificati dal vivo in una carriera reale con pareggio
+> forzato, inclusi i messaggi di diario risultanti.
+>
+> **Aggiornamento 2026-08-06 (MATCH_EVENTS, categorie TACTICAL/PHYSICAL/PROVINCIAL_LIFE)**: chiuso
+> il TODO aperto in RIEPILOGO.md sulle tre categorie del brief narrativo originario mai popolate.
+> Aggiunti 10 nuovi `MATCH_EVENTS` (3 PHYSICAL: campo pesante/pioggia/freddo; 4 PROVINCIAL_LIFE:
+> pubblico avversario/borracce dimenticate/presidente a bordocampo/terzo tempo; 3 TACTICAL: cambio
+> modulo/marcatura a uomo/pressing alto), stesso motore `pickMatchEvent`/`showMatchEvent` di tutti
+> gli eventi esistenti, applica/esito diretto su stato già presente (forma/energia/morale/
+> reputazione/relazioni/personalita) — nessuna nuova meccanica. Unico punto nuovo nel motore: il
+> trigger `'match_end'` (per `terzo_tempo`), agganciato in `finishMatch()` subito prima della
+> transizione a `screen-result`, esattamente come `'match_start'` lo è già in `beginMatch()` —
+> stesso pattern, la schermata partita resta attiva finché l'eventuale evento non viene chiuso.
+> Verificato: sintassi, bot (25 carriere/40 settimane, 0 errori — il bot clicca da solo le scelte in
+> `matchAction`, quindi ha già esercitato anche i nuovi eventi), i 10 id trovati in `MATCH_EVENTS`,
+> `terzo_tempo` forzato deterministico e seguito dal vivo in una carriera reale fino a `screen-result`.
+>
+> **Aggiornamento 2026-08-06 (continua, punti 3-4)**: completati anche i punti 3 e 4 della roadmap
+> di consolidamento del Match Viewer. Punto 3 — `CameraManager` ora ha uno stato interno
+> (`zoom`/`target`) e i metodi `setTarget()`/`setZoom()`, non ancora chiamati da nessun ticker:
+> con zoom=1 (default) `toPixel()` produce pixel identici a prima; con zoom≠1 applica davvero una
+> magnificazione centrata sul target, verificato (x=0.9 → 388px con zoom 1, 304px con zoom 2).
+> Nessun chiamante di `toPixel()` modificato: la firma è invariata, pronta per una futura
+> telecamera dinamica (segui palla/zoom in area) senza altri interventi. Punto 4 — rimosso l'
+> `if(clip==='shot')` hardcoded in `interpretMatchEvent()`: ogni clip dichiara ora il proprio
+> `variantField` (oggi solo `shot: variantField:'outcome'`), letto genericamente
+> dall'EventInterpreter — una clip futura con varianti (es. `tackle` con `foul`/`clean`) non
+> richiederà più un nuovo `if` qui. Verificato che un tiro a segno risolve ancora correttamente
+> `variant:'goal'` e `followup:'goal_celebration'`. Sintassi, bot (0 errori) e test dal vivo ok.
+>
+> **Aggiornamento 2026-08-06 (continua)**: revisione tecnica del Match Viewer (analisi separazione
+> motore/eventi/interpretazione/animazione/rendering, nessun problema di confine, ma limite di
+> scalabilità su "più giocatori") seguita dai primi due interventi della roadmap concordata.
+> Punto 1 — `AnimationManager.ballPos`/`playerPos` (due campi fissi) sostituiti da `entities`, una
+> mappa id→posizione (`ball`, `actor`, estendibile a qualunque altra chiave che una clip futura
+> restituisca via `frame.entities`) senza dover più toccare manager o renderer per ogni nuova
+> entità. Punto 2 — `renderMatchCanvas()` ora itera tutte le chiavi di `entities` (tranne `ball`,
+> disegnata per ultima/sopra) invece di disegnare un solo giocatore cablato su `evt.actor`.
+> Retrocompatibile al 100% con le clip esistenti (nessuna clip riscritta). Verificato con una clip
+> di prova che aggiunge un'entità arbitraria (`gk`) via `frame.entities`: compare disegnata senza
+> alcuna modifica a renderer/manager, confermando l'estendibilità. Sintassi, bot (25 carriere/40
+> settimane, 0 errori) e test dal vivo in pagina tutti ok.
+>
+> **Aggiornamento 2026-08-06**: due fix visivi nel Match Viewer 2D, segnalati dall'utente giocando
+> ("non c'è il pallone" / "il giocatore entra in porta"), risolti solo nel layer grafico senza
+> toccare il motore. Causa comune: per semplificazione MVP il marker giocatore coincideva sempre
+> con la posizione della palla. Fix 1 — ordine di disegno invertito in `renderMatchCanvas()`
+> (giocatore sotto, palla sopra), altrimenti il cerchio blu del giocatore copriva quello bianco
+> della palla quando sovrapposti. Fix 2 — la clip `shot` ora calcola un `playerPos` separato da
+> `ballPos`, con il giocatore che si ferma all'85% del tragitto mentre la palla prosegue fino in
+> porta (chi calcia non entra più in rete). `AnimationManager` traccia `playerPos` come campo
+> parallelo a `ballPos` (fallback su `ballPos` per le clip che non lo forniscono). Verificato:
+> sintassi, bot 25 carriere/40 settimane (0 errori), e test dal vivo in pagina.
+>
 > **Aggiornamento 2026-08-04 (continua)**: quattro richieste dell'utente nella stessa giornata,
 > dopo l'integrazione del database Brescia qui sotto — **cartellino rosso/fischio arbitrale non più
 > casuali** (scattano solo dopo un contrasto fisico fallito, con un trigger `after_foul_risk`
@@ -69,6 +228,191 @@
 [`index.html`](index.html) contiene tutto: markup, CSS e logica JS (nessuna build, nessuna dipendenza esterna
 a parte i font Google). Il giocatore crea un calciatore, sceglie girone/squadra di Serie C reale, e scala la
 piramide CSI Brescia (C → B → A) tra partite simulate a scelte, eventi narrativi, mercato ed economia.
+
+## Match Viewer 2D — easing del tiro (2026-08-06)
+
+Terzo intervento: `shot` usava `easeOutQuad` (parte veloce, rallenta), poco credibile per un tiro.
+Aggiunto `EASINGS.easeInCubic` (parte lenta, accelera bruscamente) collegato a `clips.shot.run()`
+— due righe, contenute in `AnimationLibrary`. Verificato in isolamento: incrementi crescenti ad
+ogni quarto (accelerazione confermata), `pass_short` invariato sullo stesso schema di test. `node
+--check`, bot (25 carriere, zero errori, invariato). Dettagli in
+[MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md).
+
+## Match Viewer 2D — arco sui cross (2026-08-06)
+
+Secondo intervento della lista di rifinitura: `pass_long` era identico a `pass_short` (solo più
+lento), nessuna curva. Aggiunto un arco laterale perpendicolare alla direzione del passaggio,
+contenuto interamente in `AnimationLibrary.clips.pass_long.run()` — zero righe altrove. Verificato
+in isolamento: `y` si scosta fino a 0.06 a metà volo e torna esattamente a destinazione; `pass_short`
+resta perfettamente in linea retta, nessuna regressione. `node --check`, bot (25 carriere, zero
+errori, invariato). Dettagli in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md).
+
+## Match Viewer 2D — fix traiettoria tiri falliti (2026-08-06)
+
+Completa il fix precedente: i tiri falliti avevano la stessa omissione di `destination` verso
+`emitMatchEvent()`. Aggiunta zona dedicata `goal_line_wide` (distinta da `goal_line`, altrimenti
+un tiro fuori sarebbe indistinguibile da un gol), collegata nei due punti di
+`applyChoiceOutcome()` che generano tiri falliti — zero righe di logica di calcolo dell'esito
+toccate. Verificato dal vivo su tre casi (fallimento alto rischio, fallimento rischio medio, gol
+di controllo) — tutti corretti, gol invariato. `node --check`, bot (25 carriere, zero errori,
+invariato). Dettagli in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md).
+
+## Match Viewer 2D — fix traiettoria tiro (2026-08-06)
+
+Prima fase di rifinitura visiva (architettura ora dichiarata stabile, solo miglioramenti
+sull'esistente). Trovato un difetto reale, non solo cosmetico: un tiro a segno non spostava mai la
+palla, restava ferma in area per tutta l'animazione — `ZONE_DEFAULT_PER_OUT.goal` aveva
+`destination:null` e il ramo tiro riuscito di `applyChoiceOutcome()` non passava comunque il campo
+`destination` a `emitMatchEvent()` (omissione nel bridge dati, zero logica di gioco toccata).
+Aggiunta zona `goal_line`, impostata come destinazione di default, aggiunto il campo mancante nella
+chiamata. Verificato dal vivo: palla che ora si muove concretamente da `box` a `goal_line` con
+l'easing esistente. `node --check`, bot (25 carriere, zero errori, invariato). I tiri falliti
+(`off_target`) hanno la stessa omissione, lasciata volutamente per un intervento separato. Dettagli
+in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md).
+
+## Match Viewer 2D — followup attivato (2026-08-06)
+
+Il campo `followup` (es. `goal_celebration` dopo un gol) esisteva dalla sez.9 del design ma era
+solo informativo, mai eseguito. Ora `AnimationManager.tick()` lo accoda automaticamente **dopo**
+aver già notificato il gating — l'esultanza gira in background senza ritardare la riapertura delle
+scelte. Zero righe in EventInterpreter/AnimationLibrary/motore. Verificato dal vivo: gating
+invariato dopo un gol, `goal_celebration` accodata e eseguita da sola dal loop reale. Limite noto
+dichiarato: se una nuova scelta arriva mentre l'esultanza precedente sta ancora girando, si accoda
+dietro (ritardo raro, solo dopo gol ravvicinati). Dettagli in
+[MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md). Verificato: `node --check`, bot (25 carriere,
+zero errori, invariato).
+
+## Match Viewer 2D — Timeline (sequenze di clip) (2026-08-06)
+
+Infrastruttura per eseguire più clip in sequenza (es. PASS→CONTROL→SHOT), gestita interamente
+dall'`AnimationManager` (`creaTimeline()`, interna, mai vista da motore/EventInterpreter). Formato
+evento invariato: `evt.animation.clip` diventa automaticamente una Timeline di un solo step; un
+futuro `evt.animation.timeline` (array) sarebbe già supportato. Nessuna nuova animazione aggiunta
+in questa fase, solo l'infrastruttura. Verificato dal vivo: il vecchio comportamento (clip singola)
+è identico bit-per-bit a prima; una sequenza vera a due step (iniettata a mano, `pass_short`→
+`tackle`) esegue entrambi gli step in ordine e notifica `onDone` una sola volta, solo a fine
+sequenza. Dettagli in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md). Verificato: `node --check`,
+bot (25 carriere, zero errori, invariato).
+
+## Match Viewer 2D — prova di estendibilità (2026-08-06)
+
+Test del refactoring appena fatto: aggiunta la prima clip per `tackle` (contrasto fisico, prima
+senza coreografia) toccando solo `AnimationLibrary` — una voce in `eventClipMap` + un blocco clip
+(palla ferma per 400ms). Zero righe in AnimationManager/EventInterpreter/renderer/motore, come
+previsto dal refactoring. Verificato dal vivo: un contrasto riuscito ora mette in coda una clip
+reale e il gating aspetta davvero, dove prima risolveva istantaneamente. `node --check`, bot
+(25 carriere, zero errori). Dettagli in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md).
+
+## Match Viewer 2D — consolidamento architetturale (2026-08-06)
+
+Refactoring puro su richiesta esplicita ("rendere il Match Viewer facilmente estendibile e
+indipendente dal motore, prima di aggiungere nuove funzionalità"): nessun comportamento nuovo,
+nessuna modifica al motore. Estratta `AnimationLibrary` (ogni clip è un modulo indipendente con
+la propria funzione `run()` — l'`AnimationManager` non conosce più easing/track, si limita a
+coda/tempo/notifica come richiesto); separati i renderer in `CameraManager`/`FieldRenderer`/
+`BallRenderer`/`PlayerRenderer` invece di funzioni sciolte che facevano più cose. Punti di
+integrazione col motore (nomi e firme delle funzioni chiamate da `beginMatch`/`finishMatch`/
+`applyChoiceOutcome`/`resolveChoice`) invariati. Verificato: `node --check`, bot (25 carriere,
+zero errori, invariato), stesso test di gating di prima del refactoring con risultato identico.
+Dettagli in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md).
+
+## Match Viewer 2D — gating scelte/animazione (2026-08-06)
+
+Quinto passo: le scelte di partita ora aspettano davvero la fine dell'animazione prima di
+ricomparire. Aggiunto `whenDrained(fn)` all'AnimationManager (sincrono se non c'è nulla da
+animare, altrimenti in attesa che la coda si svuoti); in `resolveChoice()` il pannello scelte
+viene svuotato subito al click (evita il doppio click sullo stesso momento) e l'esito appare solo
+dentro `whenDrained(...)`. Verificato dal vivo: una scelta animata (`pass_long`, 1100ms) lascia il
+pannello vuoto fino a fine animazione, poi la palla è esattamente a destinazione e le nuove scelte
+ricompaiono; una scelta senza clip resta istantanea come prima, nessun ritardo indebito. Dettagli
+in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md). Verificato: `node --check`, bot (25 carriere,
+zero errori, invariato).
+
+## Match Viewer 2D — primo canvas reale (2026-08-06)
+
+Quarto passo: aggiunto `<canvas id="matchCanvas">` in `screen-match` (sopra il commentary-log
+testuale esistente, mai al suo posto). `campoToPixel()` (CameraManager), `disegnaCampo()`,
+`disegnaPallino()`/`renderMatchCanvas()` (PlayerRenderer/BallRenderer MVP: un pallino palla +
+uno protagonista, ancora nella stessa posizione), loop `requestAnimationFrame` avviato/fermato in
+`beginMatch()`/`beginMatchAsSub()`/`finishMatch()`. Ogni accesso al canvas è dietro
+`typeof requestAnimationFrame==='function'`, sempre falso nel bot Node — il motore resta
+comprovatamente indipendente dal viewer. Verificato dal vivo con screenshot: dopo un assist andato
+a segno il pallino si sposta visibilmente da centrocampo all'area avversaria mentre il punteggio si
+aggiorna — prima conferma end-to-end motore→canvas, non solo dati. Le scelte NON aspettano ancora
+la fine dell'animazione (gating rimandato). Dettagli in
+[MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md). Verificato: `node --check`, bot (25 carriere,
+zero errori, invariato rispetto a prima della modifica).
+
+## Match Viewer 2D — AnimationManager (2026-08-06)
+
+Terzo passo: `creaAnimationManager()`, primo modulo con una nozione di tempo (coda di eventi,
+`tick(deltaMs)`, `pause()`/`resume()`, interpolazione posizione palla con easing da
+`ANIMATION_LIBRARY`, callback `onDone`). Ancora NON agganciato al flusso reale della partita
+(`nextMoment()`) — resta un modulo autonomo verificabile da solo, come i due step precedenti.
+Verificato dal vivo con un evento `pass_long` reale: interpolazione plausibile, arrivo esatto a
+destinazione, `onDone` con l'id giusto, pausa che blocca davvero l'avanzamento. Dettagli in
+[MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md). Verificato: `node --check`, bot (25 carriere,
+zero errori).
+
+## Match Viewer 2D — EventInterpreter (2026-08-06)
+
+Secondo passo dopo `emitMatchEvent()` (vedi voce sotto): aggiunti `ZONES`/`zonaCoordinate()`
+(zona nominale → coordinate normalizzate 0-1), `ANIMATION_LIBRARY` (clip MVP come dati:
+pass_short/pass_long/shot/save/goal_celebration) e `interpretMatchEvent()`, l'EventInterpreter
+vero e proprio, chiamato da `emitMatchEvent()` e salvato in `evt.animation`. Ancora zero canvas:
+solo trasformazione dati→dati, verificata dal vivo (tiro a segno → `clip:'shot', variant:'goal',
+originXY:{x:0.92,y:0.5}, followup:'goal_celebration'`). Dettagli in
+[MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md). Verificato: `node --check`, bot (25 carriere,
+zero errori).
+
+## Match Viewer 2D — emitMatchEvent() (2026-08-06)
+
+Primo passo verso un futuro layer grafico 2D sopra il motore partite (analisi completa e design
+in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md), incluso perché due progetti open source
+valutati come possibile base — touchlines, AGPL-3.0, e openengine — non offrono componenti
+direttamente riusabili nella nostra architettura). Aggiunta `emitMatchEvent()`: struttura in JSON
+standard gli esiti che il motore già calcola (`applyChoiceOutcome`, `resolveChoice`, `beginMatch`,
+`finishMatch`), accumulandoli in `state.matchTemp.events`, **in aggiunta** al testo di `addLog()`
+esistente, mai al suo posto — il gioco funziona identico se il viewer non esiste ancora. Nessuna
+implementazione Canvas: solo il contratto dati. Verificato: `node --check`, bot (25 carriere,
+zero errori), partita dal vivo con ispezione di `state.matchTemp.events`.
+
+## Bug: sequenza contraddittoria gol/fallo su contrasto fisico fallito (2026-08-05)
+
+Segnalato dall'utente: dopo un contrasto fisico fallito (`out:'recupero'`, `risk:'high'`) poteva
+capitare in sequenza "Palla persa in una zona pericolosa: [squadra] segna" seguito subito da
+"L'arbitro fischia contro di te per quel contatto" — narrativamente contraddittorio, perché se
+l'arbitro ferma il gioco per un fallo su quel contatto, l'azione non può essere anche proseguita
+fino a un gol in ripartenza sullo stesso pallone perso. Causa: in `resolveChoice()`,
+`applyChoiceOutcome()` (che decide con 40% di probabilità se il pallone perso diventa gol
+avversario) e il trigger `'after_foul_risk'` (che fa scattare l'evento "arbitro") erano
+indipendenti — lo stesso contrasto falso poteva generare entrambi gli esiti nello stesso momento.
+Fix: `resolveChoice()` ora confronta `m.oppGoals` prima/dopo `applyChoiceOutcome()`
+(`golSubitoOra`) e non aggiunge più `'after_foul_risk'` ai trigger se il pallone perso è già
+finito in gol in quella stessa azione — i due esiti restano entrambi possibili ma mutuamente
+esclusivi sullo stesso contrasto. Verificato: `node --check`, bot (20 carriere × 40 settimane,
+zero errori/violazioni).
+
+## Audit e compattazione hub mobile-first (2026-08-05)
+
+L'utente ha avviato una riorganizzazione mobile-first dell'interfaccia. Audit dell'architettura
+esistente: già sostanzialmente mobile-first (`#app` è `max-width:480px`, colonna singola, breakpoint
+dedicati a 420px/360px) e tre schermate (shop, formazione, carriera) usano già tab-bar per evitare
+lo stacking verticale eccessivo. Punto di partenza scelto: l'hub (`screen-hub`), la schermata vista
+più spesso, che impilava 6+ card prima delle azioni principali.
+
+Modifiche (solo CSS + riordino DOM, nessuna funzione toccata, tutti gli `id` invariati):
+- **Card "Relazioni"**: da 3 righe impilate (Mister/Procuratore/Compagni, una sotto l'altra) a una
+  riga sola a 3 colonne (`.rel-grid`, flex), stesse informazioni ma verticalmente molto più compatta.
+- **Riordino hub**: il blocco `hubActions` (Scendi in campo/Simula partita/Salta partita/Telefono/
+  Classifica/Giocatore) e il pulsante Coppa Leonessa sono stati spostati subito dopo la card
+  "Prossimo impegno", PRIMA di "Preparazione settimanale" (4 choice-card allenamento) e "Lavoro"
+  (che restano più in basso). Prima le azioni principali erano sotto 4+ card, ora sono visibili
+  senza scroll aggiuntivo su un viewport mobile standard (375×812).
+Verificato: `node --check`, bot (15 carriere × 40 settimane, zero errori/violazioni), screenshot
+nel Browser pane a 375×812 — relazioni su una riga, azioni visibili subito sotto "Prossimo impegno",
+preparazione settimanale (4 card allenamento) ancora renderizzata correttamente più in basso, nessun
+errore in console.
 
 ## Requisito trasversale: accessibilità (WCAG 2.1 AA)
 
@@ -204,9 +548,27 @@ bug, corretto: vedi cronologia). Le partite di tutte le altre squadre restano in
   c'è un girone da giocare o l'esito finale; schermata `screen-coppa` (`renderCoppa`, bottone in hub visibile
   quando c'è un girone in corso o un esito registrato) mostra tabellina del girone con la squadra del
   giocatore evidenziata (`renderTabellaGirone`).
-- **Non ancora implementato**: il tabellone a eliminazione diretta dei 32esimi vero e proprio (per ora si
-  determina solo chi vi accede); bonus derby (+30% marketing) predisposto ma non agganciato a rilevazione
-  automatica dei derby.
+- ~~Non ancora implementato: il tabellone a eliminazione diretta~~ — **implementato il 2026-08-05**.
+  Dai 32esimi in poi (trentaduesimi→sedicesimi→ottavi→quarti→semifinale→finale) è un vero tabellone a
+  eliminazione diretta: si riusa **esattamente** lo stesso motore/UI delle altre partite di Coppa
+  (`state.coppa.prossimi[0]`, `beginMatch`/`skipGiornata`/`simulaPartita`, contesto `'coppa'`) — cambia
+  solo cosa succede a fine partita. `iniziaTurnoBracket(round, squadre)` accoppia le squadre del turno,
+  trova il mio avversario, e **simula subito** tutte le altre gare del turno (`decidiVincitoreCoppa`,
+  gare secche quindi zero code multi-partita come nei gironi). Vinco → passo il turno e si genera subito
+  il turno successivo (`finalizzaTurnoBracket`); perdo → eliminato, fase `eliminato_<turno>` in
+  `state.coppaTorneo`; vinta la finale → fase `'campione'`, +15 reputazione, nuovo achievement
+  `coppa_campione` ("Re di Coppa"). **Pareggio in gara secca**: niente rigori (scelta esplicita di non
+  costruire quel sistema, resta nei TODO sotto) — si va ai supplementari simulati sulla forza reale
+  delle due squadre (`decidiVincitoreCoppa`, stesso principio già usato per le altre sfide simulate).
+  `screen-coppa` mostra lo storico completo del tabellone (`state.coppaBracket.storico`, poi
+  `coppaTorneo.percorsoBracket` a torneo concluso) turno per turno con risultato. Migrazione in `boot()`
+  per i salvataggi fermi al vecchio stato statico "ai 32esimi" (ora avviano il primo turno vero invece
+  di restare bloccati). Bot aggiornato automaticamente: riusa lo stesso `state.coppa.prossimi.length`
+  già gestito da `__botPlayOffSeason()`, nessuna modifica al bot necessaria. Verificato: `node --check`,
+  bot (60 carriere totali sommando i run di verifica, zero errori/violazioni), e percorso completo dal
+  vivo in browser — vittoria di tutti e 6 i turni fino a "campione" (achievement sbloccato, storico
+  corretto) ed eliminazione forzata in un turno intermedio (testo/grammatica "ai trentaduesimi" /
+  "agli ottavi" / "in semifinale" verificati singolarmente).
 
 ## Partita: attributi, compagni, modalità simulata
 
@@ -309,24 +671,51 @@ bug, corretto: vedi cronologia). Le partite di tutte le altre squadre restano in
 
 ## TODO aperti
 
-- Tabellone a eliminazione diretta dei 32esimi di Coppa Leonessa (oggi si determina solo chi vi accede, non
-  si gioca il turno a eliminazione).
-- Bonus derby (+30% marketing) predisposto in `calcolaMarketing` ma non agganciato a una rilevazione
-  automatica dei derby in calendario.
-- Meccanismo promozione/retrocessione di Serie B: la regola reale ("primo + 14 migliori seconde"/"ultimo +
-  14 peggiori penultime" su TUTTI i gironi B) è solo approssimata (`calcolaEsitoStagione`) perché il motore
-  segue soltanto il girone del giocatore, non l'intera Serie B in parallelo. Servirebbe simulare tutti i
-  gironi B (come si fa già per la Coppa Leonessa) per renderla esatta.
-- `MATCH_EVENTS`: oltre agli 8 eventi rappresentativi originali (5 normali + 3 GK) e ai 12 trade-off
-  generici, ora ci sono 40 eventi specifici per ruolo (5 pool da 8, vedi sezione dedicata) — restano
-  scoperte solo le categorie TACTICAL/PHYSICAL/PROVINCIAL_LIFE del brief narrativo originario
-  (campo pesante, pioggia, freddo, pubblico avversario, borracce dimenticate, presidente a bordo
+- ~~Tabellone a eliminazione diretta dei 32esimi di Coppa Leonessa~~ — **implementato il 2026-08-05**,
+  vedi sezione "Coppa Leonessa" più sopra per i dettagli.
+- ~~Bonus derby~~ — **agganciato il 2026-08-05**. `DB_SQUADRE` non ha un campo comune/località, quindi
+  niente derby geografico "vero": due segnali che riusano solo dati già in gioco, chiesti esplicitamente
+  come mix da usare entrambi (non uno o l'altro). 1) `trovaRivaleEsterno()` già esistente — se la
+  squadra affrontata è un rivale esterno consolidato, è derby. 2) euristica sul nome: tolte le sigle/
+  parole generiche da club (`DERBY_STOPWORDS`: GSO/CSI/FC/REAL/UNITED/ecc.), se resta una parola in
+  comune fra i due nomi squadra (es. "CASTEL GOFFREDO CLUB" vs "CASTEL 2.6", "GS NOVAGLI" vs "NOVAGLI
+  NEXT") è derby — segnale più debole, verificato che non scatta su nomi scorrelati. `derbyDelMese()`
+  scandisce `state.registroPartite` (contesto campionato, stagione corrente, ultime 4 giornate — lo
+  stesso ciclo di `applyPagamentoMensile`) e passa il risultato a `calcolaMarketing`. Il numero risultante
+  (`state.finanze.marketing`) non è comunque mostrato in UI (rimosso dalla scheda giocatore in una
+  sessione precedente perché non attinente alla sola parte giocatore) — resta un dato di sfondo per il
+  club, come da scope originale della richiesta.
+- ~~Meccanismo promozione/retrocessione di Serie B esatto~~ — **implementato il 2026-08-05**.
+  `calcolaEsitoStagione()` ora simula davvero gli altri gironi B (`simulaAltriGironiB`, stesso motore
+  della Coppa Leonessa: `creaSquadraCoppa`/`simulaGironeRoundRobin`) solo quando la posizione del
+  giocatore è 2° o penultima (altrove l'esito è già inequivocabile, nessuno spreco). Confronta la
+  propria "seconda"/"penultima" con la classifica NAZIONALE reale di tutte le altre — deterministico,
+  non più a probabilità basata sul rendimento.
+  Il database ha solo 8 gironi B reali da 14 squadre (più 4 squadre reali — OSZ RONCO 2017, ATLETICO
+  SAIANO, USO MONTICELLI, TORRICELLA B — finite in due mini-gironi residuali "Girone N"/"O" da 3+1 per
+  un limite dell'importazione dati, esclusi dal calcolo con una soglia sulla dimensione, non i nomi,
+  confermato con l'utente che i gironi B reali sono 8).
+  **Regola corretta dall'utente** (il tentativo iniziale usava "14 migliori/peggiori" per errore, presa
+  da un altro contesto): salgono TUTTE le prime di ogni girone B + le **4** migliori seconde a livello
+  nazionale; scendono TUTTE le ultime + le **4** peggiori penultime (C→B resta "prime 2 del girone",
+  A→B resta "ultime 2 del girone", entrambe già corrette da prima). Con 8 gironi reali (~8 candidate
+  "seconde"/"penultime" nazionali) una soglia di 4 è selettiva per davvero, non sempre vera come lo
+  sarebbe stata con 14: verificato dal vivo, un 2° posto debolissimo (10 pt/26 giornate) resta
+  confermato, uno fortissimo (88 pt) viene promosso. Verificato anche: `node --check`, bot (55 carriere
+  totali fra i run di verifica, zero errori/violazioni).
+- ~~`MATCH_EVENTS`, categorie TACTICAL/PHYSICAL/PROVINCIAL_LIFE~~ — **implementato il 2026-08-06**,
+  vedi aggiornamento in cima al documento. Oltre agli 8 eventi rappresentativi originali (5 normali
+  + 3 GK) e ai 12 trade-off generici, ci sono 40 eventi specifici per ruolo (5 pool da 8, vedi
+  sezione dedicata) e ora anche i 10 eventi di colore delle tre categorie del brief narrativo
+  originario (campo pesante, pioggia, freddo, pubblico avversario, borracce dimenticate, presidente a bordo
   campo, terzo tempo, ecc.). L'architettura (schema dati + resolver + cooldown/pesi) è già pronta
   per aggiungerne altri senza toccare il motore.
-- "Più rapporti coi compagni di squadra" (richiesta dell'utente, risposta ricevuta: espandere il
-  numero di compagni nominati stabili, non solo i 2 attuali best-ATT/best-DIF, con possibilità di
-  affinità anche negativa) — **non ancora implementata**: la conversazione è passata ad altre
-  richieste (logo, poi il resto di questa sessione) prima di arrivare al codice.
+- ~~"Più rapporti coi compagni di squadra"~~ — **verificato il 2026-08-04: già implementata**, la
+  nota qui sopra era rimasta indietro rispetto al codice. `sceglieCompagni()` espone 4 nominativi
+  stabili per reparto (portiere/difesa/centrocampo/attacco, non più i 2 best-ATT/best-DIF di
+  origine), ognuno con id persistente (`idPersonaCompagno`) e affinità propria 0-100 che può anche
+  scendere (es. evento "delusione" impatto:-3 in `applyChoiceOutcome`), raggiungibili singolarmente
+  dal Telefono (ruolo `'compagno'`).
 - Rischio panchina per skill (`rischioPanchinaPerSkill`) confronta solo l'overall pesato con gli
   altri giocatori reali del proprio ruolo nella squadra attuale — non tiene conto di anzianità,
   rapporto col mister o andamento recente, che potrebbero in futuro affinare ulteriormente la % di
@@ -335,13 +724,13 @@ bug, corretto: vedi cronologia). Le partite di tutte le altre squadre restano in
   inerti finché non esisterà una vera modalità Coach Career con eventi propri (oggi c'è solo la
   simulazione di fine carriera). Nessun lavoro sui dati da rifare quando arriverà: basta far variare
   `MODALITA_BRESCIA_CORRENTE` in base alla modalità attiva.
-- Sistema rigori: non esiste, nemmeno come struttura minima (scelta esplicita dell'utente, da fare solo
-  quando si svilupperà davvero quel sistema).
-- Mercato invernale (pausa 21 dic-24 gen): niente trasferimenti, solo allenamento + rinnovo col club
-  attuale — limite tecnico (il calendario/classifica campionato è costruito una volta a stagione intorno
-  alla squadra del giocatore, spostarlo a metà stagione richiederebbe ricostruirlo, vedi sezione dedicata).
-- 14 dei 16 giocatori reali con età implausibile (51-90 anni) trovati nello scan del database non sono
-  stati ancora verificati/corretti (solo Poli Federico e Turelli Massimo sono stati decisi dall'utente).
+- ~~Sistema rigori~~ — **implementato il 2026-08-07**, vedi aggiornamento in cima al documento.
+- ~~Mercato invernale (pausa 21 dic-24 gen): niente trasferimenti, solo allenamento + rinnovo col
+  club attuale~~ — **esteso il 2026-08-07**, vedi aggiornamento in cima al documento: ora è un vero
+  ciclo settimanale con offerte/precontratti (validi dalla stagione successiva) e svincolo. Il limite
+  tecnico di fondo resta (il calendario è costruito una volta a stagione, non si cambia squadra a
+  metà campionato) ma è aggirato correttamente facendo scattare il trasferimento in
+  `avviaNuovaStagione()`, l'unico punto in cui il calendario viene comunque ricostruito da zero.
 
 ## Batch di correzioni richieste dall'utente (2026-07-29)
 
@@ -665,6 +1054,25 @@ reale. Aggiunto su richiesta esplicita:
   data di calendario), Coppa Leonessa, contratti/scadenze — restano come prima, per restare nello scope
   della richiesta.
 
+## Percorso fisiologico legato all'età (2026-08-05)
+
+L'utente ha chiesto se esistesse una curva di sviluppo legata all'età: no, la progressione era
+puramente da XP (`addXP`), indipendente dall'età — un trentaduenne cresceva esattamente come un
+ventenne. Aggiunto riusando `etaMultiplier(eta)`, che esisteva già ma solo per `valoreMercato()`
+(curva: <20 rallentato 0.85× · 20-23 normale 1× · 24-29 picco 1.15× · 30-32 primo calo 0.95× · 33-35
+0.75× · 36+ 0.55×) — stessa fonte di verità invece di due curve scollegate:
+- **`addXP(amount)`** ora scala l'XP guadagnato per `etaMultiplier(calcolaEta(state))` prima di
+  applicarlo a `state.xp`, quindi si sale di livello più lentamente da veterani.
+- **`probabilitaCaloAttributo(eta)`** (nuova, stesse soglie di `etaMultiplier`: 0 sotto i 30, poi
+  0.10/0.25/0.40 crescente): ad ogni level up, se l'età lo giustifica, un attributo casuale (fra
+  quelli sopra 20, per non azzerarli) perde -1, messaggio dedicato nella card "Level up" ("Il fisico
+  comincia a farsi sentire"). Non blocca la crescita — è un attrito probabilistico in più, non un tetto:
+  il netto resta positivo salvo età molto avanzate con probabilità di calo alta.
+Verificato: `node --check`, bot (25 carriere, zero errori), e test dal vivo forzando età diverse — 22
+anni: XP pieno, nessun calo; 38 anni: XP quasi dimezzato (55/100), probabilità di calo 40%; 40
+level-up forzati a 41 anni: crescita netta positiva su quasi tutti gli attributi ma un calo
+osservato (passaggio 56→55), a conferma che il meccanismo scatta davvero.
+
 ## Bug: età calcolata solo sull'anno di nascita
 
 `calcolaEta(s)` sottraeva solo l'anno (`annoCorrente(s) - annoNascita`), senza verificare se il
@@ -678,8 +1086,19 @@ giornata del 7 novembre, non dal 26 settembre.
 Durante la verifica, uno scan di tutte le 2.774 date reali nel database ha trovato 16 giocatori con età
 implausibili (51-90 anni) — dati della fonte Excel originale, non un bug di calcolo. Su richiesta
 dell'utente: rimossa la `dataNascita` di **Poli Federico** (POLI PEZZAZE, dava 90 anni — scartata come
-refuso), mantenuta quella di **Turelli Massimo** (I.G.D., 58 anni — confermata come corretta). Gli altri
-14 casi implausibili individuati non sono stati toccati, in attesa di eventuale verifica dell'utente.
+refuso), mantenuta quella di **Turelli Massimo** (I.G.D., 58 anni — confermata come corretta).
+
+**Completato il 2026-08-05** (soglia data dall'utente: under 55 = plausibile, gli altri da sistemare con
+lo stesso criterio già usato per Poli/Turelli): dei 14 rimasti, **4 sotto i 55 anni** (Mister E Mister
+Aura 52, Fiori Roberto 52, Zagaria Patrizio 51, Brunelli Paolo 51) → lasciati invariati, plausibili.
+**5 fra 55 e 60 anni** (Ferrari Piergiovanni 55, Bresciani Simone 55, Pattoni Fabio 56, Pelosi Mauro 56,
+Becchetti Gino 60) → lasciati invariati, stesso ordine di grandezza di Turelli (58, già confermato
+plausibile per il livello CSI amatoriale). **5 restanti, tutti nella rosa P. PRESEGLIE, età 63-104 con
+nomi chiaramente segnaposto** ("Mister X"/"Y"/"Z"/"P"/"Ll Mister Morte") → trattati come Poli Federico,
+`dataNascita` rimossa in `data-squadre.js`. Nessuna modifica al motore: `selezionaSquadraReale()`
+([index REV2.html:1445](index%20REV2.html:1445)) genera già una data plausibile dalla media età dei
+compagni quando manca, verificato scegliendo "Mister X" come giocatore esistente (età generata: 25 anni,
+nessun errore).
 
 ## Bug: etichetta stipendio "€/gg" invece di "€/sett."
 
