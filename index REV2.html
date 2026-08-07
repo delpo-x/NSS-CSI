@@ -2085,11 +2085,15 @@ function registraConoscenza(nome, squadra, fonte){
 }
 // Un giocatore reale a caso dalla rosa di una squadra (compagno o avversario), escludendo te
 // stesso se hai iniziato la carriera da giocatore esistente in quella squadra — stessa esclusione
-// già usata da sceglieCompagni()/migliorGiocatoreRuolo().
+// già usata da sceglieCompagni()/migliorGiocatoreRuolo(). Esclude anche chi è già una persona nota
+// (COMPAGNO_/CONOSCENZA_ già in state.persone): altrimenti un evento "nuovo volto/nuova conoscenza"
+// può ripresentare qualcuno con cui hai già un rapporto, come Facchi Lorenzo se era già compagno.
 function pescaGiocatoreCasuale(nomeSquadra){
   const rosa = rosaSenzaGiocatoreReale(getRosaReale(nomeSquadra), nomeSquadra);
   if(!rosa || !rosa.length) return null;
-  return rosa[rand(0, rosa.length-1)];
+  const sconosciuti = rosa.filter(g=> !state.persone[idPersonaCompagno(g.nome, nomeSquadra)] && !state.persone[idConoscenza(g.nome, nomeSquadra)]);
+  const pool = sconosciuti.length ? sconosciuti : rosa;
+  return pool[rand(0, pool.length-1)];
 }
 function contaConoscenze(s){
   return Object.values(s.persone).filter(p=>p.ruolo==='conoscenza').length;

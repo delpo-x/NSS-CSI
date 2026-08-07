@@ -1,5 +1,15 @@
 # Carriera CSI — Riepilogo progetto
 
+> **Fix 2026-08-07 (bug segnalato dall'utente — "nuovo volto" già noto)**: `pescaGiocatoreCasuale()`
+> pescava un giocatore a caso dalla rosa senza escludere chi era già una persona nota
+> (`COMPAGNO_squadra_nome`/`CONOSCENZA_squadra_nome` già in `state.persone`), quindi eventi come
+> `social_nuovo_compagno` ("Un nuovo volto in squadra si presenta: ...") potevano ripresentare un
+> giocatore già compagno di squadra (es. già incontrato durante un'azione di gioco o già
+> conosciuto in un evento sociale precedente). Corretto filtrando il pool sugli "sconosciuti"
+> (nessun `COMPAGNO_`/`CONOSCENZA_` registrato per quel nome+squadra), con fallback alla rosa
+> intera solo se non resta nessuno sconosciuto (rosa esaurita). Verificato: sintassi OK, bot
+> (25 carriere/40 settimane) 0 errori/0 violazioni.
+
 > **Aggiornamento 2026-08-07 (approfondimento trattative/mercato)**: su richiesta esplicita
 > dell'utente ("mix" di tre direzioni), il sistema di offerte/trattative — prima 0-2 offerte casuali
 > a settimana, trattativa a un colpo solo (+20% stipendio o il club si irrigidisce/ritira) — è stato
