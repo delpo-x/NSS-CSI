@@ -33,6 +33,11 @@ const vm = require('vm');
 const ROOT = path.resolve(__dirname, '..');
 const GAME_FILE = path.join(ROOT, 'index REV2.html');
 const DATA_FILE = path.join(ROOT, 'data-squadre.js');
+// Libreria "attributo -> probabilità" (ProbabilitaAttributi), caricata dal browser come <script
+// src> prima dello script principale (vedi index REV2.html): va caricata anche qui per lo stesso
+// motivo di DATA_FILE, altrimenti calcChanceTiro/calcChanceAssist/calcChancePossesso la
+// referenzierebbero come non definita durante i test headless.
+const LIB_FILE = path.join(ROOT, 'probabilita-attributi.js');
 const HELPERS_FILE = path.join(__dirname, 'bot-helpers.js');
 const LOG_DIR = path.join(__dirname, 'test-logs');
 
@@ -159,7 +164,7 @@ function extractScript(html){
   return m[1];
 }
 
-function newGameContext(dataCode, gameCode, helpersCode){
+function newGameContext(dataCode, libCode, gameCode, helpersCode){
   const document = createFakeDocument();
   const localStorage = createFakeLocalStorage();
   const sandbox = {
@@ -173,14 +178,16 @@ function newGameContext(dataCode, gameCode, helpersCode){
   vm.createContext(sandbox);
   // DB_SQUADRE vive in data-squadre.js (<script src>), caricato dal browser prima dello script
   // principale: qui va eseguito per primo per lo stesso motivo, il gioco lo referenzia subito.
+  // ProbabilitaAttributi (probabilita-attributi.js) va caricato subito dopo, stesso motivo.
   vm.runInContext(dataCode, sandbox, { filename: 'data-squadre.js' });
+  vm.runInContext(libCode, sandbox, { filename: 'probabilita-attributi.js' });
   vm.runInContext(gameCode, sandbox, { filename: 'index-REV2-script.js' });
   vm.runInContext(helpersCode, sandbox, { filename: 'bot-helpers.js' });
   return sandbox;
 }
 
-function playOneCareer(dataCode, gameCode, helpersCode, config, logger){
-  const sandbox = newGameContext(dataCode, gameCode, helpersCode);
+function playOneCareer(dataCode, libCode, gameCode, helpersCode, config, logger){
+  const sandbox = newGameContext(dataCode, libCode, gameCode, helpersCode);
   const call = '__botPlayCareer(' + JSON.stringify(config) + ')';
   try{
     return vm.runInContext(call, sandbox);
@@ -223,6 +230,7 @@ function main(){
   const html = fs.readFileSync(GAME_FILE, 'utf8');
   const gameCode = extractScript(html);
   const dataCode = fs.readFileSync(DATA_FILE, 'utf8');
+  const libCode = fs.readFileSync(LIB_FILE, 'utf8');
   const helpersCode = fs.readFileSync(HELPERS_FILE, 'utf8');
 
   fs.mkdirSync(LOG_DIR, { recursive: true });
@@ -242,7 +250,7 @@ function main(){
 
   for(let i=0;i<args.careers;i++){
     const config = randomConfig(i, args.weeks);
-    const result = playOneCareer(dataCode, gameCode, helpersCode, config, w);
+    const result = playOneCareer(dataCode, libCode, gameCode, helpersCode, config, w);
     summary.careers++;
     summary.totalWeeks += result.weeksPlayed;
     summary.totalMatches += result.matchesPlayed;

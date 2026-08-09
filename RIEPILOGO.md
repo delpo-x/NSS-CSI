@@ -1,5 +1,772 @@
 # Carriera CSI — Riepilogo progetto
 
+> **Aggiornamento 2026-08-09 (Match Viewer 2D — audit completo, stato persistente del campo).**
+> Audit dell'intera pipeline motore→stato→eventi→animazioni→rendering, poi correzione delle cause.
+> **Cause trovate (audit, prima di toccare il codice):** C1 nessuno stato persistente dei giocatori
+> (`posizioniConMarcatura()` ricalcolava un target ogni frame e `drawFormazioneCompleta` lo disegnava
+> direttamente → teletrasporti); C2 l'unico movimento era `nuovoOffsetWander()` con `Math.random()`
+> (il "movimento casuale"), e l'unica cosa persistita era il rumore, non la posizione; C3
+> `AnimationManager.tick()` faceva `this.entities = {ball:startXY, actor:startXY}` sostituendo
+> l'oggetto: con eventi senza zona d'origine (tackle/possession/foul/whistle) diventava `null` →
+> palla e 14° giocatore sparivano; C4 due sistemi paralleli per i giocatori (13 da
+> posizioniConMarcatura, il self da `entities.actor`); C5 `interpretMatchEvent` usava sempre la
+> costante di zona, mai la posizione reale → salto a inizio clip; C6 lo stato finale di
+> un'animazione non veniva mai persistito; C7 nessun guard su NaN/undefined nel rendering.
+> **Correzioni (tutte in `index REV2.html`, single-file preservato):**
+> - Nuovo stato persistente unico `state.matchTemp.campo` = `{ball:{x,y,visible,moving},
+>   players:[14×{id,team,role,x,y,targetX,targetY,visible,base}]}` (`creaStatoCampo`), inizializzato
+>   in `beginMatch`/`beginMatchAsSub` dalle coordinate tattiche già esistenti. `base` è un
+>   RIFERIMENTO allo slot di `posizioniTattiche` (non una copia): la formazione resta la sorgente
+>   tattica immutabile letta da heatmap/MovementDecisionEngine — nessuna struttura parallela.
+> - `slotId` aggiunto agli slot in `calcolaPosizioniTattiche` per ricollegare senza ambiguità le
+>   posizioni desiderate (che sono copie riordinate) al giocatore nello stato.
+> - `sincronizzaTargetCampo` (target da heatmap+matrice+MovementDecisionEngine, invariati),
+>   `avanzaGiocatoriCampo` (current→target a 10 m/s: elimina i teletrasporti), `sincronizzaPallaCampo`
+>   (travaso della posizione interpolata), `muoviPallaEvento` (unico ingresso di stato fuori clip),
+>   `avanzaStatoCampo` (un frame di simulazione, separato dal rendering).
+> - Random-walk rimosso e sostituito da `offsetRespiroTattico`: oscillazione deterministica (fase da
+>   slotId, frequenze in rapporto √2 per non percepire il ciclo), zero `Math.random`.
+> - `AnimationManager`: `entities` non può più diventare null (riparte dall'ultima posizione nota);
+>   la posizione finale della clip viene persistita nello stato alla chiusura della timeline (Fase 8).
+> - `interpretMatchEvent`: origine = posizione reale della palla (zona nominale solo come fallback).
+> - `renderMatchCanvas`/`drawFormazioneCompleta`/`PlayerRenderer`: il renderer è ora pura lettura
+>   dello stato, tutti e 14 i giocatori da un unico percorso; ordine campo→giocatori→palla invariato.
+> - Vincoli fisici: `limitiGiocatore` impedisce ai giocatori di movimento di superare la linea di
+>   porta (`LIMITE_GIOCATORE_X=0.97`, l'area piccola resta raggiungibile); la palla resta libera di
+>   oltrepassarla per gol/tiro fuori.
+> - Difensivi + diagnostica: `coordinataValida`/`segnalaCoordinataInvalida` (un warning per tipo, mai
+>   silenzioso); `matchViewerDebug()` (Fase 14, sola lettura, non usata dall'esecuzione normale).
+> - **Bug preesistente scoperto e corretto**: `finishMatch()` chiude con `setTimeout(...,200)` e in
+>   quella finestra il bottone "Continua" resta cliccabile → la funzione veniva rieseguita (misurate
+>   4 volte) applicando più volte XP/voto/classifica/registraPartita. Aggiunta guardia `m.finita`
+>   (stesso principio di `orologioPartitaAttivo`): nessuna logica di gioco modificata, ora la partita
+>   si chiude una volta sola (verificato: `partiteRegistrate: 1`).
+> **Test eseguiti** (server Python locale; Node non disponibile in questo ambiente → `node --check` e
+> `tools/test-bot.js` NON eseguiti, sostituiti da caricamento in browser senza errori di parsing,
+> zero errori console e test funzionali diretti): T1 14 giocatori+palla presenti e posizionamento
+> tattico corretto/speculare (POR 0.06/0.94, DIF 0.22, CEN 0.48, ATT 0.74, ali y 0.18/0.50/0.82);
+> determinismo (2 run da 120 frame identiche, nessun `Math.random` nel percorso); T2 passaggio
+> (origine = posizione reale, arrivo esatto, errore 0 m); T3 tre passaggi concatenati (errore 0 m
+> ciascuno); T4 tiro (palla a 0.995 oltre la linea, giocatori fermi a 0.97: nessuno entra in porta);
+> T5 gol (gating sbloccato a 750ms, celebrazione eseguita dopo, 14 giocatori integri); T6 parata (la
+> clip non sposta la palla); T7 12 giocatori di movimento con target validi e intent coerenti
+> (SUPPORT/WIDTH/DEPTH/UNMARK in possesso, MARK/PRESS fuori possesso); T8 headless (rAF assente:
+> nessun errore, `matchAnimMgr` resta null, stato campo presente, partita conclusa su screen-result);
+> playthrough reale con canvas (40 snapshot: sempre 14 giocatori, 0 fuori campo, 0 in porta, 0 NaN,
+> 0 diagnostiche, palla in movimento solo durante le clip).
+> **Problemi residui:** (1) `node --check` e le 25 carriere del bot restano da eseguire alla prima
+> occasione utile (Node assente qui); (2) per le scelte assist/recupero/possesso la DESTINAZIONE
+> della clip resta la zona di default di `ZONE_DEFAULT_PER_OUT` (l'origine è ora corretta): allinearla
+> richiederebbe toccare `applyChoiceOutcome`, fuori dal perimetro consentito.
+
+> **Aggiornamento 2026-08-09 (palla "solo con gli eventi" + giocatori scollegati dalla posizione reale).**
+> Bug segnalato subito dopo il fix precedente: "il pallone appare solo con gli eventi, non c'è flusso
+> continuo. i giocatori non rispecchiano la posizione in campo".
+> - **Causa**: `zonaGolAttuale` (la zona che la narrazione del momento descrive già, es. "Ricevi palla
+>   al limite dell'area") veniva risolta da `nextMoment()` solo per calcolare le probabilità delle
+>   scelte — MAI collegata alla posizione visuale di palla/attore. Il fix precedente aveva tolto il
+>   movimento casuale della palla (corretto), ma il risultato era che palla e portatore restavano
+>   congelati sull'ULTIMA destinazione di clip (o al kickoff) per tutta la durata di un momento —
+>   spesso minuti di tempo reale — scollegati da dove la narrazione diceva già che ci si trovava.
+>   `posizioniConMarcatura` (quindi `MovementDecisionEngine`) legge la posizione del portatore dalla
+>   stessa fonte, quindi anche la marcatura/pressing dei giocatori risultava scollegata dalla zona
+>   reale dell'azione.
+>   Primo tentativo (far leggere la zona al renderer ad ogni frame quando idle) scartato durante la
+>   verifica: causava un salto ALL'INDIETRO della palla dopo un gol (tornava alla zona pre-tiro invece
+>   di restare sulla linea di porta) perché la zona resta quella dell'ultimo momento anche a esito
+>   già avvenuto — un problema di priorità fra "ultima zona nota" e "ultima posizione reale nota".
+> - **Correzione definitiva** (`index REV2.html`, `nextMoment()`): quando si risolve `zonaGolAttuale`
+>   per un nuovo momento, si aggiornano nello stesso punto anche `matchAnimMgr.entities.ball/actor`
+>   alla stessa zona — esattamente come fa già `AnimationManager.tick()` quando avvia una clip
+>   (`entities = {ball:startXY, actor:startXY}`), qui applicato al momento in cui inizia una nuova
+>   situazione di gioco invece che a una clip. Da quel punto in poi `entities` resta l'UNICA fonte di
+>   verità (nessuna logica di posizionamento nel renderer): il render (`renderMatchCanvas`) e il
+>   contesto di `posizioniConMarcatura`/`MovementDecisionEngine` tornano a leggere `entities.ball`/
+>   `entities.actor` incondizionatamente, come prima del tentativo scartato. Nessuna nuova animazione:
+>   uno scatto deterministico su un dato di stato già esistente (stessa zona già usata per calcolare
+>   le probabilità), non un secondo sistema di animazione. Nessun momento GK_MOMENTS_POOL ha
+>   `zonaGol`: per quei momenti `entities` non viene toccata, resta quanto lasciato dall'ultima clip.
+> - **Verificato** (server Python locale, Node non disponibile): playthrough reale completo —
+>   (1) alla rivelazione del primo momento la palla passa da centrocampo a `edge_area` (0.75,0.5);
+>   (2) tiro-goal: nessun salto all'inizio della clip (l'origine coincide già con la zona di riposo),
+>   dopo il gol la palla resta esattamente sulla linea di porta per tutta l'esultanza E oltre (13s+),
+>   nessun salto all'indietro; (3) al momento successivo (`flank_right`) palla e "Baglio" (il
+>   portatore) si spostano insieme in fascia, visibilmente vicini — giocatori coerenti con la palla;
+>   (4) campionata l'assenza di movimento per 2s reali all'interno dello stesso momento: posizione
+>   identica byte-per-byte. Zero errori console in tutti i test.
+> - **Limite noto, non toccato** (fuori scope, richiederebbe modificare `applyChoiceOutcome`/
+>   `ZONE_DEFAULT_PER_OUT`, esplicitamente non toccabili): per le scelte 'assist'/'recupero'/
+>   'possesso' l'origine della clip resta il default fisso (`midfield_center`/`own_half`), non
+>   `zonaGolAttuale` — a differenza di 'goal' (dove l'origine è già esplicitamente `zonaGolAttuale`),
+>   quindi per quei tipi di scelta può comparire un breve salto fra la posizione di riposo e l'inizio
+>   della clip. Preesistente, non introdotto da questo fix, segnalato invece di risolto silenziosamente.
+> - Node non disponibile in questo ambiente — da rilanciare `node --check` e `tools/test-bot.js` alla
+>   prima occasione utile.
+
+> **Aggiornamento 2026-08-09 (fisica del pallone — rimosso il movimento autonomo/casuale).**
+> Su richiesta esplicita dell'utente: la palla si muoveva anche senza un evento che la coinvolgesse.
+> - **Causa precisa**: in `renderMatchCanvas()`, quando nessuna clip era attiva (`idle`), la posizione
+>   della palla veniva ricalcolata ogni frame con `posizioneConWander('ball', entities.ball, deltaMs)`
+>   — lo stesso random-walk introdotto per i pallini dei giocatori (aggiornamento precedente), applicato
+>   per errore anche alla palla. Nessun `requestAnimationFrame`/tick "fantasma": il ciclo di rendering
+>   era quello giusto, era la logica AL SUO INTERNO a spostare la palla senza un evento reale.
+> - **Correzione** (`index REV2.html`): rimossa la chiamata a `posizioneConWander` per la palla — ora
+>   `ballPos = entities.ball || {x:0.5,y:0.5}` (solo un'ultima rete di sicurezza, il percorso normale
+>   la trova sempre popolata). Il wander resta invariato per i 13 pallini di formazione e per l'entità
+>   'actor' (non richiesto toccarlo, "comportamento dei giocatori" è esplicitamente fuori scope).
+>   Aggiunta anche l'inizializzazione esplicita di `matchAnimMgr.entities` al calcio d'inizio
+>   (`avviaCanvasPartita`, centrocampo `{x:0.5,y:0.5}`) cosicché la posizione iniziale derivi da un
+>   punto del flusso di gioco (kickoff) invece che da un fallback calcolato ad ogni frame dal renderer.
+>   Non toccati: motore/esito delle azioni, `AnimationLibrary`, `AnimationManager`, `EventInterpreter`,
+>   heatmap, `BEHAVIOR_MATRIX`, `MovementDecisionEngine`, comportamento dei giocatori, gating, bot.
+> - **Verificato** (server Python locale, Node non disponibile — `node --check`/25 carriere via
+>   `test-bot.js` non eseguibili in questo ambiente, sostituiti con caricamento in browser + zero
+>   errori console + test funzionali mirati sull'`AnimationManager` reale):
+>   (1) palla ferma senza eventi — campionata ogni 50ms per 3s reali, sempre esattamente `{x:0.5,y:0.5}`;
+>   (2) passaggio reale in partita — campionata ogni 50ms: ferma finché `current:false`, poi
+>   interpolazione liscia (`easeOutQuad`, clip `pass_short`) fino a destinazione, poi ferma di nuovo
+>   per 15s+ senza il minimo drift;
+>   (3) tiro-goal, tiro-fuori, cross (`pass_long` con arco laterale) — testati via `emitMatchEvent()`
+>   (stesso ingresso usato dal motore reale): traiettorie corrette, deterministiche, destinazioni
+>   diverse per outcome (`goal_line` vs `goal_line_wide`), nessuna casualità nella posizione;
+>   (4) parata/rinvio — dopo un tiro parato la palla resta esattamente ferma alla destinazione del
+>   tiro anche durante l'intera clip di followup `save` (che non sposta la palla, comportamento
+>   preesistente non toccato);
+>   (5) continuità fra eventi consecutivi verificata concettualmente tramite il meccanismo esistente
+>   (non toccato) di `zonaGolAttuale`/origin condivisi fra calcolo della chance e animazione — non è
+>   stato alterato il comportamento (preesistente, in `AnimationManager.tick`, fuori scope) per cui
+>   ogni nuova clip parte dalla zona-origine dell'evento, non da un pixel letterale precedente.
+>   Zero errori console in tutti i test.
+> - Node non disponibile in questo ambiente — da rilanciare `node --check` e 25 carriere con
+>   `tools/test-bot.js` alla prima occasione utile.
+
+> **Aggiornamento 2026-08-09 (Match Viewer — MovementDecisionEngine: integra heatmap + matrice decisionale + contesto).**
+> Su richiesta esplicita dell'utente: i pull ad-hoc introdotti nei due aggiornamenti precedenti
+> (marcatura/pressing/spinta-heatmap in `posizioniConMarcatura`) sono stati unificati in un unico
+> modulo decisionale, senza creare una nuova heatmap né una nuova matrice comportamentale.
+> - **`BEHAVIOR_MATRIX`** (nuovo, `index REV2.html`): codifica finalmente in dati la matrice
+>   qualitativa già fornita dall'utente in chat (DC supporto/costruzione↔marcatura/copertura, ALA
+>   ampiezza/sovrapposizione↔rientro/marcatura, CC supporto/inserimento↔pressione/copertura, ATT
+>   profondità/smarcamento/pivot↔pressione), tradotta nel vocabolario di intent richiesto (SUPPORT,
+>   DEPTH, WIDTH, COVER, PRESS, MARK, UNMARK, RETREAT). Stessi bucket già usati dall'heatmap
+>   (`bucketComportamento`, invariato).
+> - **`MovementDecisionEngine`** (nuovo, isolato, puramente funzionale): `decide(input)` →
+>   `{targetX,targetY,intent,priority}`. Flusso esattamente come richiesto: HEATMAP
+>   (`HEATMAP_CENTROIDI_RUOLO`, invariata) → posizione di riferimento; MATRICE (`BEHAVIOR_MATRIX`) →
+>   intent di base; CONTESTO (chi è il portatore/il pressore, distanza dall'avversario più vicino) →
+>   sostituisce l'intent di base con PRESS (pressore reale entro `RAGGIO_PRESSING_M`, riusato), MARK
+>   (avversario più vicino entro 12m, non possesso) o UNMARK (avversario entro 6m, in possesso — il
+>   giocatore si sposta dal punto heatmap verso lo spazio libero); altrimenti resta l'intent di base
+>   della matrice (COVER/RETREAT/SUPPORT/WIDTH/DEPTH). Soglie (12m, 6m, offset UNMARK) scelte da me,
+>   non fornite, stesso ordine di grandezza delle soglie già esistenti.
+> - **`posizioniConMarcatura()` riscritta** per chiamare il motore per ciascun giocatore invece della
+>   vecchia logica inline duplicata (rimossa `posizioneComportamento`, assorbita nel motore); il
+>   portatore mantiene esattamente la stessa logica di avanzamento verso porta già esistente (non
+>   toccata, solo etichettata con l'intent di base come richiesto). Il Match Viewer
+>   (`drawFormazioneCompleta`/`posizioneConWander`) riceve solo `{x,y}` come prima, nessuna logica
+>   decisionale nel renderer — non toccati `AnimationLibrary`/`AnimationManager`/`EventInterpreter`/
+>   renderer 2D/gating/bot headless.
+> - **Verificato** (server Python locale, Node non disponibile — `node --check`/`test-bot.js` non
+>   eseguibili in questo ambiente, sostituiti con caricamento in browser + zero errori console +
+>   ispezione manuale del codice): tutti e 12 i giocatori di movimento producono target in [0,1] sia
+>   in possesso che fuori possesso (0 invalidi su 2 fasi testate); osservati in una formazione reale
+>   SUPPORT/WIDTH/DEPTH/UNMARK (possesso) e MARK/PRESS (non possesso); COVER e RETREAT verificati
+>   chiamando `MovementDecisionEngine.decide()` direttamente con un avversario oltre i 12m (fallback
+>   alla matrice, come atteso); determinismo verificato (stesso input due volte → stesso output
+>   byte-per-byte); playthrough reale (scelta → esito → continua) senza regressioni, zero errori
+>   console.
+> - Node non disponibile in questo ambiente — da rilanciare `node --check` e `node tools/test-bot.js`
+>   alla prima occasione utile.
+
+> **Aggiornamento 2026-08-09 (Match Viewer — pallone assente/che esce dal campo, clamp ai bordi).**
+> Bug segnalato dall'utente: "il pallone non è presente all'inizio, appena si fa una scelta spawna e
+> si muove a caso dentro e fuori dal campo"; "i giocatori... calcano le aree della heatmap ma si
+> muovono senza una logica, a maggior ragione perché non c'è il pallone".
+> - **Causa 1 (pallone "assente" a inizio partita)**: prima della prima clip d'animazione,
+>   `matchAnimMgr.entities.ball` non esiste ancora e il fallback era un punto fisso `{x:0.5,y:0.5}`
+>   (centrocampo) scollegato da qualunque logica di gioco — da cui l'impressione di un pallone
+>   "assente"/casuale che poi "spawna" al primo evento reale. Fix in `index REV2.html`
+>   (`renderMatchCanvas`): il fallback ora è `posizionePortatorePalla(entities)` (già usata altrove
+>   per il campo di passaggio/la marcatura), cioè la posizione tattica del portatore — il pallone è
+>   presente e coerente con la situazione fin dal primo fotogramma, non un punto morto.
+> - **Causa 2 (esce dal campo)**: il random-walk idle (`posizioneConWander`, introdotto
+>   nell'aggiornamento precedente) non aveva NESSUN clamp ai bordi — un pallino a riposo vicino a una
+>   zona di bordo (corner, six_yard, goal_line, flank...) poteva uscire visivamente dal rettangolo
+>   verde con l'offset di wander (fino a 6m in ogni direzione). Fix: nuova `clampCampo()` (margine
+>   `MARGINE_CAMPO_NORM=0.015`, scelto da me) applicata all'output di `posizioneConWander` — copre sia
+>   il pallone sia i 13 pallini di formazione, un solo punto da correggere.
+> - **Verificato**: (1) screenshot a inizio partita, prima di qualunque scelta — pallone visibile
+>   accanto allo slot del giocatore, non a centrocampo; (2) forzato `entities.ball` a un angolo estremo
+>   (x=0.995,y=0.02) e campionata `posizioneConWander` per 400 step consecutivi — mai uscito da
+>   [0.015, 0.985] su nessuno dei due assi, confermato anche visivamente (pallone fermo appena dentro
+>   il bordo); (3) playthrough reale con un tiro (clip d'animazione) — pallone resta vicino al
+>   giocatore/alla porta, nessun teletrasporto né uscita dal campo. Zero errori console in tutti i test.
+> - **Non implementato in questo intervento**: rimesse laterali/dal fondo. Il motore non modella un
+>   vero stato "palla fuori" (nessun evento/scelta lo rappresenta), quindi introdurle sarebbe una
+>   nuova meccanica di gioco, non un fix — con la palla ora sempre clampata dentro il rettangolo di
+>   gioco il sintomo visivo (palla che esce senza rimessa) non si presenta più, ma il tema resta aperto
+>   se l'utente vuole modellare esplicitamente le rimesse come eventi.
+> - Node non disponibile in questo ambiente (server Python locale usato per tutti i test) — da
+>   rilanciare `node tools/test-bot.js` alla prima occasione utile.
+
+> **Aggiornamento 2026-08-09 (Match Viewer — heatmap di posizionamento per ruolo, da HEATMAP.xlsx).**
+> Implementata la matrice di comportamento per ruolo (DC/CC/ALA/ATT × possesso/non possesso) fornita
+> dall'utente, usando i valori numerici del file `HEATMAP.xlsx` caricato ("scelta 1+heatmap che ti
+> carico dopo" in risposta alla richiesta di chiarimento sulla matrice qualitativa).
+> - **Lettura file**: 2 fogli (IN POSSESSO / NON POSSESSO), 5 blocchi ciascuno (DC, CC, ALA DX, ALA
+>   SX, ATT), ciascuno una griglia 8 righe (larghezza campo) × 13 colonne (lunghezza campo, col.1 =
+>   vicino alla propria porta) di pesi 1-3. Estratti con `openpyxl` (Python, non presente nel
+>   progetto: usato solo per leggere il file offline, nessuna nuova dipendenza runtime).
+> - **Semplificazione dichiarata**: invece di portare tutte le 130×10 celle in `index REV2.html` e
+>   campionarle ogni frame, calcolato offline il baricentro pesato (Σvalore·coordinata/Σvalore) di
+>   ciascuna griglia — un punto per ruolo/fase (`HEATMAP_CENTROIDI_RUOLO`). Verificato numericamente
+>   che le griglie DC/CC/ATT sono simmetriche su y (un solo baricentro serve per entrambi gli slot
+>   DIF/per l'unico ATT) e che ALA DX/SX sono l'una lo specchio dell'altra sull'asse y — coerente con
+>   gli slotY di base (0.18/0.82) già esistenti in `FORMAZIONE_TATTICA_7`.
+> - **Integrazione**: nuove `bucketComportamento()` (mappa reparto+slotY di base → DC/CC/ALA_SX/
+>   ALA_DX/ATT/null-per-POR) e `posizioneComportamento()` (pull aggiuntivo verso il baricentro del
+>   bucket, `PULL_COMPORTAMENTO=0.3` scelto da me) in `posizioniConMarcatura()` — applicato COME PULL
+>   IN PIÙ dopo marcatura/pressing/avanzamento portatore già esistenti, non li sostituisce (richiesta
+>   esplicita "non sostituisce quanto detto precedentemente"). Per l'away (attacca verso x=0) la x del
+>   baricentro è speculare (1-x), la y no (stesso lato fisico per entrambe le squadre).
+> - **Verificato**: calcolate a mano le posizioni attese per ogni slot (es. home DIF base x=0.22 →
+>   pull marcatura+comportamento DC-possesso → x=0.276 atteso, 0.276 osservato; home ALA_DX-slot
+>   base (0.48,0.82) → 0.491,0.759 atteso e osservato; home ATT base 0.74 → 0.695 atteso e osservato)
+>   per la fase 'home' e per la fase 'away' — tutti i valori calcolati a mano coincidono esattamente
+>   con l'output di `posizioniConMarcatura()`. Verificata la tendenza generale: DC resta centrale/
+>   compatto, ATT resta avanzato anche fuori possesso ("pressione"), ALA si sposta lateralmente in
+>   base al proprio slot. Screenshot del campo senza anomalie, zero errori console.
+> - **Fix precedenti in questo aggiornamento** (stessa sessione): guardia di rientranza
+>   `orologioPartitaAttivo` contro il doppio-click sul bottone "Continua" (il tempo "impazziva" ad
+>   ogni click ripetuto durante il tween live) e velocità dei pallini corretta a `VELOCITA_PALLINO_MPS
+>   = 10` (era 65m/4s≈16.25, giudicata eccessiva) — entrambi verificati in precedenza in questa stessa
+>   sessione, vedi sopra.
+> - Node non disponibile in questo ambiente (server Python locale usato per tutti i test) — da
+>   rilanciare `node tools/test-bot.js` alla prima occasione utile.
+
+> **Aggiornamento 2026-08-09 (Match Viewer — fix orologio "impazzito" dopo Continua, velocità corretta a 10 m/s).**
+> Bug segnalato dall'utente: "una volta cliccato continua per entrare in campo, il gioco si bugga e il
+> tempo va avanti ad ogni click".
+> - **Causa individuata**: il bottone "Continua ▸" (sia quello di `nextMoment()` per l'ultimo tratto a
+>   fine partita, sia quello di `showMatchEvent()` dopo un evento ◆) resta nel DOM e cliccabile per
+>   TUTTA la durata dell'animazione live del minutaggio (`animaOrologioPartita`, fino a diversi secondi
+>   reali) perché `matchAction` viene ripulito solo nella callback finale — un secondo click sullo
+>   stesso bottone durante quella finestra richiamava un secondo `nextMoment()` in parallelo, sommando
+>   un secondo incremento di minuto e avviando un secondo tween concorrente sullo stesso elemento DOM.
+> - **Fix**: guardia di rientranza `orologioPartitaAttivo` in `index REV2.html` — `nextMoment()` ora
+>   ignora ogni chiamata mentre un tween è già in corso, si azzera nella callback finale (sia per il
+>   percorso normale sia per l'ultimo tratto fino a `finishMatch`) e viene resettata per sicurezza a
+>   ogni inizio partita (`beginMatch`/`beginMatchAsSub`).
+> - **Verificato**: simulato un doppio-click reale sullo stesso identico bottone "Continua" nello
+>   stesso tick JS (nessun gap reale) — il primo click avvia il tween (minuto 0→9, `orologioPartitaAttivo:true`),
+>   il secondo click immediato viene ignorato (minuto resta 9); dopo la fine naturale del tween il flag
+>   torna `false` e le 3 scelte del primo momento appaiono correttamente. Zero errori console.
+> - **Velocità pallini corretta a 10 m/s** (era stata calibrata a 65m/4s≈16.25 m/s nell'aggiornamento
+>   precedente, l'utente l'ha giudicata eccessiva): `VELOCITA_PALLINO_MPS = 10` in `index REV2.html`.
+>   Verificato campionando la distanza percorsa ogni 100ms per 2s: velocità media misurata ≈9.5 m/s,
+>   coerente col nuovo riferimento.
+> - **Nota per il prossimo intervento**: l'utente ha fornito una matrice di comportamento per ruolo
+>   (DC/ALA/CC/ATT × possesso/non possesso, es. "ALA: ampiezza/sovrapposizione in possesso, rientro/
+>   marcatura fuori possesso") come raffinamento — non sostituisce la marcatura/pressing già
+>   implementata (`posizioniConMarcatura`), la integra. Non ancora implementata: la matrice descrive
+>   comportamenti qualitativi, non le coordinate/soglie geometriche esatte che finora l'utente ha
+>   sempre fornito prima di ogni implementazione — chiarimento richiesto in chat prima di scriverla in
+>   `posizioniConMarcatura`, per non inventare arbitrariamente le geometrie di ampiezza/sovrapposizione/
+>   inserimento/pivot al posto suo.
+> - Node non disponibile in questo ambiente (server Python locale usato per tutti i test) — da
+>   rilanciare `node tools/test-bot.js` alla prima occasione utile.
+
+> **Aggiornamento 2026-08-09 (Match Viewer — fix orologio oltre 50', movimento random-walk a velocità reale).**
+> Bug segnalati dall'utente dopo la modifica precedente: (1) "il tempo va avanti ad oltranza e non si
+> ferma a 50'"; (2) "i giocatori oscillano in loop e si muovono troppo lentamente".
+> - **Bug orologio**: `nextMoment()` incrementava `m.minute += rand(9,13)` senza mai limitarlo — con
+>   4 momenti a scelta per partita il minutaggio VISUALIZZATO poteva arrivare fino a ~52'-53' prima
+>   che `finishMatch()` lo riportasse a 50. Fix: `m.minute = Math.min(50, m.minute + rand(9,13))` in
+>   `index REV2.html`, il minutaggio ora non supera mai 50' qualunque sia il numero di momenti ancora
+>   da giocare. Verificato pilotando un'intera partita da portiere (pool peggiore, 4 momenti gk) via
+>   click automatizzati sulle choice-card: sequenza minuti osservata `12',12',12',24',36',45',46'...48'`,
+>   mai oltre 50, partita conclusa correttamente su `screen-result` con `state.matchTemp.minute===50`.
+> - **Movimento troppo lento/"in loop"**: il precedente layer idle (singola oscillazione seno/coseno
+>   per giocatore, ampiezza ~0.8m/0.7m, periodo fisso) dava un'impressione di andirivieni ripetitivo e
+>   percettibilmente lento. Sostituito con un vero random-walk continuo: `posizioneConWander(key,
+>   centro, deltaMs)` fa inseguire a ogni pallino un micro-obiettivo casuale entro `RAGGIO_WANDER_M`
+>   (6m, scelto da me) dalla propria posizione tattica/di marcatura, spostandosi a velocità reale
+>   costante `VELOCITA_PALLINO_MPS = CAMPO_LUNGHEZZA_M/4` (~16.25 m/s, calibrazione esplicita
+>   dell'utente: "un giocatore ci mette 4 secondi per correre tutta la lunghezza del campo") e appena
+>   raggiunto il target ne sceglie subito un altro, senza mai fermarsi. Stato persistente in
+>   `statoWanderPallini` (per-key offset/target in metri), resettato a ogni `avviaCanvasPartita()`.
+>   Applicato ai 13 pallini di formazione (`drawFormazioneCompleta`) e a palla/attore quando non è in
+>   corso una clip d'animazione (`idle` in `renderMatchCanvas`, invariato il comportamento durante le
+>   clip). Nessuna modifica a motore/eventi/probabilità/`posizioniConMarcatura`/`posizioniTattiche`.
+>   Verificato: campionando la distanza percorsa da un pallino ogni 100ms per 2s, velocità media
+>   misurata ≈14.4 m/s (vicina al riferimento 16.25 m/s, scarto dovuto al campionamento discreto),
+>   movimento mai fermo, traiettoria non periodica (nuovo target casuale ogni volta). Zero errori
+>   console in entrambi i test (server Python locale, Node non disponibile in questo ambiente — da
+>   rilanciare `node tools/test-bot.js` alla prima occasione utile).
+
+> **Aggiornamento 2026-08-09 (Match Viewer — rimosse curve di passaggio, aggiunto movimento idle continuo).**
+> Richiesta utente: durante la partita il campo appariva statico (nessun movimento fra un evento e
+> l'altro) con le curve di indifferenza di passaggio sempre sovrapposte, non più volute.
+> - **Rimosso** interamente il layer grafico `drawPassProbabilityField` (e con esso `MOSTRA_CAMPO_PROBABILITA_PASSAGGIO`,
+>   `calculateIndifferenceRadius`, `LIVELLI_PROBABILITA_PASSAGGIO`) da `index REV2.html`: era solo
+>   rendering, non toccava probabilità/motore (`calcChanceAssist`/`calcChancePassaggioPortiere`
+>   restano invariati, usano `ProbabilitaAttributi.passaggioAttacco` direttamente). Ripulite anche le
+>   due righe di commento residue che citavano la funzione rimossa.
+> - **Aggiunto** movimento idle continuo, puramente grafico: `tempoAnimazioneCampoMs` (accumulato dal
+>   ticker rAF già esistente in `avviaCanvasPartita`), `seedDaStringa(nome)` (fase propria per
+>   giocatore) e `conMovimentoIdle(p, seed)` (piccola oscillazione seno/coseno, ampiezza ~0.012/0.018
+>   normalizzato ≈0.8m/0.7m sul campo reale). Applicato in `drawFormazioneCompleta` (13 pallini di
+>   formazione) e in `renderMatchCanvas` su palla/attore SOLO quando non è in corso una clip
+>   d'animazione (`idle = !mgr || !mgr.current`), per non alterare la precisione delle traiettorie
+>   animate da `AnimationManager`. Nessuna modifica a `posizioniConMarcatura`, `calcolaPosizioniTattiche`,
+>   motore o risoluzione eventi.
+> - **Verificato** (server Python locale su porta 8813, Node non disponibile in questo ambiente):
+>   carriera reale creata via `selezionaModalitaCreazione`/`startCareer`, partita avviata via
+>   `beginMatch()`; screenshot confermano nessuna curva gialla sovrapposta al campo; due snapshot
+>   `ctx.getImageData` presi a 1.5s di distanza a bot fermo (nessuna scelta/animazione in corso) sono
+>   risultati diversi (`identical:false`), a conferma del movimento continuo; zero errori console.
+>   Da rilanciare `node tools/test-bot.js` alla prima occasione utile (Node non disponibile qui).
+
+> **Aggiornamento 2026-08-09 (continua — distribuzione portiere, chiarimento formula 4)**: due
+> correzioni su indicazione esplicita dell'utente rispetto all'aggiornamento precedente.
+> 1. Confermato: "attaccante" nella formula 4 (`calcChancePassaggioPortiere`) è l'avversario che
+>    pressa il portiere in possesso palla — nessuna modifica al codice, era già implementato così.
+> 2. `P(distribuzione)` non è più un valore normalizzato grezzo (placeholder segnalato in
+>    precedenza): "è uguale alla funzione passaggio per i giocatori di movimento ma usa
+>    l'attributo distribuzione" — nuove `ProbabilitaAttributi.distribuzioneSigma`/
+>    `distribuzioneAttacco` in probabilita-attributi.js, deleghe pure verso `passaggioSigma`/
+>    `passaggioAttacco` (stesso identico modello a due passi, nessuna formula duplicata).
+>    `calcChancePassaggioPortiere()` ora richiede un parametro `distanzaM` (la lunghezza del
+>    rinvio/lancio del portiere), esattamente come `calcChanceAssist` richiede una zona per la
+>    distanza del passaggio — nessun MOMENTS/GK_MOMENTS_POOL la richiama ancora, resta una
+>    funzione pronta.
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente):
+> `distribuzioneSigma`/`distribuzioneAttacco` producono risultati identici a `passaggioSigma`/
+> `passaggioAttacco` sugli stessi input; partita reale con un portiere reale — passaggio corto
+> (10m) → 96%, passaggio lungo (40m) → 26% (coerente, la distanza penalizza come nel modello
+> passaggio); nessuna regressione sulle altre 3 funzioni evento né su calcChanceAssist. Zero
+> errori console (i risultati `null`/NaN ottenuti testando calcChanceCalcioAngolo/calcChanceAssist
+> con un personaggio Portiere sono attesi: quegli eventi usano attributi da movimento — fisico/
+> passaggio — che un Portiere non possiede, stessa separazione già esistente fra ATTR_KEYS e
+> GK_ATTR_KEYS nel resto del gioco, non una regressione).
+
+> **Aggiornamento 2026-08-09 (4 eventi combinati: angolo/punizione/uno contro uno/passaggio
+> portiere)**: su richiesta esplicita dell'utente, aggiunte a `index REV2.html` (non alla libreria
+> pura — queste funzioni leggono `state`/`posizioniTattiche`, coerenti con calcChanceTiro/Assist/
+> Possesso) quattro nuove funzioni di calcolo. **Nessuna delle 4 è collegata a un MOMENTS/
+> GK_MOMENTS_POOL**: non esiste ancora una scelta di gioco per questi eventi — solo il calcolo,
+> pronto da richiamare quando si costruirà il contenuto narrativo/UI (stesso principio degli
+> attributi portiere della richiesta precedente).
+> - `calcChanceCalcioAngolo()`: `P(fisico attaccante)×P(difesa difendente)×P(anticipo portiere)`.
+> - `calcChancePunizione(zonaNome)`: `P(posizione,gaussiana d/X)×2×P(tiro)×P(posizionamento
+>   portiere, gated su calcio-piazzato=true)×P(parata)` — il ×2 e il moltiplicatore di
+>   posizionamento (non una probabilità in [0,1]) presi letteralmente dalla formula, non riscalati.
+> - `calcChanceUnoControUno(zonaNome)` + `condizioneUnoControUno(zonaNome)`: si attiva solo se
+>   nessun avversario di movimento (oltre al portiere) è geometricamente fra l'attaccante e la
+>   porta (verifica su `posizioniTattiche`) E il portiere è entro 4.5m — altrimenti ritorna `null`
+>   (evento non applicabile, non una percentuale). `P(tecnica)×P(velocità)×P(uno contro uno
+>   portiere)`.
+> - `calcChancePassaggioPortiere()`: `P(distribuzione)×1.5×P(velocità attaccante)×P(fisico
+>   attaccante)`, con velocità/fisico attivi solo se l'attaccante avversario è entro 4.5m dal
+>   proprio portiere (self).
+> Nuova `overallAttaccanteAvversario()` (stesso principio di overallPortiereAvversario/
+> overallDifensoreAvversario: `getRosaReale`, ruolo `'ATT'`, il migliore per ovr).
+> **Due ambiguità segnalate, non risolte a caso**: (1) "attaccante" nelle formule 1-3 è assunto
+> essere il giocatore (self); nella formula 4 è invece assunto essere l'avversario che pressa il
+> PROPRIO portiere (self deve giocare da Portiere perché l'evento abbia senso) — l'utente non ha
+> esplicitato il cambio di soggetto fra le due, segnalato per una revisione futura. (2)
+> "distribuzione" non ha mai avuto una curva F(x) definita (a differenza di tutti gli altri
+> attributi): usato il valore normalizzato grezzo dell'attributo come placeholder, in attesa di
+> una formula.
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente): tutte e 4 le funzioni
+> eseguite senza errori con una carriera reale (angolo 31%, punizione 78%, uno-contro-uno attivato
+> correttamente a `six_yard`/31% e correttamente `null` a `midfield_center` — verifica geometrica
+> della condizione confermata sui due estremi); passaggio portiere testato con un personaggio
+> Portiere reale (68%, `state.attr.distribuzione`=45 letto correttamente). Zero errori console.
+
+> **Aggiornamento 2026-08-09 (ProbabilitaAttributi: attributi del portiere)**: su richiesta
+> esplicita dell'utente, aggiunte a [`probabilita-attributi.js`](probabilita-attributi.js) le
+> funzioni per gli attributi del portiere — **non ancora richiamate da nessun calcChanceXxx**,
+> pronte per quando si lavorerà nello specifico su quella parte (come annunciato dall'utente).
+> - `presaDifesa`/`anticipoDifesa`/`comunicazioneDifesa`: stessa sigmoide già usata da
+>   `parataDifesa`, estratta in un helper privato `_sigmoidePortiere` condiviso da tutte e quattro
+>   invece di duplicare la formula. `parataDifesa` resta quella usata oggi da calcChanceTiro/
+>   calcChanceAssist contro il portiere avversario (solo l'ovr reale è disponibile per un
+>   portiere avversario); le tre nuove sono per il PROPRIO portiere, che ha invece i suoi
+>   attributi reali in `state.attr`.
+> - `unoControUnoDifesa`: F(x)=cos((π/2)x), funzione propria (non un alias di `velocitaDifesa`,
+>   pur essendo la stessa forma, per non accoppiare i due attributi).
+> - `riflessiMoltiplicatoreTiro(x, distanzaM)`: moltiplicatore su un tiro (non una probabilità
+>   diretta), attivo solo per tiri entro 7.0m — sopra, fisso a 1.00. Sotto soglia, calcolato da
+>   un'efficienza sinusoidale E(x) (E(0)=0%, E(50%)=50%, E(100%)=100%) che dà 1.15 a E=0%, 1.00 a
+>   E=50%, 0.85 a E=100%.
+> - `posizionamentoMoltiplicatorePericolo(x, isSetPieceOrCross)`: stesso schema/stessa
+>   `_efficienzaSinusoidale` condivisa, ma attivato dal tipo di azione (calcio piazzato/cross)
+>   invece che dalla distanza.
+> **Incoerenza segnalata, non corretta arbitrariamente**: il testo fornito dall'utente per la voce
+> "Posizionamento" descrive l'attributo come "Comunicazione (C)" — probabile refuso, dato che
+> un'altra voce ("Comunicazione", sigmoide semplice) usa già quel nome. Implementata seguendo
+> l'intestazione ("Posizionamento"): la funzione ha un parametro generico `x`, quindi resta
+> corretta indipendentemente da quale attributo il chiamante deciderà di passarle in futuro.
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente): tutti i vincoli
+> rispettati esattamente (unoControUnoDifesa F(0)=1/F(1)=0; presa/anticipo/comunicazione
+> identiche a parata sullo stesso input; riflessi — fisso 1.00 oltre 7m qualsiasi R, 1.15/1.00/0.85
+> a R=0/50/100 sotto soglia, ancora attivo a 6.99m; posizionamento — fisso 1.00 fuori da calcio
+> piazzato/cross, stessi 1.15/1.00/0.85 quando attivo); `parataDifesa`/`probabilitaBattePortiere`
+> verificati a comportamento invariato; partita reale (calcChanceTiro) eseguita senza errori. Zero
+> errori console.
+
+> **Aggiornamento 2026-08-09 (Match Viewer 2D: pressing sul portatore + avanzamento verso porta)**:
+> su richiesta esplicita dell'utente, estesa `posizioniConMarcatura()` (marcatura a uomo "a
+> magnete", vedi aggiornamento precedente) con due comportamenti nuovi, entrambi puramente grafici:
+> 1. **Avanzamento del portatore**: il portatore ha come "obiettivo di sottotesto" l'avanzamento
+>    verso il centro della porta avversaria — la sua posizione disegnata è spinta verso quel punto
+>    (`PULL_AVANZAMENTO_PORTATORE=0.15`, scelto da me, non fornito — una tendenza di fondo modesta,
+>    non uno sprint ad ogni fotogramma). Per la squadra dell'utente si parte dalla posizione live
+>    già usata dal campo di probabilità di passaggio (`posizionePortatorePalla`); per l'avversario
+>    (nessun singolo giocatore reale tracciato con la palla) il centrocampista centrale è il proxy
+>    scelto per "chi costruisce l'azione".
+> 2. **Pressing**: fra i difensori (squadra senza palla), se qualcuno di movimento (mai il
+>    portiere) è entro `RAGGIO_PRESSING_M=8` (fornito esplicitamente dall'utente) dal portatore,
+>    aggredisce lui invece di marcare il proprio avversario assegnato — "perde interesse" nella
+>    marcatura in quel momento, come richiesto. Un solo aggressore alla volta (sempre il più
+>    vicino entro soglia): garantito per costruzione, si sceglie il minimo una sola volta prima di
+>    assegnare le posizioni, non serve bookkeeping aggiuntivo per il vincolo "se e solo se non c'è
+>    già un compagno ad aggredire". Spostamento più deciso della marcatura normale
+>    (`PULL_PRESSING=0.55` vs `MARCATURA_PULL=0.35`, scelto da me — l'aggressione è un'azione più
+>    determinata di un semplice posizionamento).
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente): avanzamento del
+> portatore riprodotto esatto (0.48→0.558 = 0.48+(1-0.48)×0.15); scenario di pressing controllato
+> (tutti i difensori spostati lontano, uno riportato esattamente sul portatore) → esattamente un
+> giocatore riceve lo spostamento di pressing (posizione finale 0.477/0.206, identica al calcolo a
+> mano), gli altri 5 restano su marcatura normale; `renderMatchCanvas()` eseguito senza eccezioni.
+> Zero errori console.
+
+> **Aggiornamento 2026-08-09 (libreria ProbabilitaAttributi, file dedicato)**: su richiesta
+> esplicita dell'utente ("creiamo un file con le funzioni che saranno poi solo da richiamare"),
+> nuovo file [`probabilita-attributi.js`](probabilita-attributi.js): un unico oggetto
+> `ProbabilitaAttributi` con tutte le formule "attributo → probabilità" concordate finora, pure
+> (nessuna dipendenza da `state`/DOM, solo numeri in→numeri out), caricato come `<script src>`
+> prima dello script principale (stesso schema di `data-squadre.js`).
+> Funzioni: `velocitaAttacco`/`velocitaDifesa` (sin/cos, nuove — non ancora richiamate da nessuna
+> scelta di gioco, pronte per quando serviranno), `fisicoAttacco` (0.5+x³), `difesaDifesa`
+> (sigmoide esponenziale calibrata), `tecnicaAttacco` (sin, **senza** il "+0.15" di una versione
+> precedente — corretto qui su indicazione esplicita dell'utente, che ha ridefinito tecnica insieme
+> a tutte le altre nella stessa lista consolidata), `tiroAttacco` (F(x)=50·4^(x³)), `parataDifesa`
+> (sigmoide logistica del portiere, c/k/M riscalati dal dominio originale 0-200 dell'utente a 0-1
+> per uniformità con tutta la libreria — stesso risultato numerico, verificato), `passaggioSigma`/
+> `passaggioAttacco`/`passaggioRaggioIndifferenza` (il modello di passaggio già costruito quando si
+> è parlato dell'assist).
+> Tutte le funzioni equivalenti già esistenti in `index REV2.html` (`probabilitaBattePortiere`,
+> `probabilitaTiroGiocatore`, `calculatePassSigma`/`calculatePassProbability`/
+> `calculateIndifferenceRadius`, `probabilitaControlloTecnica`/`FisicoProprio`/`DifesaAvversario`)
+> sono state svuotate e trasformate in wrapper sottili che richiamano `ProbabilitaAttributi.*` —
+> non duplicano più le formule, solo estraggono l'attributo da `state` e normalizzano 0-1. Rimossa
+> `probabilitaEsecuzioneAbilita` (non più necessaria, nessun altro chiamante). Nessuna modifica al
+> comportamento osservabile eccetto la correzione di tecnica (F(0) torna 0, non più 0.15).
+> **Bot aggiornato di conseguenza** (`test-bot.js`): nuova costante `LIB_FILE`, `newGameContext`/
+> `playOneCareer` ora caricano anche `probabilita-attributi.js` nel contesto vm (stesso principio
+> già usato per `data-squadre.js`) — senza questo il bot avrebbe fallito con "ProbabilitaAttributi
+> is not defined" alla prima chiamata di calcChanceTiro/Assist/Possesso.
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente, verifica strutturale del
+> bot fatta leggendo il codice, non eseguendola): libreria caricata correttamente
+> (`typeof ProbabilitaAttributi==='object'`), tutte le calibrazioni riprodotte identiche
+> (velocità/tecnica F(0)=0/F(1)=1, fisico F(0)=0.5/F(1)=1.5, difesa 0.85/0.50/0.33, portiere ovr 61
+> → 0.9208 identico al valore pre-refactor, tiro F(1)=2, passaggioSigma(50%)=21.8257 identico);
+> tutti i wrapper esistenti verificati a comportamento invariato (tranne tecnica, corretta come
+> sopra); partita reale con tutte e tre calcChanceTiro/Assist/Possesso eseguite senza errori. Zero
+> errori console.
+
+> **Aggiornamento 2026-08-09 (orologio live: 50 minuti = 50 secondi, scelte escluse)**: su richiesta
+> esplicita dell'utente, il minutaggio (`#matchMinute`) ora scorre dal vivo durante "Gioca partita"
+> invece di saltare istantaneamente da un momento all'altro. Nuova `animaOrologioPartita(daMinuto,
+> aMinuto, onDone)`: anima il testo con `requestAnimationFrame` al ritmo esatto richiesto — **1
+> minuto di gioco = 1 secondo reale** — e chiama `onDone` (che rivela narrazione+scelte, o esegue
+> `finishMatch`) solo a fine animazione. `nextMoment()` ristrutturata: il salto di minuto
+> (`m.minute += rand(9,13)`, invariato) viene calcolato subito come prima, ma la rivelazione della
+> situazione e delle scelte è spostata dentro il callback `onDone` — così l'orologio scorre SOLO fra
+> un momento chiave e l'altro, mai mentre si aspetta un click su una scelta/evento/bottone
+> "Continua" (esclusi dal conteggio, come richiesto: quei punti sono già gli unici in cui
+> `nextMoment()` viene richiamata). Aggiunto anche un ultimo tratto animato fino al 50' prima di
+> eseguire `finishMatch()` (che imposta comunque `m.minute=50` di suo, in modo idempotente), per
+> "vedere" l'intera partita fino al triplice fischio.
+> **Compatibilità bot preservata** (stessa guardia già usata per il canvas,
+> `typeof requestAnimationFrame!=='function'`): in Node l'animazione è saltata del tutto, il testo
+> si aggiorna e il callback scatta subito, sincrono — nessuna modifica al ritmo/comportamento del
+> bot. Nessuna modifica a logica di simulazione/eventi: solo la presentazione del minutaggio.
+> Verificato dal vivo in browser: simulato l'ambiente bot (rimosso temporaneamente
+> `requestAnimationFrame`) — scelte presenti immediatamente, zero ritardo, comportamento identico a
+> prima; con `requestAnimationFrame` reale, un salto di 2 minuti (10'→12') impiega esattamente
+> 2003.8ms (rapporto 1:1 confermato); zero errori console in entrambi i casi.
+
+> **Aggiornamento 2026-08-09 (Match Viewer 2D: tutti i 14 giocatori + marcatura a uomo)**: su
+> richiesta esplicita dell'utente, il Match Viewer 2D disegna ora tutti i 14 giocatori (7 per
+> squadra), non più solo il portatore/pallone. Prima volta che `state.matchTemp.posizioniTattiche`
+> (costruita in una sessione precedente, mai letta da un renderer) viene usata dal renderer.
+> - **Fase di possesso per momento**: nuovo campo `possesso` su ogni voce di `MOMENTS` (4) e
+>   `GK_MOMENTS_POOL` (8) — `'home'` se il giocatore/la sua squadra ha la palla, `'away'` altrimenti
+>   (già scritto in chiaro nel testo di uno dei momenti: "Fase di non possesso..."). Risolto una
+>   volta per momento in `nextMoment()` → `state.matchTemp.fasePossessoAttuale`, stesso pattern già
+>   usato per `zonaGolAttuale`.
+> - **Marcatura a uomo "a magnete"**: nuova `posizioniConMarcatura()` — la squadra che NON ha la
+>   palla marca, ogni giocatore di movimento (portieri esclusi, non marcano mai) viene tirato verso
+>   il proprio avversario più vicino nella formazione (`distanzaMetriTraPunti`, stessa proiezione
+>   65×40m già usata per il campo di probabilità di passaggio) di una frazione `MARCATURA_PULL=0.35`
+>   (scelta da me, non fornita dall'utente — abbastanza per essere visibile senza disintegrare la
+>   forma della squadra; da correggere se non torna). Layer puramente grafico: non tocca motore,
+>   eventi, o calcolo delle probabilità — sposta solo i pallini disegnati.
+> - **Rendering**: nuova `drawFormazioneCompleta()`, disegnata in `renderMatchCanvas()` subito dopo
+>   `FieldRenderer.draw` (sotto il campo di probabilità di passaggio e le entità animate) — 13
+>   giocatori "di formazione" per colore squadra (blu/arancio, nessuna etichetta, il portatore
+>   `self` è escluso perché già rappresentato dall'entità `actor`, più precisa durante
+>   un'animazione).
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente): in un momento con
+> possesso `'home'` la formazione della propria squadra resta identica a quella di base (nessuna
+> marcatura, come atteso); in un momento con possesso `'away'` i giocatori di movimento della
+> propria squadra si spostano verso l'avversario più vicino, il portiere resta fermo; sempre 14
+> posizioni; `renderMatchCanvas()` eseguito senza eccezioni; screenshot confermato (pallini blu/
+> arancio visibili sul campo, accoppiati nella fase difensiva). Zero errori console.
+
+> **Fix 2026-08-09 (fattore tecnica del controllo palla: sin invece di x³)**: su indicazione
+> esplicita dell'utente, `probabilitaControlloTecnica()` (fattore 1 di `calcChancePossesso()`, vedi
+> aggiornamento precedente) usa ora `F(x)=sin((π/2)·x)+0.15` invece di `F(x)=x³` — F(0)=0.15,
+> F(1)=1.15, crescente e concava (rendimenti decrescenti man mano che la tecnica sale, a differenza
+> della crescita accelerata di x³). Gli altri due fattori (fisico proprio, difesa avversaria)
+> invariati. Verificato dal vivo in browser: valori riprodotti esatti (tecnica 0→0.1500,
+> 50→0.8571, 60→0.9590, 100→1.1500); partita reale con chance possesso ricalcolata correttamente
+> (32%); zero errori console.
+
+> **Aggiornamento 2026-08-09 (probabilità di controllo palla: tecnica × fisico × difesa
+> avversaria)**: su richiesta esplicita dell'utente, con una correzione arrivata nello stesso
+> scambio (prima "fisico dell'avversario più vicino" nella griglia tattica statica, poi corretto in
+> "attributo difesa del nostro avversario" — versione finale, quella sotto), le scelte
+> `out:'possesso'` usano `calcChancePossesso()` invece di `calcChance()`. Tre formule fornite
+> esattamente dall'utente, indipendenti (nessuna riusa più F(x)=50·4^(x³) né la sigmoide del
+> portiere: formule dedicate diverse per ciascun fattore):
+> 1. **tecnica** — `probabilitaControlloTecnica()`: F(x)=x³, x=tecnica normalizzata 0-1.
+> 2. **fisico proprio** — `probabilitaControlloFisicoProprio()`: F(x)=0.5+x³, x=fisico normalizzato 0-1.
+> 3. **difesa avversaria** — `probabilitaControlloDifesaAvversario(ovr)`:
+>    F(x)=7.781230915·exp(2.53617955x²-5.69655672x), x=ovr/100. Nuova `overallDifensoreAvversario()`
+>    (stesso principio/stessa fonte dati di `overallPortiereAvversario()`: `getRosaReale`, ruolo
+>    `'DIF'`, il migliore per ovr, fallback sulla forza squadra) — nessun attributo "difesa" per
+>    singolo giocatore disponibile sul roster reale, `ovr` come proxy, come già per portiere/
+>    attaccante avversario.
+> `calcChancePossesso()` non dipende più dalla zona del momento (nessuna delle tre formule usa la
+> posizione): si applica quindi a **ogni** scelta `possesso`, inclusi i momenti da portiere (prima
+> lasciati su `calcChance()` per mancanza di zona taggata — ora coperti senza bisogno di taggarli).
+> **Versione precedente, superata nello stesso scambio**: un primo tentativo aveva interpretato
+> "fisico avversario+vicino" come due fattori — l'avversario reale geometricamente più vicino nella
+> griglia tattica statica (`state.matchTemp.posizioniTattiche`, prima volta letta da una funzione)
+> più un fattore di pressione a parte basato sulla distanza — con un limite segnalato (la griglia
+> statica rendeva alcune zone sempre al pavimento minimo indipendentemente dall'abilità). L'utente
+> ha corretto la dipendenza a "attributo difesa", eliminando sia la scelta per prossimità sia il
+> fattore di pressione separato: `avversarioPiuVicino`/`distanzaMetriTraPunti` rimosse (codice
+> morto, nessun altro chiamante) invece di lasciate inutilizzate.
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente): calibrazione esatta
+> (F(0.5)=0.850, F(0.7)=0.500, F(1)=0.330, tutti e tre confermati a 5 decimali); partita reale
+> (tecnica 60, fisico 50, difensore avversario ovr 60) → chance 9%, verificato anche a mano
+> (0.216×0.625×0.636≈0.0859→9%, coincide); scelta reale risolta correttamente; momento da portiere
+> (prima escluso) ora produce comunque una chance senza errori. Zero errori console.
+
+> **Fix 2026-08-09 (calibrazione sigma passaggio corretta: 21.83m, non 25.82m)**: su indicazione
+> esplicita dell'utente, corretta l'incoerenza matematica segnalata nell'aggiornamento precedente.
+> `calculatePassSigma()` non usa più la formula letterale `18+15.64·(Passaggio/100)` (sigma=25.82m
+> a Passaggio=50, che non soddisfaceva il vincolo P(32.5)=0.33): nuove costanti
+> `SIGMA_FLOOR_PASSAGGIO_M=18` (pavimento a Passaggio=0, invariato) e
+> `SIGMA_BASE_PASSAGGIO_M = 32.5/√(-2·ln(0.33))` (calcolata in codice, non arrotondata a mano,
+> ≈21.83m), con il coefficiente della relazione lineare ricavato di conseguenza perché a
+> Passaggio=50 la sigma torni esattamente `SIGMA_BASE_PASSAGGIO_M`. Nuova tabella:
+> Passaggio 0→18.00m, 20→19.53m, 50→21.83m, 80→24.12m, 100→25.65m (prima: 18.00/21.13/25.82/
+> 30.51/33.64m).
+> Verificato dal vivo in browser: `P(32.5, sigma=21.83)=0.330` esatto (test #2 dei 7 richiesti,
+> prima falliva a 0.453); il raggio dell'isoprobabilità 33% a Passaggio=50 risulta esattamente
+> 32.5m (coincide col vincolo geometrico); partita reale con Passaggio=65 → chance assist 58%
+> (era 62% con la sigma precedente, coerente con una sigma più stretta = passaggi lunghi più
+> penalizzati); zero errori console. Nessun'altra costante toccata (floor 18m, livelli di
+> probabilità disegnati, `calcChanceAssist`, layer grafico — tutti invariati).
+
+> **Aggiornamento 2026-08-09 (probabilità di assist: passaggio × tiro × portiere)**: su richiesta
+> esplicita dell'utente, le scelte `out:'assist'` nei 3 momenti già taggati con zona (`edge_area`,
+> `flank_left`/`flank_right`, `six_yard` — stessi di `calcChanceTiro`) ora usano una nuova
+> `calcChanceAssist(attrKey, zonaNome)` invece di `calcChance()`. Combina tre fattori "in serie":
+> 1. **P(passaggio)** — riusa `calculatePassProbability`/`calculatePassSigma` appena costruiti per
+>    il campo di probabilità di passaggio, valutati alla distanza reale (nuova
+>    `distanzaMetriTraZone`, stessa proiezione metri 65×40 già usata dal layer grafico) fra la
+>    zona del momento (dove si trova il portatore) e la zona `'box'` (bersaglio del passaggio,
+>    stessa destinazione già usata da `ZONE_DEFAULT_PER_OUT.assist`).
+> 2. **P(tiro)** — riusa identica `probabilitaTiroGiocatore(attrKey)` (F(x)=50·4^(x³)) già
+>    costruita per il tiro, con l'attributo dichiarato dalla singola scelta (`passaggio` o
+>    `tecnica` a seconda del momento), non reimplementata.
+> 3. **P(batte portiere)** — riusa identica `probabilitaBattePortiere(overallPortiereAvversario())`
+>    già costruita per il tiro, non reimplementata.
+> Sostituisce la componente "posizione" gaussiana X/d usata per il tiro (non più presente qui): per
+> un assist la posizione è già catturata dalla probabilità di riuscita del passaggio stesso, su
+> indicazione esplicita dell'utente. `nextMoment()` aggiornata per instradare `out==='assist'` (con
+> zona nota) verso la nuova funzione; il campo `m.zonaGolAttuale` (nome storico invariato, non
+> rinominato per non toccare `applyChoiceOutcome`) ora alimenta sia tiro sia assist. Scelte assist
+> senza zona nota (es. i momenti da portiere, non ancora taggati) restano su `calcChance()`,
+> comportamento invariato.
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente): chance monotona
+> decrescente con la distanza reale dal bersaglio (`six_yard` 67% → `edge_area` 63% →
+> `flank_left` 51% → `midfield_center` 42%, stessi attributi); partita reale con zona `edge_area`,
+> passaggio 65 → chance 62%, scelta assist risolta correttamente (evento `pass_short`/`goal`,
+> `myPlayerAssists` incrementato). Zero errori console.
+
+> **Aggiornamento 2026-08-09 (campo di probabilità di passaggio — curve di indifferenza concentriche)**:
+> su richiesta esplicita dell'utente (spec completa, formule incluse), aggiunto un layer grafico
+> puro nel Match Viewer 2D: cerchi di iso-probabilità di passaggio centrati sul portatore di palla,
+> stessa gaussiana isotropa `P(r)=exp(-r²/(2σ²))` in ogni direzione (nessuna distribuzione separata
+> X/Y). Nuove funzioni, inserite tra `PlayerRenderer` e `renderMatchCanvas()`: `calculatePassSigma`,
+> `calculatePassProbability`, `calculateIndifferenceRadius`, `drawPassProbabilityField`,
+> `posizionePortatorePalla`, costanti `CAMPO_LUNGHEZZA_M=65`/`CAMPO_LARGHEZZA_M=40`,
+> `LIVELLI_PROBABILITA_PASSAGGIO=[.10,.20,.33,.40,.60,.80]`, flag `MOSTRA_CAMPO_PROBABILITA_PASSAGGIO`.
+> Attributo riusato: `passaggio` (già in `ATTR_KEYS`), nessun nuovo attributo creato. Portatore di
+> palla: nessun campo di stato lo tracciava già — riusa `matchAnimMgr.entities.actor` (posizione
+> live durante una clip) con fallback allo slot `self` di `state.matchTemp.posizioniTattiche`
+> (Fase precedente), nessun nuovo stato introdotto. Raggi mai hardcodati:
+> `r(p)=σ·√(-2·ln(p))`, ricalcolati automaticamente da sigma. Un cerchio isotropo in metri diventa
+> un'ellisse in pixel solo perché campo/canvas non sono quadrati (proiezione indipendente sulle due
+> scale 65m/40m) — stessa semplificazione già presente altrove nel renderer (cerchio di centrocampo
+> di `FieldRenderer`). Clipping ai bordi campo via `ctx.clip()` sullo stesso rettangolo già
+> usato da `FieldRenderer`/`CameraManager` (margine 10px). Disegnato subito dopo `FieldRenderer.draw`
+> e prima del loop giocatori/palla in `renderMatchCanvas()`, quindi mai sopra di essi. Eredita il
+> guard `requestAnimationFrame` già esistente (nessun nuovo guard necessario, il bot Node non lo
+> esegue mai). Nessuna modifica a motore/eventi/risoluzione dei passaggi.
+> **Incoerenza matematica segnalata all'utente prima e durante l'implementazione**: la sigma
+> operativa richiesta esplicitamente (`sigma=18+15.64·(Passaggio/100)`, quindi 25.82m a
+> Passaggio=50) NON soddisfa il vincolo fondamentale dichiarato (`P(32.5)=0.33` a centrocampo) —
+> verificato: con sigma=25.82, `P(32.5)` risulta 45.3%, non 33%. La sigma che soddisferebbe
+> davvero il vincolo è 21.83m (invertendo la stessa formula di calibrazione dell'utente), non
+> 25.82m. Implementato comunque il valore letterale richiesto ("per il momento"), incoerenza
+> lasciata visibile per una decisione dell'utente, nessuna correzione arbitraria applicata.
+> Verificato dal vivo (Node non disponibile in questo ambiente, verifica in browser): tutti e 7 i
+> test richiesti eseguiti — r=0→P=1 ✓; P(32.5,σ=25.82)=0.453 (non 0.33, vedi sopra) ✗; isotropia
+> (stessa distanza, direzioni diverse → stessa probabilità) ✓; sigma cresce con Passaggio
+> (18→21.13→25.82→30.51→33.64 per Passaggio 0/20/50/80/100) ✓; raggi crescono con sigma ✓;
+> centro coincide con la posizione del portatore (verificato lettura pixel diretta via
+> `getImageData`: crossing del bordo all'80% a ±121.6px orizzontali e ±84.7px verticali, identici
+> al calcolo teorico rM/65 e rM/40) ✓; clipping ai bordi campo verificato tramite lo stesso
+> `ctx.clip()` di `FieldRenderer` ✓. Zero errori console.
+
+> **Aggiornamento 2026-08-09 (probabilità di tiro: posizione + tiro + portiere)**: su richiesta
+> esplicita dell'utente, rivalutato il sistema di rischio delle scelte di partita **solo** per le 3
+> scelte `out:'goal'` (tiro diretto in porta, tutte già `risk:'high'`) — assist/recupero/possesso
+> restano su `calcChance()`, invariati. Prima un tiro usava sempre la zona fissa `'box'`
+> (`ZONE_DEFAULT_PER_OUT.goal`), senza alcun legame con la situazione narrata né col portiere
+> avversario. Ora:
+> 1. **Zona reale per momento** (`MOMENTS[i].zonaGol`, risolta una sola volta a inizio momento in
+>    `nextMoment()` → `state.matchTemp.zonaGolAttuale`): "al limite dell'area" → nuova zona
+>    `edge_area`, "in fascia" → `flank_left`/`flank_right` (a caso), "area piccola" → nuova zona
+>    `six_yard`. Le stesse due zone nuove sono state aggiunte a `ZONES` (coordinate normalizzate,
+>    stesso sistema già usato dal Match Viewer).
+> 2. **Curve di indifferenza posizione→probabilità** (`probabilitaPosizioneTiro`): da distanza e
+>    angolo rispetto alla porta (x=1,y=0.5) si ottiene una probabilità geometrica pura, con
+>    distanza e angolo che si scambiano (poco lontano+stretto ≈ molto lontano+centrale, perché i
+>    due fattori si moltiplicano — `e^(-λ·distanza) · cos(angolo)`). Calibrazione fornita
+>    dall'utente: sulla linea di porta probabilità 1 (100%), da centrocampo centrale 0.33 (33%) — λ
+>    ricavato esattamente da questi due punti (`LAMBDA_DISTANZA_TIRO = -2·ln(0.33)`), nessuna altra
+>    costante inventata per questa parte.
+> 3. **"In serie" con tiro e portiere** (`calcChanceTiro`, sostituisce `calcChance` solo qui):
+>    `P(gol) = P(posizione) × P(tiro giocatore, con forma/relazioni come già in calcChance ma senza
+>    penalità forza-avversario) × (1 − P(parata portiere))`. Portiere preso dal roster reale della
+>    squadra avversaria (`getRosaReale(opp.nome)`, `ruolo==='POR'`, nuova `overallPortiereAvversario()`),
+>    fallback sulla forza squadra se assente. Scelta esplicita dell'utente (opzione "realistico stile
+>    xG" fra le due proposte): percentuali finali basse per i tiri defilati/lontani, alte per un tiro
+>    ravvicinato e centrale — nessun riscalamento nel range 8-92% usato da `calcChance()`, cambia
+>    davvero quanto conviene tirare da una posizione piuttosto che un'altra.
+> 4. **Coerenza col Match Viewer**: `applyChoiceOutcome()` non usa più l'origine fissa `'box'` per i
+>    tiri — copia (mai muta) `ZONE_DEFAULT_PER_OUT.goal` sovrascrivendo `origin` con
+>    `m.zonaGolAttuale`, così la posizione su cui si è calcolata la probabilità è la stessa che
+>    l'animazione disegna.
+> Verificato dal vivo in browser (server HTTP locale, node non disponibile in questo ambiente):
+> `probabilitaPosizioneTiro('midfield_center')` = esattamente 0.33 (verifica diretta della
+> calibrazione), le tre zone taggate producono chance coerenti con l'attesa (`edge_area` 23%,
+> `flank_left` 8%, `six_yard` 32-46% a seconda di skill/portiere), evento emesso con `origin`
+> corrispondente alla zona in tutti e tre i casi, `ZONE_DEFAULT_PER_OUT.goal` verificato invariato
+> dopo i tiri (nessuna mutazione dell'oggetto condiviso), zero errori console durante l'intero test.
+> Bot non rieseguito in questo ambiente (Node.js non installato/non in PATH): da rilanciare
+> (`node tools/test-bot.js`) alla prima occasione utile per la copertura standard 20+ carriere.
+>
+> **Aggiornamento 2026-08-09 (continua — coordinate tattiche dei 14 giocatori in campo)**: su
+> richiesta esplicita dell'utente, aggiunta a `state.matchTemp` una posizione x/y normalizzata
+> (stessa convenzione di `ZONES`) per i 7 giocatori per squadra del calcio a 7 (14 in campo), dato
+> pensato per il futuro Match Viewer 2D — nessuna funzione esistente lo legge ancora, motore ed
+> eventi invariati. Nuovi: `RUOLO_BUCKET_FORMAZIONE`, `FORMAZIONE_TATTICA_7` (modulo 1-2-3-1,
+> standard nel calcio a 7), `PROFONDITA_REPARTO_TATTICO`, `coordinateSlotTattico()`,
+> `calcolaPosizioniTattiche(compagniSquadra)` — tutte pure funzioni deterministiche (nessun
+> `Math.random`), inserite subito dopo `zonaCoordinate()`. Riusa lo stesso raggruppamento a 4
+> reparti già usato da `sceglieCompagni()` (ALA confluita in CEN) invece di crearne uno parallelo,
+> e riceve come parametro l'oggetto `compagni` già calcolato lì (non richiama `sceglieCompagni` una
+> seconda volta). `beginMatch()` e `beginMatchAsSub()` aggiornate solo per calcolare `compagni` in
+> una variabile locale e passare `state.matchTemp.posizioniTattiche: calcolaPosizioniTattiche(...)`
+> accanto al campo `compagni` già esistente — nessun'altra riga toccata in quelle due funzioni.
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente, stesso limite delle
+> verifiche precedenti in questa sessione): 14 posizioni sempre presenti, tutte con x/y in [0,1],
+> 7 per squadra, reparti coerenti (POR più arretrato, poi DIF, CEN, ATT più avanzato per la
+> squadra che attacca verso x=1; squadra avversaria speculare verso x=0); caso limite Portiere
+> verificato esplicitamente (il giocatore stesso occupa l'unico slot POR, nessun secondo portiere
+> generato); flusso di gioco successivo (click su una scelta reale, `beginMatchAsSub`) invariato,
+> zero errori console.
+>
+> **Aggiornamento 2026-08-09 (continua — P(tiro): F(x)=50·4^(x³) fornita dall'utente)**: il fattore
+> `pTiro` di `calcChanceTiro()` (punto 3 del primo aggiornamento) non usa più la formula additiva
+> con forma/rapporto coi compagni/rapporto col mister — nuova `probabilitaTiroGiocatore(attrKey)`:
+> `x` = attributo di tiro (0-100, con bonus equipaggiamento) espresso come frazione 0-1,
+> `F(x) = 50·4^(x³)`, `pTiro = F(x)/100`. Sostituzione **integrale** (non additiva): su indicazione
+> esplicita dell'utente, forma/relazioni non influenzano più questo fattore — segnalato all'utente
+> prima di procedere, nessuna obiezione.
+> Punto di attenzione verificato e confermato dall'utente prima dell'implementazione: `F(x)` supera
+> 100 (quindi `pTiro` supera 1.0) per attributo di tiro oltre ~79/100, fino a `pTiro=2.0` esatto ad
+> attributo 100 — lasciato così com'è, **nessun clamp/riscalatura intermedia** aggiunta: l'unico
+> punto che tiene sotto controllo il risultato complessivo resta il clamp finale di
+> `calcChanceTiro` (3-96%). `F(0)=50` (pavimento del 50% anche per un giocatore senza alcuna
+> capacità di tiro) confermato intenzionale.
+> Verificato dal vivo in browser: tabella attributo→pTiro riprodotta identica al calcolo teorico
+> (attr 0→0.500, 20→0.506, 50→0.595, 70→0.804, 79→0.990, 90→1.374, 100→2.000); partita reale con
+> attributo tiro 65 → chance 46% (edge_area) e 56% (six_yard), nessun crash nonostante `pTiro`>1 in
+> alcuni casi, zero errori console. Bot non rieseguito (stesso limite ambientale).
+>
+> **Aggiornamento 2026-08-09 (continua — modello posizione: gaussiana invece dell'esponenziale)**:
+> `probabilitaPosizioneTiro()` (punto 2 sopra) sostituita con un modello a due variabili fornito
+> dall'utente, più fedele alle "curve di indifferenza": `d∈[0,1]` distanza normalizzata dalla porta
+> (0=linea di porta, 1=centrocampo), `X∈[-1,+1]` scarto laterale dal centro porta, densità gaussiana
+> `f(X,d) = 1/(σ(d)√2π) · e^(-X²/(2σ(d)²))` con `σ(d) = 1/(√2π·[1-0.67d])` — σ scelta apposta perché
+> la densità al centro (X=0) torni esattamente 1-0.67d, cioè gli stessi due punti di calibrazione di
+> prima (porta=100%, centrocampo=33%), ora derivati da una gaussiana vera: vicino alla porta la
+> distribuzione su X è stretta (un tiro anche poco defilato perde molto), lontano è piatta (l'angolo
+> pesa relativamente meno). Nuova `sigmaPosizioneTiro(d)`. Nota conservata in codice: f(X,d) è una
+> densità normalizzata, non una probabilità discreta, ma resta sempre in [0,1] per costruzione
+> (max f(0,d)≤1, esponenziale gaussiano ≤1) — utilizzabile comunque nel prodotto di `calcChanceTiro`.
+> Verificato dal vivo in browser: tabella σ/f(0,d) per d=0/0.25/0.5/0.75/1 riprodotta identica a
+> quella fornita dall'utente (0.399/100%, 0.479/83.3%, 0.600/66.5%, 0.802/49.7%, 1.209/33%);
+> `midfield_center` → esattamente 33%; le tre zone di tiro (`edge_area` 66.5%, `six_yard` 95.3%,
+> `flank_left` 30.2%) coerenti con l'attesa; partita reale con portiere ovr 61 → chance 32%
+> (edge_area) e 40% (six_yard), origine evento ed `originXY` dell'animazione coerenti con la zona
+> usata nel calcolo. Zero errori console. Bot non rieseguito (stesso limite ambientale).
+>
+> **Aggiornamento 2026-08-09 (continua — sigmoide per il portiere)**: sostituito il termine
+> "1 − parata portiere" del punto 3 sopra con una **sigmoide logistica normalizzata** fornita
+> dall'utente (immagine con la formula, poi con `c=105, k=0.055` espliciti):
+> `F(x) = [g(x)-g(M)] / [g(0)-g(M)]`, `g(x)=1/(1+e^(k(x-c)))`, `M=200` — costruita apposta per avere
+> `F(0)=1` e `F(M)=0` esatti qualunque siano c/k. Nuove `probabilitaBattePortiere(ovrPortiere)` e
+> costante `SIGMOIDE_PORTIERE={c:105,k:0.055,M:200}`, usate in `calcChanceTiro()` al posto della
+> vecchia formula lineare `1-pParata`.
+> Punto di decisione esplicito, non lasciato all'utente per caso: con 2 incognite (c,k) e una
+> richiesta qualitativa ("meno hardcore, sigmoide con coda lunga") non bastava implementare alla
+> cieca — ho calcolato i valori risultanti e mostrato che la stessa formula, con `x = ovr×2` (usare
+> tutto il dominio 0-200) risulta **più dura** del vecchio modello lineare (portiere ovr 90-100 →
+> 1%-0% di probabilità di segnare, contro il 25% di pavimento del modello lineare), mentre con
+> `x = ovr diretto` (0-100, resta sempre nella metà "morbida" della curva 0-200) risulta
+> effettivamente più permissiva ad ogni livello (es. ovr 100 → 57% invece di 25%) — coerente con
+> l'obiettivo dichiarato dall'utente all'inizio di questo intervento. **Confermato dall'utente:
+> `x = ovr diretto`.**
+> Verificato dal vivo in browser (stesso server HTTP locale usato sopra): `probabilitaBattePortiere`
+> per ovr 20/30/50/70/90/100 → 99.4%/98.7%/95.6%/87.5%/69.6%/56.8%, identico al calcolo teorico;
+> partita reale con portiere avversario ovr 62 → chance 39% (six_yard, tiro centrale ravvicinato),
+> 28% (edge_area), 9% (flank, angolo stretto), coerenti con posizione+portiere combinati; tiro
+> ravvicinato risolto correttamente in gol. Zero errori console. Bot non rieseguito (stesso limite
+> ambientale del punto sopra).
+>
 > **Fix 2026-08-07 (bug segnalato dall'utente — "nuovo volto" già noto)**: `pescaGiocatoreCasuale()`
 > pescava un giocatore a caso dalla rosa senza escludere chi era già una persona nota
 > (`COMPAGNO_squadra_nome`/`CONOSCENZA_squadra_nome` già in `state.persone`), quindi eventi come
