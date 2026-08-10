@@ -4110,7 +4110,11 @@ function beginMatch(){
     compagni: compagniPartita,
     // Posizioni tattiche dei 14 giocatori in campo (vedi calcolaPosizioniTattiche sopra): dato per
     // il futuro Match Viewer 2D, non letto da nessun'altra funzione del motore/eventi.
-    posizioniTattiche: calcolaPosizioniTattiche(compagniPartita) };
+    posizioniTattiche: calcolaPosizioniTattiche(compagniPartita),
+    // Orologio continuo (vedi avanzaOrologioContinuo/nextMoment): primoTempoFinito=false finché non
+    // si passa i 25' (intervallo, calcio a 7 = 2x25'), latoInvertito diventa true al calcio d'inizio
+    // del secondo tempo (vedi avviaSecondoTempo/CameraManager.toPixel).
+    primoTempoFinito:false, inIntervallo:false, latoInvertito:false, prossimoMomentoMinuto:null, attesaProssimoMomento:false };
   // Stato persistente del campo (palla + 14 giocatori) inizializzato SUBITO dalle coordinate
   // tattiche: i giocatori sono già nelle loro posizioni di formazione al primo fotogramma, non
   // "appaiono" al primo evento. Puro dato: innocuo anche headless (il bot semplicemente non lo
@@ -4126,7 +4130,6 @@ function beginMatch(){
   document.getElementById('matchSubBadge').style.display = 'none';
   document.getElementById('commentaryLog').innerHTML = '';
   addLog(`Fischio d'inizio! ${teamName()} ospita ${opp.nome}.`, false);
-  orologioPartitaAttivo = false; // reset di sicurezza: nessun tween di una partita precedente deve poter bloccare questa
   avviaCanvasPartita();
   emitMatchEvent({ type:'whistle', outcome:'kickoff', actor:{role:'self', name:state.name, team:'home'} });
   state.energia = clamp(state.energia-15,0,100);
@@ -4156,7 +4159,13 @@ function beginMatchAsSub(){
     gkMomenti: state.role==='Portiere' ? shuffle(GK_MOMENTS_POOL).slice(0,numMomentiSub) : null,
     momentiOutfieldRidotti: state.role!=='Portiere' ? shuffle(MOMENTS).slice(0,numMomentiSub) : null,
     compagni: compagniPartita,
-    posizioniTattiche: calcolaPosizioniTattiche(compagniPartita) };
+    posizioniTattiche: calcolaPosizioniTattiche(compagniPartita),
+    // Chi entra dalla panchina non vive un "primo tempo" nel viewer (la partita parte già a
+    // minutoIngresso): se entra dopo il minuto dell'intervallo, il campo è già "cambiato" e non deve
+    // più fermarsi per un intervallo mai vissuto; se entra prima, l'intervallo arriverà normalmente
+    // quando l'orologio continuo raggiunge i 25'.
+    primoTempoFinito: minutoIngresso>=25, inIntervallo:false, latoInvertito: minutoIngresso>=25,
+    prossimoMomentoMinuto:null, attesaProssimoMomento:false };
   // Stato persistente del campo (palla + 14 giocatori) inizializzato SUBITO dalle coordinate
   // tattiche: i giocatori sono già nelle loro posizioni di formazione al primo fotogramma, non
   // "appaiono" al primo evento. Puro dato: innocuo anche headless (il bot semplicemente non lo
@@ -4167,7 +4176,6 @@ function beginMatchAsSub(){
   document.getElementById('matchSubBadge').style.display = 'inline-block';
   document.getElementById('commentaryLog').innerHTML = '';
   addLog(`Il mister ti chiama dalla panchina: entri al ${minutoIngresso}', tempo per lasciare il segno.`, false);
-  orologioPartitaAttivo = false; // reset di sicurezza: nessun tween di una partita precedente deve poter bloccare questa
   avviaCanvasPartita();
   emitMatchEvent({ type:'whistle', outcome:'substitution_in', actor:{role:'self', name:state.name, team:'home'} });
   state.energia = clamp(state.energia-8,0,100);
@@ -4334,7 +4342,16 @@ function creaStatoCampo(posizioniTattiche){
     self: !!slot.self,
     base: slot            // riferimento allo slot tattico, non una copia
   }));
-  return { ball: { x:0.5, y:0.5, visible:true, moving:false }, players };
+  // anchor: ultima posizione AUTOREVOLE della palla (kickoff/nuovo momento/fine clip/ricalcio dopo
+  // gol), aggiornata da muoviPallaEvento — è il punto da cui avanzaPallaLibera() può allontanarsi di
+  // poco mentre aspetta il prossimo evento, mai un inseguimento senza fine. owner/possessionTeam
+  // sono lo stesso concetto già richiesto/discusso, riportati direttamente su campo.ball invece di
+  // aprire una seconda struttura: nessun nuovo state parallelo.
+  // libera/liberaDalMinuto/candidati (Fase 6): rappresentano la fase FREE (palla non controllata,
+  // ball.owner===null davvero, nessun proxy) riusando lo stesso oggetto ball invece di una macchina a
+  // stati parallela — vedi avviaPallaLibera/avanzaStatoPallaLibera.
+  return { ball: { x:0.5, y:0.5, visible:true, moving:false, anchor:{x:0.5,y:0.5}, owner:null, possessionTeam:null,
+    libera:false, liberaDalMinuto:null, candidati:null }, players };
 }
 function statoCampoCorrente(){
   return state.matchTemp ? state.matchTemp.campo : null;
@@ -4362,6 +4379,15 @@ function segnalaCoordinataInvalida(contesto, xy){
   if(campoDiagnosticaEmessa[contesto]) return;
   campoDiagnosticaEmessa[contesto] = true;
   if(typeof console!=='undefined' && console.warn) console.warn('[MatchViewer] coordinata non valida in '+contesto+':', xy);
+}
+// Stesso dizionario/pattern di segnalaCoordinataInvalida, per il controllo diagnostico di coerenza
+// del possesso richiesto in Fase 4 (sez.6): un solo warning per tipo di problema, mai una correzione
+// silenziosa — se scatta, indica un punto del motore che ha scritto owner/possessionTeam/
+// fasePossessoAttuale in modo incoerente fra loro (vedi verificaCoerenzaPossesso più sotto).
+function segnalaProblemaPossesso(contesto){
+  if(campoDiagnosticaEmessa[contesto]) return;
+  campoDiagnosticaEmessa[contesto] = true;
+  if(typeof console!=='undefined' && console.warn) console.warn('[MatchViewer] incoerenza di possesso: '+contesto);
 }
 // Aggiorna i target dei 14 giocatori dal sistema tattico/decisionale già esistente
 // (posizioniConMarcatura → MovementDecisionEngine → heatmap + BEHAVIOR_MATRIX): qui NON si decide
@@ -4431,6 +4457,10 @@ function muoviPallaEvento(xy, contesto){
   if(!campo) return;
   if(!coordinataValida(xy)){ segnalaCoordinataInvalida(contesto||'muoviPallaEvento', xy); return; }
   campo.ball.x = xy.x; campo.ball.y = xy.y; campo.ball.visible = true;
+  // Ogni spostamento "di motore" ridefinisce anche l'ancora per avanzaPallaLibera() (vedi
+  // creaStatoCampo): un evento vero sposta sempre il punto attorno a cui la palla può poi
+  // continuare a vivere in attesa del prossimo evento.
+  campo.ball.anchor = { x: xy.x, y: xy.y };
 }
 /* ---------- Animation Library (vedi MATCH_VIEWER_DESIGN.md sez.4) ----------
    Proprietaria di TUTTE le clip: ogni clip è un modulo indipendente con la propria durata e la
@@ -4468,25 +4498,42 @@ const AnimationLibrary = {
     },
     pass_short: {
       durationMs: 600,
-      run(t, animation){ return { ballPos: lerpPunto(animation.originXY, animation.destinationXY, EASINGS.easeOutQuad(t)) }; }
+      // variantField/variants come in 'shot': un assist che porta al gol (evt.outcome==='goal')
+      // deve accodare la stessa esultanza — prima solo il tiro diretto la innescava, un passaggio
+      // vincente restava senza; goal_celebration è anche il punto in cui la palla torna al centro.
+      variantField: 'outcome',
+      variants: { goal:{followup:'goal_celebration'} },
+      // La palla segue la spezzata (vettori ogni 1,5m reali, vedi costruisciSpezzata) invece di una
+      // formula continua; il portatore in conduzione legge la STESSA spezzata un po' più indietro
+      // (DISTANZA_CONDUZIONE_M) invece di stare sempre esattamente sul pallone.
+      run(t, animation){
+        if(!animation.originXY) return {};
+        const spezzata = costruisciSpezzata(animation.originXY, animation.destinationXY, 0);
+        const distanza = spezzata.distanzaTotaleM * EASINGS.easeOutQuad(t);
+        return {
+          ballPos: puntoSuSpezzata(spezzata, distanza),
+          playerPos: puntoSuSpezzata(spezzata, distanza - DISTANZA_CONDUZIONE_M)
+        };
+      }
     },
     pass_long: {
       durationMs: 1100,
-      // Prima identica a pass_short (solo più lenta): un lancio lungo/cross in linea retta non è
-      // credibile quanto un passaggio corto. Aggiunge un arco laterale, perpendicolare alla
-      // direzione origine→destinazione, che cresce e torna a zero a metà volo (sin(π·t)) — la
-      // palla si scosta dalla linea retta e ci ritorna esattamente a destinazione, qualunque sia
-      // l'orientamento del passaggio (non solo lungo l'asse x). Contenuto qui: nessun'altra clip
-      // ne è affetta.
+      // Stesso motivo di pass_short: un cross/lancio che risulta in assist-gol deve accodare
+      // goal_celebration (e quindi il ricentraggio della palla) come farebbe un tiro diretto.
+      variantField: 'outcome',
+      variants: { goal:{followup:'goal_celebration'} },
+      // Stessa spezzata di pass_short, con un arco laterale in metri (arcoM, derivato dall'ampiezza
+      // normalizzata 0.06 già usata prima di questo fix, così il cross/lancio lungo mantiene la
+      // stessa escursione visiva) che cresce e torna a zero a metà volo — vedi costruisciSpezzata.
       run(t, animation){
-        const origin = animation.originXY, dest = animation.destinationXY || origin;
-        if(!origin) return {};
-        const base = lerpPunto(origin, dest, EASINGS.easeInOutQuad(t));
-        const dx = dest.x-origin.x, dy = dest.y-origin.y;
-        const len = Math.hypot(dx,dy) || 1;
-        const perp = { x: -dy/len, y: dx/len };
-        const arco = 0.06 * Math.sin(Math.PI*t);
-        return { ballPos: { x: base.x + perp.x*arco, y: base.y + perp.y*arco } };
+        if(!animation.originXY) return {};
+        const arcoM = 0.06 * CAMPO_LUNGHEZZA_M;
+        const spezzata = costruisciSpezzata(animation.originXY, animation.destinationXY, arcoM);
+        const distanza = spezzata.distanzaTotaleM * EASINGS.easeInOutQuad(t);
+        return {
+          ballPos: puntoSuSpezzata(spezzata, distanza),
+          playerPos: puntoSuSpezzata(spezzata, distanza - DISTANZA_CONDUZIONE_M)
+        };
       }
     },
     shot: {
@@ -4495,19 +4542,35 @@ const AnimationLibrary = {
       // lo legge genericamente da qui, non deve conoscere per nome quali clip esistono.
       variantField: 'outcome',
       variants: { goal:{followup:'goal_celebration'}, saved:{followup:'save'}, off_target:{} },
-      // playerPos distinto da ballPos: chi calcia non entra in porta insieme al pallone, si ferma
-      // all'85% del percorso (fuori/sul bordo area) mentre la palla prosegue fino a destinazione.
+      // playerPos distinto da ballPos, sulla stessa spezzata: chi calcia non entra in porta insieme
+      // al pallone, resta al più all'85% del percorso (fuori/sul bordo area) mentre la palla
+      // prosegue fino a destinazione — stesso limite di sicurezza di prima, ora espresso in distanza
+      // reale sulla spezzata invece che in una frazione del parametro t.
       run(t, animation){
-        const te = EASINGS.easeInCubic(t);
+        if(!animation.originXY) return {};
+        const spezzata = costruisciSpezzata(animation.originXY, animation.destinationXY, 0);
+        const distanzaPalla = spezzata.distanzaTotaleM * EASINGS.easeInCubic(t);
+        const distanzaGiocatore = Math.min(distanzaPalla - DISTANZA_CONDUZIONE_M, spezzata.distanzaTotaleM * 0.85);
         return {
-          ballPos: lerpPunto(animation.originXY, animation.destinationXY, te),
-          playerPos: lerpPunto(animation.originXY, animation.destinationXY, Math.min(te, 0.85))
+          ballPos: puntoSuSpezzata(spezzata, distanzaPalla),
+          playerPos: puntoSuSpezzata(spezzata, distanzaGiocatore)
         };
       }
     },
+    // Fase 6: prima puramente estetica (nessun ballPos), ora la vera deviazione del rimbalzo — la
+    // palla percorre la spezzata dal punto di parata (dove il tiro ha raggiunto il portiere) al
+    // punto di rimbalzo calcolato deterministicamente da direzioneDeviazioneParata, stessa geometria
+    // di spezzata già usata da pass_short/shot (nessuna nuova traiettoria inventata). Al termine di
+    // questa clip la palla è fisicamente al punto di rimbalzo: AnimationManager.tick() (vedi
+    // onFollowupDone) la marca FREE da lì, non altrove — mai un teletrasporto.
     save: {
       durationMs: 500,
-      run(t, animation){ return {}; } // nessun ballPos: il portiere non è ancora disegnato (MVP)
+      run(t, animation){
+        if(!animation.originXY || !animation.destinationXY) return {};
+        const spezzata = costruisciSpezzata(animation.originXY, animation.destinationXY, 0);
+        const distanza = spezzata.distanzaTotaleM * EASINGS.easeOutQuad(t);
+        return { ballPos: puntoSuSpezzata(spezzata, distanza) };
+      }
     },
     goal_celebration: {
       durationMs: 1200, interruptible: true,
@@ -4541,11 +4604,19 @@ function interpretMatchEvent(evt){
   const campo = statoCampoCorrente();
   const originDaStato = campo && coordinataValida(campo.ball) ? { x: campo.ball.x, y: campo.ball.y } : null;
   const originDaZona = zonaCoordinate(evt.origin);
+  // evt.destinationXY (Fase 3): quando il motore ha già individuato il vero giocatore destinatario
+  // (scegliRicevitoreReale/trovaIntercettoreReale in applyChoiceOutcome), la sua posizione reale
+  // scavalca la zona nominale — che resta il default per tutti gli eventi che non passano ancora
+  // una destinazione geometrica (nessuna chiamata esistente è toccata da questo campo opzionale).
   return {
     clip: clipId,                           // null = nessuna coreografia nell'MVP, solo indicatore
     variant,
     originXY: originDaStato || originDaZona,
-    destinationXY: zonaCoordinate(evt.destination),
+    destinationXY: coordinataValida(evt.destinationXY) ? evt.destinationXY : zonaCoordinate(evt.destination),
+    // reboundXY (Fase 6): punto di rimbalzo dopo una parata deviata (destinazione del followup
+    // 'save', non della clip 'shot' stessa) — passthrough opzionale con lo stesso principio di
+    // destinationXY, nessuna chiamata esistente ne risente se non lo imposta.
+    reboundXY: coordinataValida(evt.reboundXY) ? evt.reboundXY : null,
     followup: AnimationLibrary.followupFor(clipId, variant)
   };
 }
@@ -4680,7 +4751,38 @@ function creaAnimationManager(){
         const followupId = cur.evt.animation && cur.evt.animation.followup;
         if(followupId && AnimationLibrary.get(followupId)){
           const anim = cur.evt.animation;
-          this.enqueue({ animation: { clip: followupId, originXY: anim.destinationXY || anim.originXY, destinationXY: null } });
+          // Dopo l'esultanza la palla torna al centrocampo — ricalcio, come a inizio partita — per
+          // OGNI gol (richiesto esplicitamente dall'utente, non solo per il tiro diretto: vedi
+          // variants su pass_short/pass_long). Un solo punto (qui, quando finisce goal_celebration)
+          // invece di ripeterlo in ciascun ramo del motore che può segnare un gol.
+          const onFollowupDone = followupId==='goal_celebration'
+            ? ()=> {
+                muoviPallaEvento({x:0.5,y:0.5}, 'ricalcio dopo gol');
+                // Chi ha subito il gol rimette in gioco: senza questo, avanzaPallaLibera() farebbe
+                // ripartire subito il portatore verso la porta appena segnata, direzione sbagliata.
+                // sincronizzaPossesso allinea nello stesso istante anche ball.owner/possessionTeam.
+                if(state.matchTemp) sincronizzaPossesso('away');
+              }
+            // Fase 6: quando la clip 'save' finisce, due esiti possibili (decisi in emettiTiroParato
+            // via anim.reboundXY, non qui): se c'è un punto di rimbalzo la palla vi è già fisicamente
+            // arrivata (persistita sopra da muoviPallaEvento) — avviaPallaLibera la marca FREE, senza
+            // spostarla oltre. Se reboundXY è null (trattenuta, sez.16 "caso prioritario"), la palla
+            // non si è mai mossa dal portiere durante questi 500ms: è lui il vero possessore, nessuna
+            // fase FREE — sincronizzaPossesso con lui esplicito, non il proxy generico.
+            : followupId==='save'
+              ? ()=> {
+                  if(!state.matchTemp) return;
+                  if(anim.reboundXY){ avviaPallaLibera(null, 'rimbalzo dopo parata'); return; }
+                  const campoOra = statoCampoCorrente();
+                  const portiere = campoOra && campoOra.players.find(p=>p.team==='away' && p.role==='POR');
+                  if(portiere) sincronizzaPossesso('away', portiere);
+                }
+              : null;
+          // reboundXY (Fase 6): il followup 'save' ha bisogno di una destinazione propria (il punto
+          // di rimbalzo), diversa da destinationXY (che è dove il TIRO ha raggiunto il portiere) —
+          // per ogni altro followup (oggi solo goal_celebration) resta null come prima.
+          const destinazioneFollowup = followupId==='save' ? anim.reboundXY : null;
+          this.enqueue({ animation: { clip: followupId, originXY: anim.destinationXY || anim.originXY, destinationXY: destinazioneFollowup } }, onFollowupDone);
         }
       }
     }
@@ -4709,11 +4811,19 @@ const CameraManager = {
   state: { zoom: 1, target: { x:0.5, y:0.5 } },
   setTarget(xy){ if(xy) this.state.target = xy; },
   setZoom(z){ this.state.zoom = z > 0 ? z : 1; },
+  // Cambio campo al secondo tempo (state.matchTemp.latoInvertito): UNICO punto di inversione
+  // laterale per l'intera resa a schermo — giocatori, palla, tutto passa da qui perché tutto passa
+  // da toPixel(). L'asse che rappresenta la lunghezza del campo è x (CAMPO_LUNGHEZZA_M, home attacca
+  // verso x=1): si specchia solo quello (x'=1-x), y resta invariata come da convenzione già in uso
+  // in tutto il file (marcatura/heatmap/zone). Motore/heatmap/MovementDecisionEngine/zone restano
+  // "in casa attacca verso x=1" per tutta la partita, primo e secondo tempo: zero formule toccate,
+  // zero rischio per quei sistemi — è solo la RESA a specchiarsi, non la simulazione sottostante.
   toPixel(xy, w, h){
     const margin = 10;
     const z = this.state.zoom;
     const t = this.state.target;
-    const nx = t.x + (xy.x - t.x)/z;
+    const xLogico = (state.matchTemp && state.matchTemp.latoInvertito) ? 1-xy.x : xy.x;
+    const nx = t.x + (xLogico - t.x)/z;
     const ny = t.y + (xy.y - t.y)/z;
     return { x: margin + nx*(w-2*margin), y: margin + ny*(h-2*margin) };
   }
@@ -4799,18 +4909,80 @@ function distanzaMetriTraPunti(p1, p2){
   const dyM = (p1.y-p2.y) * CAMPO_LARGHEZZA_M;
   return Math.hypot(dxM, dyM);
 }
+/* ---------- Spezzata di vettori (linearizzazione della curva della palla) ----------
+   Su richiesta esplicita dell'utente: la palla non deve più seguire una formula parametrica
+   continua (lerp/seno campionati a t) ma una spezzata — una composizione di vettori, uno ogni
+   PASSO_VETTORE_M metri REALI (1,5m, valore fornito dall'utente) lungo la curva (retta, oppure retta
+   + arco laterale in metri per i lanci lunghi, stesso principio già usato da pass_long). Il
+   portatore in conduzione resta SULLA STESSA spezzata, letta a una distanza percorsa minore
+   (DISTANZA_CONDUZIONE_M in meno): non è un secondo calcolo indipendente, sono gli stessi vettori
+   semplicemente traslati un po' indietro lungo il percorso, come richiesto.
+   Puro dato/geometria: nessun accesso a state, nessuna clip la conosce se non tramite le due
+   funzioni sotto — AnimationLibrary resta l'unico posto che decide quando chiamarle. */
+const PASSO_VETTORE_M = 1.5;
+// "Poco indietro": l'utente non ha dato un valore esatto, scelto da me pari a un solo passo di
+// vettore (stessa risoluzione della spezzata) — abbastanza per essere visibile senza allontanare
+// il portatore dalla palla in modo innaturale.
+const DISTANZA_CONDUZIONE_M = PASSO_VETTORE_M;
+function costruisciSpezzata(origin, dest, arcoM){
+  const dest2 = (dest && coordinataValida(dest)) ? dest : origin;
+  const distanzaTotaleM = distanzaMetriTraPunti(origin, dest2);
+  const n = Math.max(1, Math.round(distanzaTotaleM / PASSO_VETTORE_M));
+  const dx = dest2.x-origin.x, dy = dest2.y-origin.y;
+  const len = Math.hypot(dx,dy) || 1;
+  const perp = { x: -dy/len, y: dx/len }; // perpendicolare alla direzione origine→destinazione
+  const punti = [];
+  for(let i=0;i<=n;i++){
+    const pu = i/n;
+    const base = lerpPunto(origin, dest2, pu);
+    // Arco laterale (metri, sull'asse lunghezza campo, coerente col perp normalizzato): cresce e
+    // torna a zero a metà spezzata, stesso profilo sin(pi·pu) già usato dal cross/lancio lungo.
+    const arco = arcoM ? (arcoM/CAMPO_LUNGHEZZA_M) * Math.sin(Math.PI*pu) : 0;
+    punti.push({ x: base.x + perp.x*arco, y: base.y + perp.y*arco });
+  }
+  return { punti, distanzaTotaleM };
+}
+// Punto sulla spezzata a una distanza reale percorsa (metri) dall'origine: interpola fra i due
+// vettori più vicini (la spezzata resta una linearizzazione — segmenti retti fra vettori — non una
+// nuova curva liscia). Usata sia per la palla (distanza = lunghezza totale · easing(t)) sia per il
+// portatore in conduzione (stessa distanza meno DISTANZA_CONDUZIONE_M): stessa spezzata, stesso
+// punto di lettura, cambia solo la distanza — è così che il portatore resta "dietro" restando sugli
+// stessi vettori invece di un calcolo indipendente.
+function puntoSuSpezzata(spezzata, distanzaM){
+  const { punti, distanzaTotaleM } = spezzata;
+  if(punti.length===1) return punti[0];
+  const d = clamp(distanzaM, 0, distanzaTotaleM);
+  const nSeg = punti.length-1;
+  const passoM = distanzaTotaleM / nSeg;
+  if(!(passoM>0)) return punti[0];
+  const idxFloat = d/passoM;
+  const idx = Math.min(nSeg-1, Math.floor(idxFloat));
+  const frac = idxFloat - idx;
+  return lerpPunto(punti[idx], punti[idx+1], frac);
+}
 // Quanto ci si sposta dalla propria posizione di formazione verso l'avversario marcato (0=formazione
 // pura, 1=sovrapposto). Scelto da me (non fornito dall'utente, solo la logica "come un magnete" lo
 // era): abbastanza per rendere visibile la marcatura senza disintegrare la forma della squadra.
 const MARCATURA_PULL = 0.35;
 // Soglia di aggressione sul portatore, fornita esplicitamente dall'utente (8 metri).
 const RAGGIO_PRESSING_M = 8;
+// Fase 5, sez.10: sotto questa distanza dal SEGMENTO portatore→compagno (non dal compagno stesso —
+// vedi distanzaPuntoSegmentoM, già costruita in Fase 3 per l'intercetto, riusata qui), un avversario
+// "copre" la linea di passaggio verso quel compagno. Stesso ordine di grandezza di RAGGIO_PRESSING_M
+// (scelto da me, non fornito): abbastanza stretto da non far scattare lo smarcamento per un
+// avversario lontano dalla traiettoria, abbastanza largo da coprire un difensore realmente in mezzo.
+const LINEA_PASSAGGIO_CHIUSA_M = 5;
 // Quanto si sposta chi aggredisce verso il portatore — più deciso della marcatura normale (scelto
 // da me, non fornito: l'aggressione è un'azione più determinata di un semplice posizionamento).
 const PULL_PRESSING = 0.55;
 // Spinta di "sottotesto" del portatore verso il centro della porta avversaria — deliberatamente
 // modesta (scelta da me, non fornita): è una tendenza di fondo, non uno sprint ad ogni fotogramma.
 const PULL_AVANZAMENTO_PORTATORE = 0.15;
+// Sotto pressione (avversario entro RAGGIO_PRESSING_M dal portatore, stessa soglia già usata per
+// decidere chi pressa) l'avanzamento si riduce invece di restare un pull fisso: "pressione alta →
+// protezione palla" invece di "conduzione spedita", richiesto esplicitamente. Fattore scelto da me
+// (non fornito): abbastanza per essere percepibile senza annullare del tutto l'avanzamento.
+const FATTORE_AVANZAMENTO_SOTTO_PRESSIONE = 0.35;
 function pullVerso(p, target, frazione){
   return { x: p.x + (target.x-p.x)*frazione, y: p.y + (target.y-p.y)*frazione };
 }
@@ -4840,6 +5012,16 @@ const HEATMAP_CENTROIDI_RUOLO = {
   ALA_DX: { possesso:{x:0.5175,y:0.6162}, nonPossesso:{x:0.4462,y:0.6100} },
   ATT:    { possesso:{x:0.5902,y:0.5000}, nonPossesso:{x:0.5880,y:0.5000} }
 };
+// Quanto il baricentro di reparto segue la posizione REALE della palla, invece di restare un punto
+// fisso per ruolo/fase — "palla lato destro" deve produrre una struttura diversa da "palla lato
+// sinistro/centrale" (richiesto esplicitamente), e la squadra deve avanzare progressivamente con la
+// palla (costruzione→ultimo terzo), non restare sulle coordinate iniziali della formazione. Pull
+// BOUNDED (non sostituisce il baricentro, lo sposta di una frazione): il ruolo resta riconoscibile
+// (un DC non finisce mai davanti a un ATT solo perché la palla è avanti), non c'è "ball magnet".
+// Frazioni scelte da me (non fornite): y più marcata (il lato è l'effetto più visibile e richiesto
+// esplicitamente), x più cauta (la profondità è già differenziata da possesso/non possesso sopra).
+const CENTROIDE_BALL_SHIFT_Y = 0.28;
+const CENTROIDE_BALL_SHIFT_X = 0.18;
 // Bucket di comportamento dal reparto/slotY DI BASE (calcolaPosizioniTattiche, prima di qualunque
 // pull di marcatura): i 2 slot DIF sono entrambi "DC" (griglia simmetrica), lo slot CEN centrale
 // (slotY=0.50) è "CC", i due slot CEN laterali sono ALA_SX (slotY=0.18, baricentro y<0.5 nella
@@ -4890,16 +5072,29 @@ const MovementDecisionEngine = {
   PULL_MARK: MARCATURA_PULL,        // riuso
   PULL_PRESS: PULL_PRESSING,        // riuso
   // Input: { player:{x,y,reparto,team}, bucket, team, possession:'home'|'away', ballPosition:{x,y},
-  //   isBallCarrier, isPresser, opponentPositions:[{x,y,reparto}] } — teammatePositions/formation/
-  // matchState non servono alla decisione attuale (nessun comportamento qui dipende dai compagni),
-  // accettati comunque nell'input per rispettare il contratto richiesto e per usi futuri.
+  //   isBallCarrier, isPresser, opponentPositions:[{x,y,reparto}], lineaChiusa } — teammatePositions/
+  // formation/matchState non servono alla decisione attuale (nessun comportamento qui dipende dai
+  // compagni), accettati comunque nell'input per rispettare il contratto richiesto e per usi futuri.
+  // lineaChiusa (Fase 5, sez.10, opzionale — default falsy, ogni chiamata che non lo passa si
+  // comporta esattamente come prima): un avversario copre già la linea di passaggio verso questo
+  // giocatore (calcolato dal chiamante con distanzaPuntoSegmentoM, la stessa geometria già usata per
+  // l'intercetto in Fase 3 — nessuna nuova geometria qui).
   // Output: { targetX, targetY, intent, priority }.
   decide(input){
-    const { player, bucket, team, possession, ballPosition, isBallCarrier, isPresser, opponentPositions } = input;
+    const { player, bucket, team, possession, ballPosition, isBallCarrier, isPresser, opponentPositions, lineaChiusa } = input;
     if(!bucket) return { targetX:player.x, targetY:player.y, intent:null, priority:0 }; // POR: nessuna voce in matrice/heatmap
     const inPossesso = possession === team;
     const centro = HEATMAP_CENTROIDI_RUOLO[bucket][inPossesso ? 'possesso' : 'nonPossesso'];
-    const puntoHeatmap = { x: team==='home' ? centro.x : (1-centro.x), y: centro.y };
+    const puntoHeatmapBase = { x: team==='home' ? centro.x : (1-centro.x), y: centro.y };
+    // Il baricentro di reparto segue la posizione reale della palla (bounded, vedi
+    // CENTROIDE_BALL_SHIFT_*): stessa identità di ruolo, ma tutta la squadra scorre lateralmente col
+    // lato di gioco e avanza progressivamente con l'azione — vale per entrambe le fasi (in possesso E
+    // fuori possesso: quando cambia lato, anche chi difende scorre verso quel lato), non solo per chi
+    // ha palla.
+    const puntoHeatmap = ballPosition ? {
+      x: puntoHeatmapBase.x + (ballPosition.x - puntoHeatmapBase.x) * CENTROIDE_BALL_SHIFT_X,
+      y: puntoHeatmapBase.y + (ballPosition.y - puntoHeatmapBase.y) * CENTROIDE_BALL_SHIFT_Y
+    } : puntoHeatmapBase;
     const baseIntent = BEHAVIOR_MATRIX[bucket][inPossesso ? 'possesso' : 'nonPossesso'];
 
     let vicino = null, distMin = Infinity;
@@ -4918,9 +5113,16 @@ const MovementDecisionEngine = {
       // Il target del portatore è già calcolato altrove (avanzamento verso porta, logica esistente
       // non toccata): qui riportiamo solo l'intent di base come etichetta, nessun nuovo target.
       intent = baseIntent; target = { x:player.x, y:player.y };
-    } else if(vicino && distMin <= this.DISTANZA_STRETTA_M){
+    } else if((vicino && distMin <= this.DISTANZA_STRETTA_M) || lineaChiusa){
+      // Fase 5, sez.10: prima l'UNMARK scattava solo in base alla PROPRIA distanza dal marcatore più
+      // vicino — un giocatore poco marcato ma con la linea di passaggio comunque coperta da un
+      // difensore restava fermo, senza incentivo a spostarsi. `riferimento` resta `vicino` quando
+      // esiste (si scappa DA lui, come prima); se invece è solo la linea a essere chiusa (nessun
+      // marcatore stretto), si usa la posizione del portatore come riferimento — lo scarto laterale
+      // si allontana comunque dalla traiettoria diretta, aprendo un angolo di ricezione diverso.
       intent = 'UNMARK';
-      const via = { x: player.x-vicino.x, y: player.y-vicino.y };
+      const riferimento = vicino || ballPosition;
+      const via = { x: player.x-riferimento.x, y: player.y-riferimento.y };
       const mod = Math.hypot(via.x, via.y) || 1;
       const scarto = { x: puntoHeatmap.x + (via.x/mod)*this.SCARTO_UNMARK_NORM, y: puntoHeatmap.y + (via.y/mod)*this.SCARTO_UNMARK_NORM };
       target = pullVerso(player, scarto, this.PULL_HEATMAP);
@@ -4944,6 +5146,57 @@ const MovementDecisionEngine = {
       entro RAGGIO_PRESSING_M) è calcolato qui come CONTESTO — la decisione se aggredire, marcare,
       smarcarsi o tenere la posizione di ruolo è demandata a MovementDecisionEngine.decide() per
       ciascun giocatore (comportamento scelto dalla matrice/heatmap, non hardcodato qui). */
+// Portieri: nessuna voce in heatmap/BEHAVIOR_MATRIX/MovementDecisionEngine per il ruolo POR (mai
+// prevista, per restare ancorati alla propria area) — ma questo li lasciava COMPLETAMENTE fermi
+// sullo slot di formazione per l'intera partita, mai un adattamento alla palla. Comportamento
+// minimo e separato dai 12 di movimento (richiesto esplicitamente): resta sulla propria linea di
+// porta (profondità quasi invariata, PROFONDITA_REPARTO_TATTICO.POR), si sposta lateralmente
+// seguendo la palla entro un raggio realistico, si stacca leggermente dalla linea quando la palla è
+// lontana e rientra quando il pericolo si avvicina. Valori scelti da me (non forniti): bastano a
+// essere percepibili senza far uscire il portiere dalla propria area.
+const PORTIERE_SHIFT_Y_MAX_NORM = 0.12;
+const PORTIERE_USCITA_MAX_NORM = 0.03;
+function decidiPosizionePortiere(player, ballXY, team){
+  const scartoY = clamp((ballXY.y-0.5)*0.5, -PORTIERE_SHIFT_Y_MAX_NORM, PORTIERE_SHIFT_Y_MAX_NORM);
+  const distanzaPortaNorm = clamp(team==='home' ? ballXY.x : (1-ballXY.x), 0, 1);
+  const uscita = distanzaPortaNorm * PORTIERE_USCITA_MAX_NORM;
+  const baseX = PROFONDITA_REPARTO_TATTICO.POR;
+  return { x: team==='home' ? baseX+uscita : (1-baseX)-uscita, y: 0.5+scartoY };
+}
+// Punto di mira di un tiro andato a segno (Fase 3, sez.13): lontano dal lato in cui si trova
+// realmente il portiere avversario (già dinamico, decidiPosizionePortiere) invece del centro fisso
+// di ZONES.goal_line — bounded dentro lo stesso specchio di porta, nessuna nuova zona introdotta.
+// Non cambia la probabilità di gol (già decisa da calcChanceTiro più a valle nella pipeline): è solo
+// la resa geometrica di un esito già deciso, non un secondo calcolo di parata.
+function miraPortaLontanoDalPortiere(faseTiro){
+  const zona = ZONES.goal_line;
+  const yCentro = (zona.yRange[0]+zona.yRange[1])/2;
+  const xGoal = faseTiro==='home' ? 1 : 0;
+  const campo = statoCampoCorrente();
+  const portiereAvv = campo && campo.players.find(p=> p.team!==faseTiro && p.role==='POR');
+  if(!portiereAvv) return { x:xGoal, y:yCentro };
+  const lato = portiereAvv.y >= 0.5 ? -1 : 1; // lontano dal lato di porta coperto dal portiere
+  const y = clamp(yCentro + lato*(zona.yRange[1]-zona.yRange[0])*0.4, zona.yRange[0], zona.yRange[1]);
+  return { x:xGoal, y };
+}
+// Distanza (metri) del punto di rimbalzo dopo una parata deviata dalla posizione del portiere —
+// scelta da me (non fornita): abbastanza per essere un vero rimbalzo contendibile, non così lontano
+// da sembrare un secondo tiro.
+const REBOUND_DISTANZA_M = 6;
+// Punto di rimbalzo dopo una parata deviata (Fase 6, sez.15): lontano dalla propria porta verso il
+// centro campo, spostato lateralmente sul lato OPPOSTO a quello coperto dal portiere (stesso
+// principio già usato da miraPortaLontanoDalPortiere per la mira del tiro, qui applicato alla
+// deviazione) — deterministico dalla posizione reale del portiere, bounded dentro il campo di gioco
+// (limitiGiocatore). Non è un nuovo calcolo di probabilità: il tiro è già stato deciso "parato" da
+// calcChanceTiro più a monte, questa funzione decide solo DOVE va la palla dopo, geometricamente.
+function direzioneDeviazioneParata(faseTiro, portiere){
+  const versoCampo = faseTiro==='home' ? -1 : 1; // dalla propria porta verso il centrocampo
+  const lato = portiere.y >= 0.5 ? -1 : 1;        // si allontana dal lato coperto dal portiere
+  return limitiGiocatore({
+    x: portiere.x + versoCampo*(REBOUND_DISTANZA_M/CAMPO_LUNGHEZZA_M),
+    y: portiere.y + lato*0.15
+  });
+}
 function posizioniConMarcatura(){
   const pos = state.matchTemp && state.matchTemp.posizioniTattiche;
   if(!pos) return [];
@@ -4952,16 +5205,49 @@ function posizioniConMarcatura(){
   const squadraConPalla = fase==='home' ? home : away;
   const squadraSenzaPalla = fase==='home' ? away : home;
 
-  const portatoreSlot = fase==='home'
+  // Portatore reale (Fase 4): stessa regola ora unica di giocatorePortatoreCorrente (owner reale se
+  // esiste ed è della squadra giusta, altrimenti proxy) — prima era duplicata qui a mano, sempre e
+  // solo il CEN fisso per l'away, quindi un intercettore reale (campo.ball.owner) non veniva MAI
+  // letto da MovementDecisionEngine: la posizione/il pull verso porta restavano centrati sul proxy
+  // anche quando un vero giocatore aveva recuperato palla. `.base` è il riferimento allo slot
+  // tattico (non una copia, vedi creaStatoCampo) — lo stesso oggetto presente in squadraConPalla,
+  // quindi il confronto `p===portatoreSlot` sotto continua a funzionare per riferimento.
+  const campoCorrente = statoCampoCorrente();
+  const portatoreLive = campoCorrente ? giocatorePortatoreCorrente(campoCorrente, fase) : null;
+  const portatoreSlot = (portatoreLive && portatoreLive.base) || (fase==='home'
     ? (squadraConPalla.find(p=>p.self) || squadraConPalla[0])
-    : (squadraConPalla.find(p=>p.reparto==='CEN') || squadraConPalla[0]);
-  // La posizione della palla arriva dallo stato persistente del campo (posizionePortatorePalla la
-  // legge da lì); `entities` resta passato solo come fallback per i casi in cui lo stato non esista
-  // ancora — non è più la fonte primaria.
+    : (squadraConPalla.find(p=>p.reparto==='CEN') || squadraConPalla[0]));
+  // La base del pull verso porta resta SEMPRE la posizione della PALLA (posizionePortatorePalla),
+  // mai la posizione del giocatore portatore stesso — per entrambe le squadre, non solo per 'home'
+  // come prima. Tentativo scartato durante il test dal vivo di questa fase: usare la posizione live
+  // del portatore reale (portatoreLive.x/y) come base sembrava corretto, ma apre un loop di
+  // retroazione — il target del portatore dipenderebbe dalla sua stessa posizione dell'istante prima,
+  // pullata ripetutamente verso porta ad ogni frame, senza alcun aggancio esterno che la fermi: un
+  // avanzamento sostanzialmente a velocità piena e senza fine durante un'attesa lunga (misurato: il
+  // portatore avanzava da solo, scollegato dalla palla). La posizione della palla invece È già
+  // vincolata (avanzaPallaLibera la tiene entro DERIVA_PORTATORE_IDLE_M dal suo anchor fisso): usarla
+  // come base rende il pull del portatore vincolato allo stesso modo, per costruzione, per qualunque
+  // squadra — esattamente il principio già verificato per 'home' in Fase 1, ora esteso davvero
+  // all'away invece di restare sullo slot statico di formazione (mai in movimento). `entities` resta
+  // passato solo come fallback per i casi in cui lo stato non esista ancora.
   const entities = matchAnimMgr && matchAnimMgr.entities;
-  const portatoreBaseXY = (fase==='home' && posizionePortatorePalla(entities)) || portatoreSlot;
+  const portatoreBaseXY = posizionePortatorePalla(entities) || portatoreSlot;
   const obiettivoPorta = { x: fase==='home' ? 1 : 0, y: 0.5 };
-  const portatoreXY = pullVerso(portatoreBaseXY, obiettivoPorta, PULL_AVANZAMENTO_PORTATORE);
+  // Pressione sul portatore: se un avversario di movimento è già entro RAGGIO_PRESSING_M dalla sua
+  // posizione attuale (calcolata QUI, prima del pull verso porta, per non dipendere dal risultato
+  // che sta per produrre), l'avanzamento si riduce — "protezione palla" invece di conduzione spedita.
+  const sottoPressione = squadraSenzaPalla.some(p=> p.reparto!=='POR' && distanzaMetriTraPunti(p, portatoreBaseXY) <= RAGGIO_PRESSING_M);
+  const pullAvanzamento = sottoPressione ? PULL_AVANZAMENTO_PORTATORE * FATTORE_AVANZAMENTO_SOTTO_PRESSIONE : PULL_AVANZAMENTO_PORTATORE;
+  // Fase 6: durante FREE (palla senza owner) il pull "verso porta" non ha senso — non esiste un
+  // portatore che sta avanzando l'azione, solo una palla vagante — e applicarlo comunque crea un
+  //'offset permanente fra il punto verso cui pressing/marcatura vengono attratti e la posizione VERA
+  // della palla (misurato in test dal vivo: ~8m di scarto costante, che impediva a chiunque di
+  // arrivare mai entro il raggio di recupero). Durante FREE il riferimento tattico per tutti i 14 è
+  // quindi la posizione reale della palla, non un punto derivato da un'azione che nessuno sta
+  // conducendo.
+  const portatoreXY = (campoCorrente && campoCorrente.ball.libera)
+    ? { x:campoCorrente.ball.x, y:campoCorrente.ball.y }
+    : pullVerso(portatoreBaseXY, obiettivoPorta, pullAvanzamento);
 
   let pressore = null, distMinPress = Infinity;
   squadraSenzaPalla.forEach(p=>{
@@ -4971,12 +5257,21 @@ function posizioniConMarcatura(){
   });
 
   const decidiPosizione = (p, inPossesso)=>{
+    if(p.reparto==='POR') return Object.assign({}, p, decidiPosizionePortiere(p, portatoreXY, p.team), { intent:null });
     const bucket = bucketComportamento(p.reparto, p.y);
+    const opponentPositions = inPossesso ? squadraSenzaPalla : squadraConPalla;
+    // Fase 5, sez.10: solo per i compagni del portatore (mai per chi difende, mai per il portatore
+    // stesso — il suo target è già deciso altrove) — un avversario di movimento è già vicino al
+    // SEGMENTO portatore→questo giocatore (distanzaPuntoSegmentoM, riusata da Fase 3, non una nuova
+    // geometria). Alimenta il trigger UNMARK di MovementDecisionEngine in aggiunta alla propria
+    // distanza dal marcatore più vicino, non al suo posto.
+    const lineaChiusa = inPossesso && p!==portatoreSlot &&
+      opponentPositions.some(a=> a.reparto!=='POR' && distanzaPuntoSegmentoM(a, portatoreXY, p) <= LINEA_PASSAGGIO_CHIUSA_M);
     const risultato = MovementDecisionEngine.decide({
       player: p, bucket, team: p.team, possession: fase, ballPosition: portatoreXY,
-      isBallCarrier: p===portatoreSlot, isPresser: p===pressore,
+      isBallCarrier: p===portatoreSlot, isPresser: p===pressore, lineaChiusa,
       teammatePositions: (inPossesso?squadraConPalla:squadraSenzaPalla),
-      opponentPositions: (inPossesso?squadraSenzaPalla:squadraConPalla),
+      opponentPositions,
       matchState: { minute: state.matchTemp.minute }
     });
     const xy = p===portatoreSlot ? portatoreXY : { x:risultato.targetX, y:risultato.targetY };
@@ -5036,15 +5331,352 @@ function offsetRespiroTattico(slotId){
     dyM: Math.cos(t*0.45*Math.SQRT2 + f*1.7) * AMPIEZZA_RESPIRO_M
   };
 }
+// Stessa regola di "chi porta la palla" già usata da posizioniConMarcatura() (portatoreSlot) per il
+// pull di avanzamento verso porta: duplicata qui in 2 righe invece di far dipendere questa funzione
+// da quella (già verificata, marcatura/pressing esclusi dal perimetro di questo intervento) — se la
+// regola cambia va aggiornata in entrambi i posti.
+// Fase 4: prima di ricadere sul proxy di reparto, controlla se esiste già un possessore REALE e
+// valido (stesso team) — un intercetto o una ricezione appena assegnati esplicitamente da
+// sincronizzaPossesso(fase, giocatore). Senza questo controllo, ogni chiamata "generica" (senza
+// secondo parametro — il caso più comune: la rete di sicurezza per-frame di avanzaPallaLibera, il
+// reset di un nuovo momento, l'esito di una scelta) sovrascriveva silenziosamente l'intercettore/
+// ricevitore reale col proxy fisso al frame successivo: era esattamente il "problema prioritario"
+// lasciato aperto dalla Fase 3 (il possesso torna al proxy generico invece di restare al giocatore
+// che ha davvero recuperato palla). Il filtro per team (squadra.find, non campo.players.find) fa sì
+// che un vecchio owner della squadra AVVERSARIA (rimasto in campo.ball.owner da prima di un
+// turnover) non venga mai riletto per errore: in quel caso non c'è match e si ricade sul proxy,
+// come deve essere.
+function giocatorePortatoreCorrente(campo, fase){
+  const squadra = campo.players.filter(p=>p.team===fase);
+  if(!squadra.length) return null;
+  if(campo.ball && campo.ball.owner){
+    const reale = squadra.find(p=>p.id===campo.ball.owner);
+    if(reale) return reale;
+  }
+  if(fase==='home'){
+    const self = squadra.find(p=>p.self);
+    if(self) return self;
+  } else if(coordinataValida(campo.ball)){
+    // Fase 5, sez.15/16: quando non esiste ancora un owner esplicito per l'away (nuovo momento
+    // scriptato, calcio d'inizio — nessun MOMENTS conosce mai un avversario per nome, resta un
+    // proxy per design), invece del CEN fisso di sempre — SEMPRE lo stesso slot indipendentemente da
+    // dove sia realmente la palla — il compagno di movimento (portiere escluso) geometricamente più
+    // vicino alla palla: un proxy plausibile invece di uno slot immobile. Nessun rischio di
+    // retroazione (a differenza del bug trovato in Fase 4): qui si LEGGE soltanto la posizione della
+    // palla, non la si scrive mai in funzione di questa scelta. Nessuna oscillazione frame-per-frame
+    // nemmeno per squadre molto vicine fra loro: appena sincronizzaPossesso() scrive l'esito su
+    // campo.ball.owner, il controllo sticky sopra lo ritrova identico al frame successivo — questo
+    // ramo è rivalutato solo quando l'owner è stato davvero azzerato/cambiato (nuovo momento, gol).
+    let migliore = null, distMin = Infinity;
+    squadra.forEach(p=>{
+      if(p.role==='POR') return;
+      const d = distanzaMetriTraPunti(p, campo.ball);
+      if(d<distMin){ distMin=d; migliore=p; }
+    });
+    if(migliore) return migliore;
+  }
+  return (fase==='home' ? squadra.find(p=>p.self) : squadra.find(p=>p.role==='CEN')) || squadra[0];
+}
+/* ---------- Geometria minima di passaggio/intercetto (Fase 3, sez.5/7) ----------
+   Su richiesta esplicita dell'utente: chi riceve un passaggio riuscito e chi intercetta un
+   passaggio fallito devono essere i VERI giocatori disegnati in campo (campo.players), scelti per
+   posizione reale — non più una zona nominale fissa o un flip anonimo di possesso. Il dado
+   (calcChance*) resta l'unica autorità su successo/fallimento della scelta (confermato
+   esplicitamente, per non introdurre una seconda fonte di probabilità): questi due helper NON
+   decidono se il passaggio riesce, scelgono solo CHI, fra i giocatori realmente in campo, è il
+   destinatario/l'intercettore più plausibile di un esito già deciso altrove. Deterministici (nessun
+   Math.random), stesso principio già richiesto per MovementDecisionEngine.
+   Nessun nuovo indice di controllo: interrogano direttamente campo.players con lo stesso pattern di
+   filtro già usato in tutto il file (team/role, POR sempre escluso dal gioco di squadra normale). */
+// Distanza minima reale (metri) fra un punto e il segmento a→b, proiezione clampata agli estremi.
+// Stessa conversione metri già usata da distanzaMetriTraPunti (asse x/y separati sulle due scale
+// reali del campo): qui serve per capire quanto un giocatore è vicino alla LINEA di un passaggio,
+// non solo ai suoi due estremi.
+function distanzaPuntoSegmentoM(p, a, b){
+  const abx = (b.x-a.x)*CAMPO_LUNGHEZZA_M, aby = (b.y-a.y)*CAMPO_LARGHEZZA_M;
+  const apx = (p.x-a.x)*CAMPO_LUNGHEZZA_M, apy = (p.y-a.y)*CAMPO_LARGHEZZA_M;
+  const abLenSq = abx*abx + aby*aby;
+  const t = abLenSq>0 ? clamp((apx*abx+apy*aby)/abLenSq, 0, 1) : 0;
+  const dx = apx - abx*t, dy = apy - aby*t;
+  return Math.hypot(dx, dy);
+}
+// Ricevitore reale più plausibile di un passaggio riuscito: il compagno (portiere ed eventuale
+// portatore stesso esclusi) geometricamente più vicino al punto di destinazione — il vero pallino
+// che si vede muoversi in campo, non un nome scelto altrove.
+function scegliRicevitoreReale(campo, fase, destinazioneXY, escludiId){
+  if(!campo || !coordinataValida(destinazioneXY)) return null;
+  let migliore = null, distMin = Infinity;
+  campo.players.forEach(p=>{
+    if(p.team!==fase || p.role==='POR' || p.id===escludiId) return;
+    const d = distanzaMetriTraPunti(p, destinazioneXY);
+    if(d<distMin){ distMin=d; migliore=p; }
+  });
+  return migliore;
+}
+// Intercettore reale più plausibile di un passaggio avversario fallito: il difensore/centrocampista
+// (portiere escluso) geometricamente più vicino alla LINEA origine→destinazione del passaggio —
+// stessa idea già usata per la pressione sul portatore (RAGGIO_PRESSING_M in posizioniConMarcatura),
+// qui applicata alla traiettoria invece che al portatore.
+function trovaIntercettoreReale(campo, faseAvversaria, originXY, destinazioneXY){
+  if(!campo || !coordinataValida(originXY) || !coordinataValida(destinazioneXY)) return null;
+  let migliore = null, distMin = Infinity;
+  campo.players.forEach(p=>{
+    if(p.team!==faseAvversaria || p.role==='POR') return;
+    const d = distanzaPuntoSegmentoM(p, originXY, destinazioneXY);
+    if(d<distMin){ distMin=d; migliore=p; }
+  });
+  return migliore;
+}
+// UNICA fonte di verità per il possesso: da qui in poi ogni cambio di fasePossessoAttuale passa da
+// qui, che aggiorna nello stesso istante anche campo.ball.owner/possessionTeam (stessa regola di
+// giocatorePortatoreCorrente, non una seconda logica) — sincronizzazione immediata, non demandata al
+// prossimo frame di avanzaPallaLibera (che comunque la ricalcola ad ogni tick fuori da una clip come
+// rete di sicurezza, stessa funzione, nessuna duplicazione). Chiamata da: rivelaMomentoCorrente
+// (nuovo momento), applyChoiceOutcome (esito di una scelta — il vero fix del turnover che non
+// aggiornava il possesso), il ricalcio dopo un gol (segnato o subito), avviaSecondoTempo.
+// giocatoreEsplicito (Fase 3, opzionale): quando il chiamante ha già individuato IL vero giocatore
+// (ricevitore o intercettore geometrico, vedi sopra) invece del generico proxy di reparto — firma
+// estesa con un parametro in coda, ogni chiamata esistente che ne fa a meno resta identica.
+function sincronizzaPossesso(nuovaFase, giocatoreEsplicito){
+  const m = state.matchTemp;
+  if(!m || !nuovaFase) return;
+  // Continuità del possesso (Fase 5, sez.25): contata SOLO a un vero cambio di squadra, non a ogni
+  // chiamata generica (la rete di sicurezza per-frame di avanzaPallaLibera richiama questa funzione
+  // continuamente con la STESSA fase — quel caso comune non deve mai incrementare nulla). Derivato
+  // dalle chiamate reali già esistenti, nessun evento fittizio creato apposta per il contatore.
+  if(m.fasePossessoAttuale && m.fasePossessoAttuale !== nuovaFase){
+    m.turnoverCount = (m.turnoverCount||0)+1;
+    m.possessoDalMinuto = m.minute;
+    m.possessoStreak = 0;
+  } else if(m.possessoDalMinuto===undefined){
+    m.possessoDalMinuto = m.minute; // primissima assegnazione della partita
+  }
+  m.fasePossessoAttuale = nuovaFase;
+  const campo = statoCampoCorrente();
+  if(!campo) return;
+  const portatore = giocatoreEsplicito || giocatorePortatoreCorrente(campo, nuovaFase);
+  campo.ball.owner = portatore ? portatore.id : null;
+  campo.ball.possessionTeam = nuovaFase;
+  // Valvola di sicurezza (Fase 6): qualunque assegnazione REALE di possesso (nuovo momento, gol,
+  // intervallo, o il recupero geometrico di avanzaStatoPallaLibera stessa) chiude la fase FREE, anche
+  // se per qualche motivo nessun candidato l'avesse ancora chiusa da sé — mai una palla libera che
+  // resta "fantasma" dopo che il motore ha già deciso una nuova situazione.
+  if(portatore && campo.ball.libera){ campo.ball.libera = false; campo.ball.liberaDalMinuto = null; campo.ball.candidati = null; }
+}
+// Quanto la palla può allontanarsi dall'ultima posizione autorevole (campo.ball.anchor) mentre è
+// ferma in attesa del prossimo evento/clip: un piccolo avanzamento verso la porta avversaria
+// (costruzione dell'azione) più un respiro deterministico, MAI un inseguimento senza fine — altrimenti
+// durante un'attesa lunga (l'orologio fra un momento e l'altro dura diversi secondi reali) il
+// portatore percorrerebbe da solo tutto il campo, cosa non richiesta e non credibile. Valori scelti
+// da me (non forniti dall'utente): abbastanza per essere visibili, non abbastanza da sostituire un
+// vero avanzamento di gioco (che resta deciso dal motore a ogni nuovo momento/evento).
+const DERIVA_PORTATORE_IDLE_M = 4;
+const VELOCITA_DRIBBLING_MPS = 3.5;
+/* ---------- Palla libera / FREE (Fase 6) ----------
+   Su richiesta esplicita dell'utente: dopo una parata deviata o un contrasto, la palla può restare
+   davvero senza proprietario per un intervallo — ball.owner=null, NESSUN proxy la sostituisce subito
+   (a differenza della rete di sicurezza "controllata" sopra, che invece assegna sempre qualcuno).
+   Riusa lo stato esistente (campo.ball.libera/liberaDalMinuto/candidati, aggiunti a creaStatoCampo) e
+   le stesse primitive geometriche già costruite (distanzaMetriTraPunti, limitiGiocatore,
+   offsetRespiroTattico, sincronizzaPossesso): nessun nuovo motore, nessuna nuova probabilità — chi
+   recupera è deciso da PURA geometria (il candidato più vicino entro un raggio di contatto
+   plausibile), esattamente come richiesto ("la geometria stabilisce chi arriva"); non esiste nel
+   motore attuale un percorso di probabilità "duello autonomo" da riusare per due candidati
+   contemporanei (calcChance* vive solo dentro il flusso di scelta interattiva, mai chiamato in un
+   tick automatico) — quando ce ne sono 2+, vince comunque il più vicino: la stessa regola del caso a
+   1 candidato, generalizzata, non una logica speciale per il caso a 2. */
+// Entro questa distanza reale un giocatore può davvero "toccare" una palla vagante — soglia stretta
+// apposta (scelta da me, non fornita): abbastanza vicino da essere un contatto plausibile, non un
+// inseguimento a distanza che equivarrebbe a un ball magnet travestito.
+const RAGGIO_RECUPERO_PALLA_LIBERA_M = 2;
+// Velocità della palla vagante mentre deriva verso il proprio punto di riposo (rimbalzo/deviazione):
+// più lenta di un tiro o di un passaggio (quelli restano dentro le loro clip), ma non ferma — scelta
+// da me, stesso ordine di grandezza di VELOCITA_DRIBBLING_MPS.
+const VELOCITA_PALLA_LIBERA_MPS = 4;
+// Oltre questa durata senza che nessun candidato l'abbia recuperata, la palla libera è considerata
+// "bloccata" — solo diagnostica (segnalaProblemaPossesso), mai una correzione automatica. Unità: le
+// stesse di m.minute, che qui coincidono 1:1 con i secondi reali (avanzaOrologioContinuo incrementa
+// m.minute di deltaMs/1000 per frame — "1 minuto simulato = 1 secondo reale", indicazione esplicita
+// dell'utente): 10 equivale quindi a 10 secondi reali di attesa, non 10 minuti di partita. Valore
+// scelto da me (non fornito): abbastanza oltre la durata delle clip di parata/rimbalzo (~1,3s) da non
+// scattare su un recupero rapido e legittimo, abbastanza corto da segnalare un vero blocco.
+const SOGLIA_PALLA_LIBERA_BLOCCATA_MIN = 10;
+// Marca la palla come FREE a partire da una posizione reale (dove la deviazione/il contrasto l'ha
+// lasciata): nessun proxy immediato, owner davvero null. Chiamata dal followup 'save' (parata con
+// rimbalzo) e dal ramo di contrasto senza vincitore immediato in applyChoiceOutcome.
+function avviaPallaLibera(originXY, contesto){
+  const campo = statoCampoCorrente();
+  const m = state.matchTemp;
+  if(!campo || !m) return;
+  if(coordinataValida(originXY)) muoviPallaEvento(originXY, contesto||'palla libera');
+  campo.ball.owner = null;
+  campo.ball.possessionTeam = null;
+  campo.ball.libera = true;
+  campo.ball.liberaDalMinuto = m.minute;
+  campo.ball.candidati = null;
+  m.palleLibere = (m.palleLibere||0)+1;
+}
+// Giocatori realmente in grado di raggiungere la palla in questo istante (Fase 6, sez.6/8): non
+// un'assegnazione di possesso, solo l'elenco — ordinato per distanza — di chi è entro un raggio di
+// contatto plausibile. Portieri inclusi (sez.16: se la palla resta a tiro del portiere è corretto che
+// possa controllarla lui). Nessuna funzione equivalente esisteva già: scegliRicevitoreReale/
+// trovaIntercettoreReale restituiscono un solo giocatore di UNA squadra nota in anticipo, qui invece
+// servono TUTTI i candidati reali di ENTRAMBE le squadre, senza sapere a priori chi vincerà.
+function trovaCandidatiRecuperoPalla(campo, raggioM){
+  if(!campo || !coordinataValida(campo.ball)) return [];
+  return campo.players
+    .map(p=>({ player:p, distM: distanzaMetriTraPunti(p, campo.ball) }))
+    .filter(c=>c.distM <= raggioM)
+    .sort((a,b)=>a.distM-b.distM);
+}
+// Un frame di simulazione della palla FREE: deriva (bounded, deterministica) verso il proprio punto
+// di riposo con un piccolo respiro continuo (mai perfettamente ferma, coerente col "deve continuare
+// a muoversi" richiesto), poi verifica se qualcuno è già entro il raggio di contatto. Se sì, la
+// geometria ha deciso: sincronizzaPossesso() chiude la fase FREE nello stesso istante (stessa unica
+// fonte di verità del possesso, nessuna logica duplicata).
+function avanzaStatoPallaLibera(deltaMs){
+  const campo = statoCampoCorrente();
+  const m = state.matchTemp;
+  if(!campo || !m) return;
+  const target = campo.ball.anchor || { x:campo.ball.x, y:campo.ball.y };
+  const respiro = offsetRespiroTattico('palla_libera');
+  const targetConRespiro = limitiGiocatore({
+    x: target.x + (respiro.dxM*0.3)/CAMPO_LUNGHEZZA_M,
+    y: target.y + (respiro.dyM*0.3)/CAMPO_LARGHEZZA_M
+  });
+  const passoM = VELOCITA_PALLA_LIBERA_MPS * (deltaMs/1000);
+  const dxM = (targetConRespiro.x-campo.ball.x) * CAMPO_LUNGHEZZA_M;
+  const dyM = (targetConRespiro.y-campo.ball.y) * CAMPO_LARGHEZZA_M;
+  const distM = Math.hypot(dxM, dyM);
+  if(distM>0){
+    if(distM<=passoM){ campo.ball.x = targetConRespiro.x; campo.ball.y = targetConRespiro.y; }
+    else { const k=passoM/distM; campo.ball.x += (dxM*k)/CAMPO_LUNGHEZZA_M; campo.ball.y += (dyM*k)/CAMPO_LARGHEZZA_M; }
+  }
+  const candidati = trovaCandidatiRecuperoPalla(campo, RAGGIO_RECUPERO_PALLA_LIBERA_M);
+  campo.ball.candidati = candidati.length ? candidati.map(c=>c.player.id) : null;
+  if(candidati.length){
+    const vincitore = candidati[0].player; // il più vicino: geometria, non un secondo sistema di probabilità
+    m.duelliPalla = (m.duelliPalla||0) + (candidati.length>=2 ? 1 : 0);
+    m.palleLibereDurataTotaleMin = (m.palleLibereDurataTotaleMin||0) + (m.minute - (campo.ball.liberaDalMinuto!=null?campo.ball.liberaDalMinuto:m.minute));
+    // Fase 7, sez.26: unica "azione" che il motore genera oggi in totale autonomia, senza alcun
+    // click — separata esplicitamente da m.recuperi (Fase 4, sempre conseguenza di una scelta
+    // dell'utente, out:'recupero' riuscito) per poter distinguere onestamente motore da scelta.
+    m.recuperiAutomatici = (m.recuperiAutomatici||0)+1;
+    sincronizzaPossesso(vincitore.team, vincitore); // chiude libera=false (valvola di sicurezza già in sincronizzaPossesso)
+  } else if(campo.ball.liberaDalMinuto!=null && (m.minute-campo.ball.liberaDalMinuto) > SOGLIA_PALLA_LIBERA_BLOCCATA_MIN){
+    segnalaProblemaPossesso('palla libera bloccata da oltre '+SOGLIA_PALLA_LIBERA_BLOCCATA_MIN+'s reali senza recupero');
+  }
+}
+// Fa vivere la palla FUORI dalle clip: prima restava congelata sull'ultima posizione fra un evento e
+// l'altro (unico vero "vuoto visivo" della simulazione, vedi audit) mentre i 13 giocatori di
+// formazione già respiravano via offsetRespiroTattico. Qui si applica lo stesso principio alla palla,
+// agganciata a chi la porta (giocatorePortatoreCorrente) invece che a un punto fisso: la palla si
+// muove verso un punto vicino all'ancora (avanzamento limitato + respiro), mai verso la palla stessa
+// (nessun ciclo che si autoalimenta, nessuna corsa senza fine). Durante una clip questa funzione non
+// fa nulla (stessa guardia di sincronizzaPallaCampo, mai in contemporanea).
+function avanzaPallaLibera(deltaMs){
+  const campo = statoCampoCorrente();
+  if(!campo) return;
+  if(matchAnimMgr && matchAnimMgr.current) return;
+  // Fase 6: mentre la palla è davvero FREE, questa funzione non deve MAI chiamare la rete di
+  // sicurezza sotto (che assegnerebbe subito un proxy, esattamente ciò che la Fase 6 vieta) — la
+  // deriva/il recupero della palla libera vivono in avanzaStatoPallaLibera, unico punto che può
+  // chiudere la fase FREE (via sincronizzaPossesso, quando un candidato reale è a contatto).
+  if(campo.ball.libera){ avanzaStatoPallaLibera(deltaMs); return; }
+  const m = state.matchTemp;
+  const fase = (m && m.fasePossessoAttuale) || 'home';
+  // Rete di sicurezza ad ogni frame fuori da una clip: stessa sincronizzaPossesso() usata alle
+  // transizioni vere (nuovo momento, esito di una scelta, gol), nessuna logica duplicata — qui serve
+  // solo a tenere owner allineato al giocatore che fisicamente si muove sotto la palla.
+  sincronizzaPossesso(fase);
+  const anchor = campo.ball.anchor || { x: campo.ball.x, y: campo.ball.y };
+  const obiettivoPorta = { x: fase==='home' ? 1 : 0, y: 0.5 };
+  const distAnchorPortaM = distanzaMetriTraPunti(anchor, obiettivoPorta);
+  const frazione = distAnchorPortaM>0 ? Math.min(0.5, DERIVA_PORTATORE_IDLE_M/distAnchorPortaM) : 0;
+  const puntoBase = pullVerso(anchor, obiettivoPorta, frazione);
+  const respiro = offsetRespiroTattico('ball_libera');
+  const target = limitiGiocatore({
+    x: puntoBase.x + respiro.dxM/CAMPO_LUNGHEZZA_M,
+    y: puntoBase.y + respiro.dyM/CAMPO_LARGHEZZA_M
+  });
+  const passoM = VELOCITA_DRIBBLING_MPS * (deltaMs/1000);
+  const dxM = (target.x-campo.ball.x) * CAMPO_LUNGHEZZA_M;
+  const dyM = (target.y-campo.ball.y) * CAMPO_LARGHEZZA_M;
+  const distM = Math.hypot(dxM, dyM);
+  if(!(distM>0)) return;
+  if(distM<=passoM){ campo.ball.x = target.x; campo.ball.y = target.y; return; }
+  const k = passoM/distM;
+  campo.ball.x += (dxM*k)/CAMPO_LUNGHEZZA_M;
+  campo.ball.y += (dyM*k)/CAMPO_LARGHEZZA_M;
+}
+// Controllo diagnostico di coerenza del possesso (Fase 4, sez.6/22): owner/possessionTeam/
+// fasePossessoAttuale devono essere coerenti nello STESSO tick in cui cambiano, non un frame dopo —
+// per questo è qui, all'interno del frame di simulazione, non in un controllo periodico separato.
+// Non corregge nulla (mai una correzione silenziosa): solo un warning, un colpo solo per tipo di
+// problema, così un'eventuale futura regressione (un punto del motore che torna a scrivere owner
+// senza passare da sincronizzaPossesso) si vede subito in console invece di restare invisibile.
+function verificaCoerenzaPossesso(){
+  const campo = statoCampoCorrente();
+  const m = state.matchTemp;
+  if(!campo || !m || !campo.ball.owner) return;
+  const owner = campo.players.find(p=>p.id===campo.ball.owner);
+  if(!owner){ segnalaProblemaPossesso('ball.owner ('+campo.ball.owner+') non esiste in campo.players'); return; }
+  if(owner.team !== campo.ball.possessionTeam) segnalaProblemaPossesso('owner.team ('+owner.team+') diverso da ball.possessionTeam ('+campo.ball.possessionTeam+')');
+  if(owner.team !== m.fasePossessoAttuale) segnalaProblemaPossesso('owner.team ('+owner.team+') diverso da fasePossessoAttuale ('+m.fasePossessoAttuale+')');
+}
+// Controllo diagnostico sul campo (Fase 5, sez.22): coordinate valide e limiti ammessi per tutti e
+// 14 i giocatori — strutturalmente già garantiti da limitiGiocatore() dentro avanzaGiocatoriCampo
+// (ogni target passa da lì), quindi in condizioni normali questo non troverà mai nulla: è una difesa
+// in profondità contro un'eventuale futura regressione (un punto che scrive p.x/p.y bypassando
+// limitiGiocatore), non una correzione — stesso principio "solo un warning" del resto della
+// diagnostica. Il portiere ha un controllo più stretto: deve restare vicino alla propria linea di
+// porta (bounded da decidiPosizionePortiere, qui solo verificato, non imposto).
+function verificaCoerenzaCampo(){
+  const campo = statoCampoCorrente();
+  if(!campo) return;
+  campo.players.forEach(p=>{
+    if(!coordinataValida(p)){ segnalaProblemaPossesso('giocatore '+p.id+' coordinate non valide'); return; }
+    if(p.x < 1-LIMITE_GIOCATORE_X-0.001 || p.x > LIMITE_GIOCATORE_X+0.001 || p.y < MARGINE_CAMPO_NORM-0.001 || p.y > 1-MARGINE_CAMPO_NORM+0.001){
+      segnalaProblemaPossesso('giocatore '+p.id+' fuori dai limiti di campo ammessi (x='+p.x.toFixed(3)+', y='+p.y.toFixed(3)+')');
+    }
+    if(p.role==='POR'){
+      const baseX = p.team==='home' ? PROFONDITA_REPARTO_TATTICO.POR : 1-PROFONDITA_REPARTO_TATTICO.POR;
+      if(Math.abs(p.x-baseX) > PORTIERE_USCITA_MAX_NORM+0.01) segnalaProblemaPossesso('portiere '+p.id+' fuori dalla propria area (x='+p.x.toFixed(3)+')');
+    }
+  });
+}
+// Quante choice-card sono davvero cliccabili in questo istante (Fase 7, sez.27): stesso pattern
+// __botClickRandomChild già usato dal bot — un elemento reale con onclick assegnato via JS, non una
+// stringa innerHTML. Serve solo a MISURARE se la simulazione continua anche quando l'utente ha una
+// scelta aperta davanti, mai a deciderlo: usato esclusivamente dall'accumulatore sotto.
+function contaSceltePendenti(){
+  const box = typeof document!=='undefined' && document.getElementById('matchAction');
+  if(!box) return 0;
+  return [...box.children].filter(c=>typeof c.onclick==='function').length;
+}
 /* Un frame di simulazione del campo: aggiorna lo STATO, non disegna nulla. Separato dal rendering
    di proposito — il render diventa una pura lettura dello stato (requisito centrale dell'audit) e
    questa funzione resta invocabile anche senza canvas (test headless a passi fissi). */
 function avanzaStatoCampo(deltaMs){
   if(!statoCampoCorrente()) return;
   tempoCampoMs += deltaMs;
+  avanzaOrologioContinuo(deltaMs); // minutaggio partita: continuo, non dipende da eventi/click
   sincronizzaTargetCampo();   // heatmap + matrice + MovementDecisionEngine → targetX/targetY
   avanzaGiocatoriCampo(deltaMs); // current → target, velocità limitata: nessun teletrasporto
   sincronizzaPallaCampo();    // durante una clip persiste la posizione interpolata della palla
+  avanzaPallaLibera(deltaMs); // fuori da una clip, la palla continua a vivere vicino a chi la porta
+  verificaCoerenzaPossesso(); // diagnostica: mai una correzione, solo un warning se qualcosa diverge
+  verificaCoerenzaCampo();    // idem, per coordinate/limiti dei 14 giocatori e area dei portieri
+  // Fase 7, sez.27: misura DAVVERO se questo frame di simulazione dipende da un momento narrativo,
+  // invece di assumerlo. msSimulazioneConSceltaPendente è il tempo simulato durante cui l'utente
+  // aveva una scelta aperta davanti E la simulazione ha comunque eseguito questo stesso frame — la
+  // prova, non l'ipotesi, che la simulazione non si ferma per un momento (msSimulazioneConSceltaPendente
+  // può quindi essere anche >0 senza che sia un problema: è tempo simulato che continua NONOSTANTE
+  // un momento aperto, non tempo "controllato" dal momento).
+  if(state.matchTemp){
+    state.matchTemp.msSimulazioneTotali = (state.matchTemp.msSimulazioneTotali||0) + deltaMs;
+    if(contaSceltePendenti()>0) state.matchTemp.msSimulazioneConSceltaPendente = (state.matchTemp.msSimulazioneConSceltaPendente||0) + deltaMs;
+  }
 }
 function renderMatchCanvas(){
   const canvas = document.getElementById('matchCanvas');
@@ -5071,6 +5703,13 @@ function avviaCanvasPartita(){
   tempoCampoMs = 0;
   ultimoDeltaMsCampo = 16;
   campoDiagnosticaEmessa = {};
+  // Primo disegno SINCRONO, non delegato al primo requestAnimationFrame: su alcuni browser il primo
+  // paint di un canvas appena reso visibile (screen-match passa da nascosto ad attivo nello stesso
+  // istante) può restare un frame indietro rispetto al toggle di visibilità, dando l'impressione che
+  // il pallone "non ci sia" finché non arriva il primo evento a forzare un nuovo giro di disegno.
+  // Disegnando qui, prima ancora di programmare il loop rAF, il canvas ha già i pixel giusti nel
+  // suo backing store nell'istante stesso in cui lo schermo diventa visibile.
+  renderMatchCanvas();
   if(matchCanvasRafId) cancelAnimationFrame(matchCanvasRafId);
   let ultimoTs = null;
   function frame(ts){
@@ -5080,7 +5719,14 @@ function avviaCanvasPartita(){
         // secondi e un singolo passo enorme farebbe attraversare il campo di colpo a tutti.
         const deltaMs = Math.min(ts-ultimoTs, 100);
         matchAnimMgr.tick(deltaMs);   // avanza le clip (buffer entities)
-        avanzaStatoCampo(deltaMs);    // travasa nello stato persistente + muove i giocatori
+        avanzaStatoCampo(deltaMs);    // travasa nello stato persistente + muove i giocatori (e l'orologio continuo)
+        // L'orologio continuo (avanzaOrologioContinuo, dentro avanzaStatoCampo) può ora chiamare
+        // finishMatch() SINCRONAMENTE da qui dentro (raggiunto il 50'), che a sua volta chiama
+        // fermaCanvasPartita(): cancelAnimationFrame su un callback già in esecuzione non ha effetto,
+        // quindi senza questo controllo il loop si sarebbe comunque riprogrammato un'ultima volta
+        // (innocuo — la schermata cambia e il controllo sopra lo fermerebbe comunque al frame dopo —
+        // ma evitabile: se matchAnimMgr è appena stato azzerato, ci fermiamo qui, subito).
+        if(!matchAnimMgr) return;
         ultimoDeltaMsCampo = deltaMs;
       }
       ultimoTs = ts;
@@ -5098,23 +5744,143 @@ function fermaCanvasPartita(){
    Nessuna UI, nessuna dipendenza, nessun costo a runtime: una sola funzione di lettura che
    fotografa lo stato corrente. Non è necessaria all'esecuzione normale — nessun'altra funzione la
    chiama. Si invoca dalla console del browser: matchViewerDebug(). */
+// Metriche posizionali derivate (Fase 5, sez.23/24): pure funzioni di sola lettura sullo stato del
+// campo, MAI usate per decidere il movimento (richiesto esplicitamente: "diagnostica, non deve
+// modificare il comportamento") — calcolate on-demand quando richieste da matchViewerDebug(), non
+// mantenute ad ogni frame (nessun costo per i frame in cui nessuno le legge). Servono a verificare
+// l'assenza di "ball magnet" (distanza media/conteggio entro soglia) e la tenuta della struttura di
+// squadra (larghezza/profondità/baricentro), non a correggerla.
+function calcolaMetrichePosizionali(campo){
+  if(!campo || !coordinataValida(campo.ball)) return null;
+  const movimento = campo.players.filter(p=>p.role!=='POR');
+  const distanze = movimento.map(p=>distanzaMetriTraPunti(p, campo.ball));
+  const distanzaMedia = distanze.reduce((a,b)=>a+b,0) / (distanze.length||1);
+  const struttura = {};
+  ['home','away'].forEach(team=>{
+    const giocatori = movimento.filter(p=>p.team===team);
+    if(!giocatori.length){ struttura[team] = null; return; }
+    const xs = giocatori.map(p=>p.x), ys = giocatori.map(p=>p.y);
+    struttura[team] = {
+      larghezzaM: +((Math.max(...ys)-Math.min(...ys))*CAMPO_LARGHEZZA_M).toFixed(1),
+      profonditaM: +((Math.max(...xs)-Math.min(...xs))*CAMPO_LUNGHEZZA_M).toFixed(1),
+      baricentro: { x:+(xs.reduce((a,b)=>a+b,0)/xs.length).toFixed(3), y:+(ys.reduce((a,b)=>a+b,0)/ys.length).toFixed(3) }
+    };
+  });
+  return {
+    distanzaMediaGiocatoriPallaM: +distanzaMedia.toFixed(2),
+    numeroGiocatoriEntro5m: distanze.filter(d=>d<=5).length,
+    numeroGiocatoriEntro10m: distanze.filter(d=>d<=10).length,
+    struttura
+  };
+}
+// Diagnostica dell'azione corrente (Fase 7, sez.25): "BALL / OWNER / PHASE / ACTION / TARGET" della
+// richiesta — PURAMENTE osservativa (nessuna correzione, nessuna decisione): legge solo stato già
+// scritto altrove (ball.owner/libera/candidati, la clip in corso in matchAnimMgr). Nessuna nuova
+// logica di gioco, solo una lettura formattata per essere ispezionata a colpo d'occhio.
+function azioneCorrenteDebug(campo, mgr){
+  if(!campo) return null;
+  const owner = campo.ball.owner ? campo.players.find(p=>p.id===campo.ball.owner) : null;
+  const cur = mgr && mgr.current ? mgr.current.evt : null;
+  const MAPPA_AZIONE = { pass_short:'PASS', pass_long:'PASS', shot:'SHOOT', tackle:'TACKLE', save:'SAVE', possession:'HOLD', turnover:'TURNOVER', whistle:'WHISTLE', card:'CARD', foul:'FOUL' };
+  let action = 'IDLE', target = null;
+  if(cur){
+    action = MAPPA_AZIONE[cur.type] || String(cur.type||'?').toUpperCase();
+    if(cur.target) target = cur.target.name+' ('+String(cur.target.team||'?').toUpperCase()+')';
+  } else if(campo.ball.libera){
+    action = 'RECOVERY';
+    const primoCandidato = campo.ball.candidati && campo.ball.candidati.length ? campo.players.find(p=>p.id===campo.ball.candidati[0]) : null;
+    if(primoCandidato) target = primoCandidato.id+' ('+primoCandidato.team.toUpperCase()+')';
+  } else if(owner){
+    action = 'CARRY';
+  }
+  return {
+    ball: { xM:+(campo.ball.x*CAMPO_LUNGHEZZA_M).toFixed(1), yM:+(campo.ball.y*CAMPO_LARGHEZZA_M).toFixed(1) },
+    owner: owner ? owner.id+' ('+owner.team.toUpperCase()+')' : 'NONE',
+    phase: campo.ball.libera ? 'FREE' : 'ATTACK',
+    action, target
+  };
+}
 function matchViewerDebug(){
   const campo = statoCampoCorrente();
   const mgr = matchAnimMgr;
   if(!campo) return { attivo:false, motivo:'nessuna partita in corso (state.matchTemp.campo assente)' };
   return {
     attivo: true,
-    ball: { x:+campo.ball.x.toFixed(4), y:+campo.ball.y.toFixed(4), visible:campo.ball.visible, moving:campo.ball.moving },
+    // stato (Fase 6, sez.22): "BALL OWNER: NONE / BALL STATE: FREE / CANDIDATES: A,B" della richiesta
+    // — libera/candidati riflettono direttamente campo.ball.libera/candidati, nessun calcolo qui.
+    ball: { x:+campo.ball.x.toFixed(4), y:+campo.ball.y.toFixed(4), visible:campo.ball.visible, moving:campo.ball.moving,
+      owner:campo.ball.owner||null, possessionTeam:campo.ball.possessionTeam||null,
+      stato: campo.ball.libera ? 'FREE' : 'CONTROLLED', candidati: campo.ball.candidati||null,
+      anchor: campo.ball.anchor ? {x:+campo.ball.anchor.x.toFixed(4), y:+campo.ball.anchor.y.toFixed(4)} : null },
+    matchMinute: state.matchTemp ? state.matchTemp.minute : null,
+    fasePossessoAttuale: state.matchTemp ? (state.matchTemp.fasePossessoAttuale||null) : null,
     players: campo.players.map(p=>({
       id:p.id, team:p.team, role:p.role, self:!!p.self, intent:p.intent||null,
       x:+p.x.toFixed(4), y:+p.y.toFixed(4), targetX:+p.targetX.toFixed(4), targetY:+p.targetY.toFixed(4),
       distanzaDalTargetM: +Math.hypot((p.targetX-p.x)*CAMPO_LUNGHEZZA_M, (p.targetY-p.y)*CAMPO_LARGHEZZA_M).toFixed(2),
       visible:p.visible
     })),
-    currentEvent: mgr && mgr.current ? { type:mgr.current.evt.type, outcome:mgr.current.evt.outcome||null, clip:(mgr.current.evt.animation||{}).clip||null } : null,
+    // target (Fase 4, sez.21): "PASS TARGET"/"INTERCEPTOR" della richiesta — il debug resta lo stato
+    // interno interrogabile via console (stesso approccio già usato in Fase 2/3), non un overlay a
+    // schermo (mai esistito, non introdotto ora).
+    currentEvent: mgr && mgr.current ? { type:mgr.current.evt.type, outcome:mgr.current.evt.outcome||null, clip:(mgr.current.evt.animation||{}).clip||null, target:mgr.current.evt.target||null } : null,
     animationQueue: mgr ? mgr.queue.length : 0,
     tempoCampoMs: Math.round(tempoCampoMs),
-    diagnosticheEmesse: Object.keys(campoDiagnosticaEmessa)
+    diagnosticheEmesse: Object.keys(campoDiagnosticaEmessa),
+    // Fase 7, sez.25: BALL/OWNER/PHASE/ACTION/TARGET — vedi azioneCorrenteDebug.
+    azioneCorrente: azioneCorrenteDebug(campo, mgr),
+    // Fase 7, sez.26/27: separazione esplicita fra azione generata dal motore SENZA click
+    // (recuperiAutomatici, l'unica che esiste oggi — vedi avanzaStatoPallaLibera) e azione derivata
+    // da una scelta dell'utente (recuperi, passCompletati, ecc., già esposti sopra). passaggiAutomatici/
+    // conduzioniAutomatiche/tiriAutomatici restano dichiaratamente 0: nessun percorso del motore
+    // genera oggi un passaggio/una conduzione/un tiro senza un click dell'utente che lo inneschi —
+    // vedi "Dipendenza da MOMENTS" nell'output finale della Fase 7. Esposti comunque (non nascosti)
+    // perché la loro assenza è essa stessa il dato richiesto, non un'omissione.
+    azioniAutomatiche: state.matchTemp ? {
+      recuperiAutomatici: state.matchTemp.recuperiAutomatici||0,
+      passaggiAutomatici: 0, conduzioniAutomatiche: 0, tiriAutomatici: 0,
+      palleFREE: state.matchTemp.palleLibere||0,
+      durataFREETotaleMin: +(state.matchTemp.palleLibereDurataTotaleMin||0).toFixed(3)
+    } : null,
+    // Fase 7, sez.27: msSimulazioneConSceltaPendente è tempo simulato che continua NONOSTANTE un
+    // momento aperto (non "controllato" da esso) — la percentuale misura quanto spesso l'utente ha
+    // una scelta davanti mentre il campo comunque avanza, prova diretta che l'avanzamento non dipende
+    // dalla presenza/assenza di un momento (msSimulazioneTotali cresce ad ogni frame a prescindere).
+    dipendenzaDaMoments: state.matchTemp ? {
+      msSimulazioneTotali: state.matchTemp.msSimulazioneTotali||0,
+      msSimulazioneConSceltaPendente: state.matchTemp.msSimulazioneConSceltaPendente||0,
+      percentualeConSceltaPendenteMaSimulazioneAttiva: state.matchTemp.msSimulazioneTotali ?
+        +((100*(state.matchTemp.msSimulazioneConSceltaPendente||0)/state.matchTemp.msSimulazioneTotali)).toFixed(1) : 0
+    } : null,
+    // Metriche derivate dalle azioni reali (Fase 3 sez.26 + Fase 4 sez.20 + Fase 6 sez.30):
+    // incrementate solo nei punti in cui il relativo emitMatchEvent/avviaPallaLibera viene davvero
+    // eseguito, mai eventi fittizi creati apposta per il contatore. 'parate' (outcome:'saved') era
+    // dichiarato non derivabile in Fase 3/5 perché il modello non distingueva un tiro parato da un
+    // tiro fuori bersaglio — la Fase 6 introduce davvero quella distinzione (emettiTiroParato), quindi
+    // ora è un dato reale, non più un limite dichiarato.
+    metriche: state.matchTemp ? { passTentati: state.matchTemp.passTentati||0, passCompletati: state.matchTemp.passCompletati||0,
+      passIntercettati: state.matchTemp.passIntercettati||0, recuperi: state.matchTemp.recuperi||0,
+      tiriTotali: state.matchTemp.tiriTotali||0, tiriInPorta: state.matchTemp.tiriInPorta||0,
+      parate: state.matchTemp.deviazioni||0 } : null,
+    // Fase 6, sez.30: palla libera — conteggio, durata media (minuti simulati) e duelli (2+ candidati
+    // presenti nello stesso istante di recupero), tutti derivati da avanzaStatoPallaLibera/
+    // avviaPallaLibera, mai statistiche inventate.
+    palleLibere: state.matchTemp ? {
+      conteggio: state.matchTemp.palleLibere||0,
+      durataMediaMin: state.matchTemp.palleLibere ? +((state.matchTemp.palleLibereDurataTotaleMin||0)/state.matchTemp.palleLibere).toFixed(3) : 0,
+      duelli: state.matchTemp.duelliPalla||0
+    } : null,
+    // Fase 5, sez.23/24: diagnostica anti-ball-magnet e struttura di squadra, pura lettura (vedi
+    // calcolaMetrichePosizionali).
+    metrichePosizionali: calcolaMetrichePosizionali(campo),
+    // Fase 5, sez.25: continuità del possesso derivata dalle chiamate reali a sincronizzaPossesso
+    // (turnoverCount/possessoDalMinuto) e dai passaggi realmente completati (possessoStreak,
+    // azzerato a ogni cambio di squadra) — nessuna statistica artificiale.
+    continuitaPossesso: state.matchTemp ? {
+      turnoverCount: state.matchTemp.turnoverCount||0,
+      possessoStreak: state.matchTemp.possessoStreak||0,
+      durataPossessoAttualeMin: state.matchTemp.possessoDalMinuto!==undefined ? +(state.matchTemp.minute-state.matchTemp.possessoDalMinuto).toFixed(2) : null
+    } : null
   };
 }
 const MOMENTS = [
@@ -5820,114 +6586,190 @@ function showMatchEvent(ev, cb){
   });
 }
 
-/* ---------- Orologio live della partita ----------
-   Su richiesta esplicita dell'utente: i 50 minuti di gioco devono scorrere dal vivo (un minuto di
-   gioco = un secondo reale) mentre si guarda "Gioca partita", e il tempo passato sulle scelte
-   (choice-card, eventi ◆, il bottone "Continua") non deve contare. Puro layer di presentazione:
-   m.minute viene comunque impostato subito al valore finale calcolato da nextMoment/finishMatch
-   come già accadeva — qui si anima solo il TESTO del minutaggio verso quel valore, e si rivelano
-   narrazione/scelte solo a animazione conclusa (il tempo scorre fra un momento e l'altro, non
-   mentre si aspetta un click, che è esattamente il comportamento richiesto).
-   Guardia identica a quella già usata per il canvas (avviaCanvasPartita): in Node (bot)
-   requestAnimationFrame non esiste, quindi l'animazione è saltata e tutto resta sincrono e
-   identico a prima — nessun rischio per test-bot.js, nessuna nuova dipendenza. */
-function animaOrologioPartita(daMinuto, aMinuto, onDone){
-  const el = document.getElementById('matchMinute');
-  if(typeof requestAnimationFrame !== 'function' || !el || aMinuto<=daMinuto){
-    if(el) el.textContent = aMinuto+"'";
-    onDone();
-    return;
-  }
-  const durataMs = (aMinuto-daMinuto) * 1000; // 1 minuto di gioco = 1 secondo reale, richiesto
-  const inizio = performance.now();
-  function frame(ts){
-    const t = clamp((ts-inizio)/durataMs, 0, 1);
-    el.textContent = Math.round(daMinuto + (aMinuto-daMinuto)*t) + "'";
-    if(t < 1) requestAnimationFrame(frame); else onDone();
-  }
-  requestAnimationFrame(frame);
-}
-// Guardia di rientranza per l'orologio live: bug segnalato dall'utente ("cliccato continua per
-// entrare in campo, il gioco si bugga e il tempo va avanti ad ogni click"). Causa: il bottone
-// "Continua ▸" (onclick="nextMoment()", sia quello di nextMoment stesso sia quello di
-// showMatchEvent) resta nel DOM e cliccabile per TUTTA la durata dell'animazione live del minutaggio
-// (fino a diversi secondi, vedi animaOrologioPartita) perché matchAction viene ripulito solo nella
-// callback finale — un secondo click durante quella finestra richiamava un SECONDO nextMoment() in
-// parallelo, sommando un secondo incremento di minuto e avviando un secondo tween concorrente sullo
-// stesso elemento DOM (da cui il minutaggio impazzito). Con questa guardia, mentre un tween è già in
-// corso ogni nuova chiamata a nextMoment() viene semplicemente ignorata: nessun secondo incremento,
-// nessun secondo tween.
-let orologioPartitaAttivo = false;
+/* ---------- Orologio continuo della partita (cambio di architettura 2026-08-10) ----------
+   Su richiesta esplicita dell'utente: il tempo di gioco NON deve più dipendere da quando il
+   giocatore clicca. Prima m.minute saltava di colpo dentro nextMoment() (chiamata solo al click di
+   "Continua"), con un tween puramente cosmetico del testo che BLOCCAVA la rivelazione del momento
+   successivo per tutta la sua durata: il tempo, di fatto, avanzava solo in risposta a un click.
+   Ora m.minute avanza da solo, un frame alla volta, tramite avanzaOrologioContinuo() (chiamata da
+   avanzaStatoCampo, quindi SEMPRE mentre si è sulla schermata partita: durante la lettura di una
+   scelta, durante l'esultanza, durante l'attesa) — esattamente come già succede per il campo/la
+   palla/i giocatori. Gli eventi/momenti non sono più "il clock": sono soglie che l'orologio
+   continuo può superare da solo, anche mentre il giocatore sta ancora leggendo il momento
+   precedente. nextMoment() (stesso nome, stessi 4 punti di chiamata, per non toccare gli altri
+   riferimenti) non salta più il minutaggio: dichiara solo "sono pronto per il prossimo momento" —
+   se l'orologio ha già superato la soglia (probabile: scorreva anche mentre leggevi) rivela subito,
+   altrimenti resta in attesa e ci pensa provaRivelaMomento() al frame in cui la soglia viene
+   raggiunta. Stesso ritmo di prima, 1 minuto simulato = 1 secondo reale.
+   Headless/bot (Node, nessun requestAnimationFrame quindi nessun ticker continuo): nextMoment()
+   forza subito m.minute alla soglia e rivela in modo sincrono, ESATTAMENTE come il comportamento
+   precedente — zero rischio per test-bot.js, che chiama nextMoment() direttamente. */
+// Guardia di rientranza (stesso ruolo del vecchio orologioPartitaAttivo, ora sul flag di stato
+// invece che su una variabile di modulo a parte): mentre siamo già "in attesa" del prossimo
+// momento, un click ripetuto su un bottone rimasto nel DOM viene ignorato, nessun doppio avanzamento.
 function nextMoment(){
-  if(orologioPartitaAttivo) return;
+  const m = state.matchTemp;
+  if(!m || m.attesaProssimoMomento) return;
+  document.getElementById('matchAction').innerHTML = '';
+  if(m.prossimoMomentoMinuto===undefined || m.prossimoMomentoMinuto===null){
+    m.prossimoMomentoMinuto = Math.min(50, m.minute + rand(9,13));
+  }
+  m.attesaProssimoMomento = true;
+  provaRivelaMomento();
+}
+// Chiamata ad ogni frame da avanzaStatoCampo (quindi mai in headless: stessa guardia già usata da
+// tutto il resto del ciclo di rendering), subito da nextMoment() quando il giocatore conferma di
+// essere pronto, e da rivelaMomentoCorrente() stessa quando i momenti sono esauriti ma resta tempo
+// prima del prossimo cancello duro. Se l'orologio ha già raggiunto/superato la soglia del prossimo
+// momento agisce, altrimenti non fa nulla (resta "in attesa", il campo intanto continua a vivere) —
+// TRANNE in headless (bot/Node): lì non esiste alcun ticker continuo (avanzaOrologioContinuo gira
+// solo dentro il loop rAF, mai istanziato in Node) che possa mai far scattare questa funzione una
+// seconda volta, quindi in quel caso si forza subito il minuto alla soglia e si procede — stesso
+// comportamento sincrono e immediato di sempre per il bot, zero attese fittizie possibili.
+// I due cancelli duri (intervallo al 25', fine gara al 50') hanno SEMPRE priorità su un momento in
+// attesa, anche se il suo target personale non è ancora stato raggiunto — altrimenti un'attesa lunga
+// potrebbe non far scattare mai l'intervallo (avanzaOrologioContinuo comunque non lascia mai superare
+// questi due cancelli in tempo reale).
+function provaRivelaMomento(){
+  const m = state.matchTemp;
+  if(!m || !m.attesaProssimoMomento) return;
+  // !inIntervallo nella guardia: senza, questo controllo si ripeterebbe (nessun effetto pratico dato
+  // che avviaIntervallo() è idempotente, ma concettualmente sporco) finché avviaSecondoTempo() non
+  // porta primoTempoFinito a true — il vero cancello contro il doppio innesco è m.attesaProssimoMomento
+  // già a false dopo la prima chiamata.
+  if(!m.primoTempoFinito && !m.inIntervallo && m.minute>=25){ m.attesaProssimoMomento = false; avviaIntervallo(); return; }
+  if(m.minute>=50){ m.attesaProssimoMomento = false; finishMatch(); return; }
+  if(m.minute < m.prossimoMomentoMinuto){
+    if(typeof requestAnimationFrame === 'function') return; // aspetta il prossimo frame reale
+    m.minute = m.prossimoMomentoMinuto; // headless: nessun ticker, avanza subito
+  }
+  m.attesaProssimoMomento = false;
+  rivelaMomentoCorrente();
+}
+// Avanza m.minute in modo continuo, un frame alla volta — indipendente da eventi/click, come
+// richiesto. Non supera mai la prossima "soglia dura" (25'/intervallo se il primo tempo non è
+// ancora finito, altrimenti 50'/fine gara): oltre quella soglia il tempo deve fermarsi DAVVERO
+// (unica eccezione esplicitamente richiesta al "mai statico"), non prima che provaRivelaMomento()
+// l'abbia gestita.
+function avanzaOrologioContinuo(deltaMs){
+  const m = state.matchTemp;
+  // m.inIntervallo: l'UNICA vera pausa della simulazione continua, esplicitamente richiesta — senza
+  // questo controllo il minuto avrebbe continuato a scorrere anche mentre il bottone "Inizia il
+  // secondo tempo" era ancora sullo schermo (bug osservato: minutaggio già a 31' quando il secondo
+  // tempo veniva effettivamente avviato, invece di restare fermo esattamente a 25').
+  if(!m || m.finita || m.inIntervallo) return;
+  const sogliaDura = m.primoTempoFinito ? 50 : 25;
+  if(m.minute >= sogliaDura){ provaRivelaMomento(); return; }
+  m.minute = Math.min(sogliaDura, m.minute + deltaMs/1000);
+  const el = document.getElementById('matchMinute');
+  if(el) el.textContent = Math.floor(m.minute) + "'";
+  provaRivelaMomento();
+}
+// Corpo del "rivela il prossimo momento": stessa identica logica di prima (zona → chance → scelte),
+// solo scorporata dal tween cosmetico che la incapsulava. Se i momenti sono esauriti, il campo resta
+// vivo (avanzaPallaLibera + respiro dei giocatori non dipendono da questo) e il tempo continua da
+// solo verso il prossimo cancello duro, senza fissare un altro target di momento.
+function rivelaMomentoCorrente(){
   const m = state.matchTemp;
   // Chi subentra dalla panchina (beginMatchAsSub) porta un pool di momenti ridotto in
   // m.momentiOutfieldRidotti: stesso motore, solo meno occasioni perché entra a partita in corso.
   const momentiAttivi = state.role==='Portiere' ? m.gkMomenti : (m.momentiOutfieldRidotti || MOMENTS);
   if(m.momentumIdx >= momentiAttivi.length){
-    // Anche l'ultimo tratto fino al triplice fischio scorre dal vivo, prima di eseguire davvero
-    // finishMatch() (che imposta comunque m.minute=50 di suo, in modo idempotente).
-    orologioPartitaAttivo = true;
-    return animaOrologioPartita(m.minute, 50, ()=>{ orologioPartitaAttivo = false; finishMatch(); });
+    m.attesaProssimoMomento = true;
+    m.prossimoMomentoMinuto = m.primoTempoFinito ? 50 : 25;
+    // In tempo reale il campo resta vivo e ci pensa il ticker (avanzaOrologioContinuo) a richiamare
+    // provaRivelaMomento() quando l'orologio raggiunge il target. In headless non esiste alcun
+    // ticker: senza questa chiamata il gioco resterebbe "in attesa" per sempre (nessuna scelta da
+    // cliccare, nessun evento futuro che lo risvegli) — bug osservato nel bot dopo l'introduzione
+    // dell'orologio continuo, quando i momenti finiscono prima del cancello duro (es. un subentro
+    // dalla panchina con solo 2 momenti). provaRivelaMomento() stessa sa forzare il minuto in
+    // headless, quindi questa chiamata converge subito a intervallo/fine gara senza altro codice.
+    if(typeof requestAnimationFrame !== 'function') provaRivelaMomento();
+    return;
   }
-  const minutoPrecedente = m.minute;
-  // Clamp a 50': i pool di momenti (MOMENTS/gkMomenti, fino a 8 voci) possono superare abbondantemente
-  // i 50' se sommati senza limite (es. 8 x 13' = 104') — bug segnalato dall'utente ("il tempo va avanti
-  // ad oltranza, non si ferma a 50'"). Il minutaggio VISUALIZZATO non deve mai superare 50', qualunque
-  // sia il numero di momenti ancora da giocare.
-  m.minute = Math.min(50, m.minute + rand(9,13));
-  const nuovoMinuto = m.minute;
   const moment = momentiAttivi[m.momentumIdx];
-  orologioPartitaAttivo = true;
-  animaOrologioPartita(minutoPrecedente, nuovoMinuto, ()=>{
-    orologioPartitaAttivo = false;
-    // Zona risolta una sola volta per momento (non per singola scelta): la stessa posizione alimenta
-    // sia calcChanceTiro()/calcChanceAssist() qui sotto sia l'origine dell'evento animato in
-    // applyChoiceOutcome, così ciò che viene rappresentato nel Match Viewer coincide sempre con
-    // quello su cui si è calcolata la chance. Il nome storico "zonaGolAttuale" resta invariato
-    // (usato anche per l'assist ora) per non toccare applyChoiceOutcome, che lo legge già così.
-    m.zonaGolAttuale = moment.zonaGol ? (typeof moment.zonaGol==='function' ? moment.zonaGol() : moment.zonaGol) : null;
-    // Fase di possesso del momento (chi ha la palla): letta dal Match Viewer per decidere quale
-    // squadra marca a uomo (vedi posizioniConMarcatura). Default 'home' se un momento non è taggato
-    // (nessuno oggi, ma resta un fallback sicuro).
-    m.fasePossessoAttuale = moment.possesso || 'home';
-    // La palla "arriva" fisicamente qui: un nuovo momento è un vero evento del motore (la narrazione
-    // lo dice esplicitamente, es. "Ricevi palla al limite dell'area"), quindi aggiorna la posizione
-    // nota di palla/attore esattamente come farebbe una clip — non un'ipotesi del renderer. Senza
-    // questo la palla restava congelata all'ultima destinazione della clip precedente (o al kickoff,
-    // prima del primo momento) per tutta la durata della decisione, scollegata da ciò che la
-    // narrazione descrive già — bug segnalato dall'utente ("il pallone appare solo con gli eventi,
-    // non c'è flusso continuo", "i giocatori non rispecchiano la posizione in campo": anche
-    // posizioniConMarcatura legge da qui tramite posizionePortatorePalla). Nessuna nuova animazione:
-    // uno scatto deterministico, stesso principio già usato da AnimationManager.tick() quando avvia
-    // una clip (this.entities = {ball:startXY, actor:startXY}), qui applicato al momento in cui
-    // comincia una nuova situazione di gioco invece che a una clip. GK_MOMENTS_POOL non ha zonaGol
-    // (nessuna coordinata nota per quei momenti): in quel caso non si tocca entities, resta quanto
-    // lasciato dall'ultima clip reale.
-    if(m.zonaGolAttuale){
-      const zonaXY = zonaCoordinate(m.zonaGolAttuale);
-      if(zonaXY){
-        muoviPallaEvento(zonaXY, 'nuovo momento '+m.zonaGolAttuale); // stato persistente
-        if(matchAnimMgr) matchAnimMgr.entities = { ball: zonaXY, actor: zonaXY }; // buffer clip allineato
-      }
+  // Zona risolta una sola volta per momento (non per singola scelta): la stessa posizione alimenta
+  // sia calcChanceTiro()/calcChanceAssist() qui sotto sia l'origine dell'evento animato in
+  // applyChoiceOutcome, così ciò che viene rappresentato nel Match Viewer coincide sempre con
+  // quello su cui si è calcolata la chance. Il nome storico "zonaGolAttuale" resta invariato
+  // (usato anche per l'assist ora) per non toccare applyChoiceOutcome, che lo legge già così.
+  m.zonaGolAttuale = moment.zonaGol ? (typeof moment.zonaGol==='function' ? moment.zonaGol() : moment.zonaGol) : null;
+  // Fase di possesso del momento (chi ha la palla): letta dal Match Viewer per decidere quale
+  // squadra marca a uomo (vedi posizioniConMarcatura). Default 'home' se un momento non è taggato
+  // (nessuno oggi, ma resta un fallback sicuro). sincronizzaPossesso() allinea nello stesso istante
+  // anche campo.ball.owner/possessionTeam — unica fonte di verità per il possesso.
+  sincronizzaPossesso(moment.possesso || 'home');
+  // La palla "arriva" fisicamente qui: un nuovo momento è un vero evento del motore (la narrazione
+  // lo dice esplicitamente, es. "Ricevi palla al limite dell'area"), quindi aggiorna la posizione
+  // nota di palla/attore esattamente come farebbe una clip — non un'ipotesi del renderer.
+  if(m.zonaGolAttuale){
+    const zonaXY = zonaCoordinate(m.zonaGolAttuale);
+    if(zonaXY){
+      muoviPallaEvento(zonaXY, 'nuovo momento '+m.zonaGolAttuale); // stato persistente
+      if(matchAnimMgr) matchAnimMgr.entities = { ball: zonaXY, actor: zonaXY }; // buffer clip allineato
     }
-    addLog(moment.testo(m.opp), false);
-    const box = document.getElementById('matchAction'); box.innerHTML = '';
-    moment.choices.forEach(c=>{
-      const chance = (c.out==='goal' && m.zonaGolAttuale) ? calcChanceTiro(c.attr, m.zonaGolAttuale)
-        : (c.out==='assist' && m.zonaGolAttuale) ? calcChanceAssist(c.attr, m.zonaGolAttuale)
-        // calcChancePossesso non dipende dalla zona (nessuna posizione nelle 3 formule fornite
-        // dall'utente): si applica a ogni scelta 'possesso', inclusi i momenti da portiere.
-        : (c.out==='possesso') ? calcChancePossesso()
-        : calcChance(c.attr, c.risk, c.out, c.attr2);
-      const el = document.createElement('div'); el.className = 'choice-card';
-      el.tabIndex = 0; el.setAttribute('role','button');
-      el.onclick = ()=> resolveChoice(c, chance);
-      const riskClass = c.risk==='safe'?'risk-safe':(c.risk==='mid'?'risk-mid':'risk-high');
-      el.innerHTML = `<div class="choice-title">${c.label}</div><div class="choice-meta"><span class="${riskClass}">${RISK_LABEL[c.risk]}</span></div>`;
-      box.appendChild(el);
-    });
+  }
+  addLog(moment.testo(m.opp), false);
+  const box = document.getElementById('matchAction'); box.innerHTML = '';
+  moment.choices.forEach(c=>{
+    const chance = (c.out==='goal' && m.zonaGolAttuale) ? calcChanceTiro(c.attr, m.zonaGolAttuale)
+      : (c.out==='assist' && m.zonaGolAttuale) ? calcChanceAssist(c.attr, m.zonaGolAttuale)
+      // calcChancePossesso non dipende dalla zona (nessuna posizione nelle 3 formule fornite
+      // dall'utente): si applica a ogni scelta 'possesso', inclusi i momenti da portiere.
+      : (c.out==='possesso') ? calcChancePossesso()
+      : calcChance(c.attr, c.risk, c.out, c.attr2);
+    const el = document.createElement('div'); el.className = 'choice-card';
+    el.tabIndex = 0; el.setAttribute('role','button');
+    el.onclick = ()=> resolveChoice(c, chance);
+    const riskClass = c.risk==='safe'?'risk-safe':(c.risk==='mid'?'risk-mid':'risk-high');
+    el.innerHTML = `<div class="choice-title">${c.label}</div><div class="choice-meta"><span class="${riskClass}">${RISK_LABEL[c.risk]}</span></div>`;
+    box.appendChild(el);
   });
+}
+/* ---------- Intervallo e cambio campo (calcio a 7 = 2x25', richiesto esplicitamente) ----------
+   Unica pausa VERA della simulazione continua: il campo resta disegnato (renderMatchCanvas non
+   dipende da questo) ma l'orologio non supera i 25' (avanzaOrologioContinuo) finché il giocatore non
+   conferma l'inizio del secondo tempo — stesso pattern del bottone "Continua ▸" già esistente
+   (elemento reale con onclick, non stringa innerHTML: lo intercetta anche il bot headless tramite
+   lo stesso __botClickRandomChild già usato per le choice-card, senza bisogno di toccare bot-helpers.js). */
+function avviaIntervallo(){
+  // inIntervallo (non primoTempoFinito, che resta false fino al calcio d'inizio del secondo tempo):
+  // blocca avanzaOrologioContinuo, la vera pausa richiesta esplicitamente. primoTempoFinito è un
+  // concetto diverso ("il secondo tempo è già iniziato") — confonderli faceva ripartire l'orologio
+  // fino al 50' PRIMA che il giocatore cliccasse "Inizia il secondo tempo" (bug osservato: minutaggio
+  // già a 31' al momento del click, invece di restare fermo a 25').
+  state.matchTemp.inIntervallo = true;
+  const el = document.getElementById('matchMinute');
+  if(el) el.textContent = 'Intervallo';
+  addLog('Fine primo tempo. Squadre negli spogliatoi.', true);
+  const box = document.getElementById('matchAction'); box.innerHTML = '';
+  const cont = document.createElement('div');
+  cont.className = 'btn ghost'; cont.style.textAlign = 'center'; cont.style.cursor = 'pointer';
+  cont.tabIndex = 0; cont.setAttribute('role','button');
+  cont.textContent = 'Inizia il secondo tempo ▸';
+  cont.onclick = avviaSecondoTempo;
+  box.appendChild(cont);
+}
+// Cambio campo: le due squadre invertono il lato. Trasformazione centralizzata in UN punto solo
+// (CameraManager.toPixel, guidato da state.matchTemp.latoInvertito) invece di toccare
+// zone/heatmap/marcatura/MovementDecisionEngine, che continuano a ragionare "in casa attacca verso
+// x=1" per tutta la partita — zero formule toccate, zero rischio per quei sistemi verificati, si
+// specchia solo la resa a schermo. Possesso del calcio d'inizio: rimette in gioco chi NON ha dato
+// il via al primo tempo — in questo motore è sempre 'home' ad avviare il primo tempo, quindi qui è
+// sempre 'away' (stessa regola reale già usata per il ricalcio dopo un gol).
+function avviaSecondoTempo(){
+  const m = state.matchTemp;
+  m.minute = 25;
+  m.primoTempoFinito = true; // ora davvero: da qui in poi l'orologio può avanzare fino al 50'
+  m.inIntervallo = false;    // fine della pausa vera
+  m.latoInvertito = true;
+  sincronizzaPossesso('away');
+  m.prossimoMomentoMinuto = null;
+  muoviPallaEvento({x:0.5,y:0.5}, 'calcio d\'inizio secondo tempo');
+  addLog('Si riparte per il secondo tempo: le squadre hanno cambiato campo.', true);
+  const el = document.getElementById('matchMinute');
+  if(el) el.textContent = "25'";
+  nextMoment();
 }
 /* ---------- Probabilità di tiro: curve di indifferenza posizione + tiro + portiere ----------
    Sostituisce calcChance() SOLO per le 3 scelte out:'goal' (tiro diretto in porta), su richiesta
@@ -6187,6 +7029,56 @@ function calcChance(attrKey, risk, out, attrKey2){
 function pescaCompagno(primo, secondo, pesoPrimo){
   return (secondo && Math.random()>=pesoPrimo) ? secondo : primo;
 }
+// Passaggio 'assist' fallito (Fase 3, sez.8/9): invece del generico evento 'possession'/'lost' senza
+// alcuna animazione (com'era prima — il testo diceva "intercettato" ma la palla restava ferma),
+// emette la STESSA clip pass_short/pass_long del passaggio riuscito, ma con outcome 'intercepted' e
+// destinazione il vero avversario più vicino alla linea origine→destinazione (trovaIntercettoreReale)
+// invece del compagno. Se in campo non risulta nessun avversario di movimento (caso limite, mai
+// osservato ma non impossibile) ricade sulla zona nominale, come prima. Estratta in una funzione
+// perché richiamata identica dai due rami di fallimento sotto (alto rischio e normale): stesso testo
+// già deciso dal chiamante, qui cambia solo l'evento/l'animazione/il possesso.
+function emettiPassaggioFallito(choice, zona, txt){
+  const m = state.matchTemp;
+  const campo = statoCampoCorrente();
+  const originXY = campo && coordinataValida(campo.ball) ? { x:campo.ball.x, y:campo.ball.y } : zonaCoordinate(zona.origin);
+  const destinazioneNominale = zonaCoordinate(zona.destination);
+  const intercettore = campo ? trovaIntercettoreReale(campo, 'away', originXY, destinazioneNominale) : null;
+  if(intercettore) sincronizzaPossesso('away', intercettore); // il vero avversario diventa portatore, non il proxy generico
+  m.passTentati = (m.passTentati||0)+1;
+  m.passIntercettati = (m.passIntercettati||0)+1;
+  emitMatchEvent({ type: choice.risk==='high' ? 'pass_long' : 'pass_short', outcome:'intercepted',
+    success:false, risk:choice.risk, origin:zona.origin, destination:zona.destination,
+    destinationXY: intercettore ? { x:intercettore.x, y:intercettore.y } : destinazioneNominale,
+    actor:{role:'self', name:state.name, team:'home'},
+    target: intercettore ? {role:'opponent', name:m.opp.nome, team:'away'} : null, text:txt });
+}
+// Tiro fallito ma parato (Fase 6, sez.12/15/16): invece del generico 'off_target' (tiro fuori, palla
+// morta — che resta il comportamento per l'altra metà dei tiri falliti, invariato) il tiro raggiunge
+// davvero il portiere reale (destinationXY sulla sua posizione, "in porta" ma respinto). Da lì il
+// portiere può TRATTENERE la palla (nessuna fase FREE, owner=portiere, "caso prioritario" del
+// sez.16) oppure RESPINGERLA lontano da sé (reboundXY presente, la clip 'save' la devia davvero
+// verso il rimbalzo, poi FREE — vedi AnimationManager.tick) — stesso flavor split già accettato
+// altrove (0.4 sul gol subito, 0.5 sopra per saved/off_target), non una nuova probabilità di riuscita
+// del tiro (già decisa fallito da calcChanceTiro più a monte, qui si decide solo la geometria di
+// COSA succede alla palla dopo).
+function emettiTiroParato(choice, zona, txt){
+  const m = state.matchTemp;
+  const campo = statoCampoCorrente();
+  const portiereAvv = campo && campo.players.find(p=>p.team==='away' && p.role==='POR');
+  if(!portiereAvv){
+    // Nessun portiere in campo (non dovrebbe mai succedere con 14 giocatori reali): ricade sul
+    // comportamento esistente invece di lasciare un evento a metà.
+    emitMatchEvent({ type:'shot', outcome:'off_target', success:false, risk:choice.risk, origin:zona.origin,
+      destination:'goal_line_wide', actor:{role:'self', name:state.name, team:'home'}, text:txt });
+    return;
+  }
+  const trattenuta = Math.random()<0.5;
+  m.deviazioni = (m.deviazioni||0)+1;
+  emitMatchEvent({ type:'shot', outcome:'saved', success:false, risk:choice.risk, origin:zona.origin,
+    destinationXY: { x:portiereAvv.x, y:portiereAvv.y },
+    reboundXY: trattenuta ? null : direzioneDeviazioneParata('home', portiereAvv),
+    actor:{role:'self', name:state.name, team:'home'}, text:txt });
+}
 function applyChoiceOutcome(choice, success){
   const m = state.matchTemp;
   let zona = ZONE_DEFAULT_PER_OUT[choice.out] || { origin:'midfield_center', destination:null };
@@ -6194,9 +7086,21 @@ function applyChoiceOutcome(choice, success){
   // probabilità (vedi nextMoment), non più il default fisso 'box': copia, non muta l'oggetto
   // condiviso ZONE_DEFAULT_PER_OUT.goal (riusato identico ad ogni tiro della carriera).
   if(choice.out==='goal' && m.zonaGolAttuale) zona = Object.assign({}, zona, { origin: m.zonaGolAttuale });
+  // Fix: un turnover (in qualunque direzione) deve aggiornare il possesso alla fonte, non nel
+  // renderer. Regola unica per ogni out (goal/assist/recupero/possesso): successo = la palla resta a
+  // noi, fallimento = va all'avversario — prima questa sincronizzazione mancava del tutto per
+  // 'recupero' riuscito (un turnover A NOSTRO favore non veniva mai registrato: fasePossessoAttuale
+  // restava 'away' anche dopo aver vinto un contrasto) e per i falliti non legati a un gol subito.
+  // sincronizzaPossesso() aggiorna nello stesso istante anche ball.owner/possessionTeam (unica fonte
+  // di verità). Il ramo "gol subito" più sotto sovrascrive esplicitamente a 'home' (chi rimette in
+  // gioco dopo aver incassato); quello del gol segnato resta 'home' fino al ricalcio dopo
+  // l'esultanza (invariato, gestito altrove).
+  sincronizzaPossesso(success ? 'home' : 'away');
   if(success){
     if(choice.out==='goal'){ m.myGoals++; m.myPlayerGoals++; const txt=`GOL! ${state.name} la mette dentro!`; addLog(txt, true);
+      m.tiriTotali = (m.tiriTotali||0)+1; m.tiriInPorta = (m.tiriInPorta||0)+1;
       emitMatchEvent({ type:'shot', outcome:'goal', success:true, risk:choice.risk, origin:zona.origin, destination:zona.destination,
+        destinationXY: miraPortaLontanoDalPortiere('home'),
         actor:{role:'self', name:state.name, team:'home'}, text:txt }); }
     else if(choice.out==='assist'){ m.myGoals++; m.myPlayerAssists++;
       const beneficiario = pescaCompagno(m.compagni.attacco, m.compagni.centrocampo, 0.6);
@@ -6205,8 +7109,17 @@ function applyChoiceOutcome(choice, success){
       const idAtt = idPersonaCompagno(beneficiario.nome, teamName());
       registraPersona(idAtt, { nome:beneficiario.nome, ruolo:'compagno' });
       registraEventoPersona(idAtt, { tipo:'assist', testo:`Gli fai un assist decisivo contro ${m.opp.nome}.`, impatto:2 });
+      // Ricevitore geometrico reale (Fase 3, sez.5): il compagno disegnato in campo più vicino alla
+      // zona di destinazione, escluso chi ha appena passato (campo.ball.owner, il portatore prima di
+      // questo passaggio). Se lo stato del campo non esiste ancora (bot in un frame anomalo) ricade
+      // sulla zona nominale, come prima.
+      const campoAssist = statoCampoCorrente();
+      const ricevitoreReale = campoAssist ? scegliRicevitoreReale(campoAssist, 'home', zonaCoordinate(zona.destination), campoAssist.ball.owner) : null;
+      m.passTentati = (m.passTentati||0)+1; m.passCompletati = (m.passCompletati||0)+1;
+      m.possessoStreak = (m.possessoStreak||0)+1;
       emitMatchEvent({ type: choice.risk==='high' ? 'pass_long' : 'pass_short', outcome:'goal', success:true, risk:choice.risk,
         origin:zona.origin, destination:zona.destination,
+        destinationXY: ricevitoreReale ? { x:ricevitoreReale.x, y:ricevitoreReale.y } : null,
         actor:{role:'self', name:state.name, team:'home'}, target:{role:'teammate', name:beneficiario.nome, team:'home'}, text:txt }); }
     else if(choice.out==='recupero'){
       const compagnoDif = pescaCompagno(m.compagni.difesa, m.compagni.portiere, 0.7);
@@ -6215,6 +7128,7 @@ function applyChoiceOutcome(choice, success){
       const idDif = idPersonaCompagno(compagnoDif.nome, teamName());
       registraPersona(idDif, { nome:compagnoDif.nome, ruolo:'compagno' });
       registraEventoPersona(idDif, { tipo:'recupero', testo:`Chiudete insieme un'azione pericolosa di ${m.opp.nome}.`, impatto:1 });
+      m.recuperi = (m.recuperi||0)+1;
       emitMatchEvent({ type:'tackle', outcome:'won', success:true, risk:choice.risk, origin:zona.origin,
         actor:{role:'self', name:state.name, team:'home'}, target:{role:'teammate', name:compagnoDif.nome, team:'home'}, text:txt }); }
     else { const txt = `Giocata pulita di ${state.name}, l'azione continua con ordine.`; addLog(txt, false);
@@ -6234,11 +7148,36 @@ function applyChoiceOutcome(choice, success){
         registraEventoPersona(idDel, { tipo:'delusione', testo:`Subite gol dopo un pallone perso da te in una zona pericolosa.`, impatto:-3 });
         emitMatchEvent({ type:'turnover', outcome:'goal_conceded', success:false, risk:choice.risk, origin:zona.origin,
           actor:{role:'self', name:state.name, team:'home'}, target:{role:'opponent', name:m.opp.nome, team:'away'}, text:txt });
+        // 'turnover' non ha una clip (eventClipMap non lo mappa): nessuna animazione da aspettare,
+        // quindi il ricalcio al centrocampo dopo il gol subito va fatto qui direttamente, non tramite
+        // il followup di goal_celebration (che vale solo per i gol segnati da noi, con la loro clip).
+        muoviPallaEvento({x:0.5,y:0.5}, 'ricalcio dopo gol subito');
+        sincronizzaPossesso('home'); // rimettiamo noi in gioco dopo aver subito il gol
       }
       else { const txt = `Scelta non riuscita, ${m.opp.nome} riorganizza la propria difesa.`; addLog(txt, false);
-        emitMatchEvent({ type: choice.out==='recupero' ? 'tackle' : (choice.out==='goal' ? 'shot' : 'possession'),
-          outcome: choice.out==='recupero' ? 'lost' : (choice.out==='goal' ? 'off_target' : 'lost'),
-          success:false, risk:choice.risk, origin:zona.origin, destination: choice.out==='goal' ? 'goal_line_wide' : null,
+        if(choice.out==='assist'){ emettiPassaggioFallito(choice, zona, txt); }
+        else if(choice.out==='goal'){
+          // Fase 6, sez.12/15: metà dei tiri falliti diventa una vera parata con rimbalzo (palla
+          // libera contendibile) invece del generico "fuori" — flavor split con lo stesso pattern già
+          // accettato nel ramo sopra (0.4 per il gol subito su turnover alto rischio), non una nuova
+          // probabilità di riuscita del tiro (già decisa false da calcChanceTiro più a monte).
+          m.tiriTotali = (m.tiriTotali||0)+1;
+          if(Math.random()<0.5) emettiTiroParato(choice, zona, txt);
+          else emitMatchEvent({ type:'shot', outcome:'off_target', success:false, risk:choice.risk, origin:zona.origin,
+            destination:'goal_line_wide', actor:{role:'self', name:state.name, team:'home'}, text:txt });
+        }
+        else if(choice.out==='recupero'){
+          emitMatchEvent({ type:'tackle', outcome:'lost', success:false, risk:choice.risk, origin:zona.origin,
+            actor:{role:'self', name:state.name, team:'home'}, text:txt });
+          // Fase 6, sez.17: un contrasto fisico perso può lasciare la palla davvero libera invece di
+          // consegnarla subito all'avversario (metà dei casi, stesso principio della parata sopra) —
+          // parte da dove si trova già la palla, il contrasto avviene lì, nessuna nuova posizione.
+          if(Math.random()<0.5){
+            const campoContrasto = statoCampoCorrente();
+            if(campoContrasto && coordinataValida(campoContrasto.ball)) avviaPallaLibera({x:campoContrasto.ball.x,y:campoContrasto.ball.y}, 'palla libera dopo contrasto');
+          }
+        }
+        else emitMatchEvent({ type:'possession', outcome:'lost', success:false, risk:choice.risk, origin:zona.origin,
           actor:{role:'self', name:state.name, team:'home'}, text:txt }); }
       // Il cartellino rosso prima poteva scattare dopo QUALSIASI scelta ad alto rischio fallita,
       // anche un tiro o un dribbling: non aveva senso (un tiro alto non è un fallo). Ora scatta
@@ -6251,8 +7190,15 @@ function applyChoiceOutcome(choice, success){
         emitMatchEvent({ type:'card', involvesCard:'red', success:false, origin:zona.origin,
           actor:{role:'self', name:state.name, team:'home'}, text:txt }); }
     } else { const txt = `Scelta non riuscita, ${m.opp.nome} riorganizza la propria difesa.`; addLog(txt, false);
-      emitMatchEvent({ type: choice.out==='goal' ? 'shot' : 'possession', outcome: choice.out==='goal' ? 'off_target' : 'lost',
-        success:false, risk:choice.risk, origin:zona.origin, destination: choice.out==='goal' ? 'goal_line_wide' : null,
+      if(choice.out==='assist'){ emettiPassaggioFallito(choice, zona, txt); }
+      else if(choice.out==='goal'){
+        // Stesso flavor split del ramo alto rischio sopra (Fase 6, sez.12/15).
+        m.tiriTotali = (m.tiriTotali||0)+1;
+        if(Math.random()<0.5) emettiTiroParato(choice, zona, txt);
+        else emitMatchEvent({ type:'shot', outcome:'off_target', success:false, risk:choice.risk, origin:zona.origin,
+          destination:'goal_line_wide', actor:{role:'self', name:state.name, team:'home'}, text:txt });
+      }
+      else emitMatchEvent({ type:'possession', outcome:'lost', success:false, risk:choice.risk, origin:zona.origin,
         actor:{role:'self', name:state.name, team:'home'}, text:txt }); }
   }
   document.getElementById('matchScore').textContent = `${m.myGoals} - ${m.oppGoals}`;
@@ -6272,6 +7218,13 @@ function resolveChoice(choice, chance){
   if(trattoMomento) state.personalita[trattoMomento]++;
   if(success) m.consecutiveFails = 0; else m.consecutiveFails = (m.consecutiveFails||0)+1;
   m.momentumIdx++;
+  // Target del prossimo momento deciso SUBITO (mentre il giocatore legge ancora questo esito), non
+  // al click di "Continua": è così che il tempo smette di dipendere dalla tua scelta, come richiesto
+  // — l'orologio continuo (avanzaOrologioContinuo) può già avvicinarsi a questa soglia mentre leggi,
+  // prima ancora di cliccare. Senza questo il target restava quello del momento appena concluso (già
+  // superato), facendo rivelare il momento successivo istantaneamente al click invece che quando
+  // l'orologio lo raggiunge davvero.
+  m.prossimoMomentoMinuto = Math.min(50, m.minute + rand(9,13));
 
   // Trigger per gli eventi dinamici di partita, valutati DOPO l'esito della scelta (non alterano
   // mai myGoals/oppGoals/attempts/successes, già scritti sopra). Al massimo un evento per
@@ -6320,7 +7273,7 @@ function finishMatch(){
   // resta nel DOM e cliccabile — ogni click ulteriore rieseguiva l'intera funzione, applicando più
   // volte XP, voto, classifica, registraPartita e infortuni (misurato: 4 esecuzioni per una sola
   // partita). Nessuna logica di gioco cambia qui: si impedisce solo di chiudere due volte la stessa
-  // partita. Stesso principio della guardia orologioPartitaAttivo già presente in nextMoment.
+  // partita. Stesso principio della guardia m.attesaProssimoMomento già presente in nextMoment.
   if(m.finita) return;
   m.finita = true;
   m.minute = 50;

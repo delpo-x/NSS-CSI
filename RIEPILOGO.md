@@ -1,5 +1,738 @@
 # Carriera CSI — Riepilogo progetto
 
+> **Aggiornamento 2026-08-10 (Fase 7 — emergenza del gioco: MOMENT come rappresentazione, non
+> motore).** Su richiesta esplicita dell'utente, con audit PRIMA del codice (come richiesto): questa
+> fase è stata prevalentemente diagnosi/misurazione/instrumentazione, non nuova meccanica — l'audit
+> ha trovato che la parte importante (simulazione continua indipendente dai momenti) era già vera
+> dalla Fase 1-6, e che l'unico dubbio concreto avanzato dalla richiesta (scelte risolte su stato
+> "vecchio") non corrispondeva a un bug reale nel codice attuale.
+> - **Diagnosi — SIMULAZIONE vs EVENTO/OUTCOME vs NARRAZIONE**: verificato che i tre livelli sono già
+>   separati nel codice. La SIMULAZIONE (`avanzaStatoCampo`: orologio, target dei 14, movimento,
+>   palla, coerenza) gira in `avviaCanvasPartita`'s `frame()` con un'unica guardia — lo schermo attivo
+>   è `screen-match` — MAI condizionata dalla presenza di scelte pendenti o da `MOMENTS`. L'EVENTO/
+>   OUTCOME (`applyChoiceOutcome`/`emitMatchEvent`) resta sempre e solo innescato da un click reale
+>   (nessuna azione narrata — gol, assist, tackle, tiro — nasce oggi senza un click, ECCETTO il
+>   recupero geometrico di una palla FREE, Fase 6, l'unica azione realmente autonoma del motore). La
+>   NARRAZIONE (`addLog`/`showMatchEvent`/scelte mostrate) è un layer puramente di presentazione:
+>   verificato con un test dal vivo che sopprime `addLog`/`showMatchEvent` (stub temporaneo, MAI
+>   permanente) per un'intera partita — il motore produce identiche conseguenze reali (contatori,
+>   possesso, stato della palla) senza alcun testo mostrato.
+> - **Dipendenza da MOMENTS**: onestamente ancora totale per qualunque azione che intacca il
+>   punteggio/le statistiche di carriera (gol, assist, tackle vinto/perso, tiro) — tutte richiedono
+>   un click che attraversi `resolveChoice`→`applyChoiceOutcome`, perché `calcChance*` (l'unica
+>   autorità sull'esito, non toccata) è costruita esclusivamente sugli attributi di `self` e non ha
+>   un equivalente per nessun altro dei 14 giocatori. Non è stata costruita una generazione autonoma
+>   di passaggi/conduzioni/tiri per giocatori diversi da `self` — sarebbe stata, nella sostanza, una
+>   nuova IA (vietata esplicitamente sez.4), anche riusando `scegliRicevitoreReale`/
+>   `trovaIntercettoreReale`/`miraPortaLontanoDalPortiere`, perché non esiste alcun dado da riusare
+>   per decidere l'esito di quell'azione autonoma. Dichiarato qui invece di essere nascosto o
+>   forzato: **passaggiAutomatici/conduzioniAutomatiche/tiriAutomatici restano 0** (nuovi contatori
+>   introdotti apposta per esporre onestamente questo limite, non per nasconderlo).
+> - **Azioni autonome reali**: la posizione dei 14 (ogni frame, sempre), il possesso persistente
+>   (`ball.owner`, Fase 4), le transizioni immediate (`posizioniConMarcatura` ricalcola da zero ad
+>   ogni frame da `fasePossessoAttuale` corrente, nessuna logica di transizione dedicata necessaria),
+>   il recupero geometrico di una palla FREE (Fase 6, l'unica azione "motore" senza click) — tutte
+>   verificate ancora attive e indipendenti da `MOMENTS` in questa fase.
+> - **Verificato (non un bug)**: il timore esplicito della richiesta ("scelta risolta su coordinate
+>   vecchie") non corrisponde a un problema reale — `calcChance*` non legge mai `campo.ball`/
+>   `campo.players` (solo attributi statici + nome della zona, fissi per l'intero momento), e ogni
+>   funzione geometrica in `applyChoiceOutcome` (`scegliRicevitoreReale`, `miraPortaLontanoDalPortiere`,
+>   il portiere in `emettiTiroParato`) chiama `statoCampoCorrente()` al momento dell'ESECUZIONE (cioè
+>   al click), non a quello della rivelazione del momento — già corretto per costruzione fin dalla
+>   Fase 3. Confermato con un test dal vivo (non solo lettura del codice): momento rivelato, 20s di
+>   attesa reale-equivalente, un compagno spostato manualmente in un angolo completamente diverso del
+>   campo, poi click — il ricevitore selezionato coincide esattamente (0m di scarto) con la posizione
+>   manipolata appena prima del click, non con quella di 20s prima.
+> - **Modifiche** (tutte in `index REV2.html`, tutte diagnostica pura — nessuna nuova decisione di
+>   gioco): `azioneCorrenteDebug()` (BALL/OWNER/PHASE/ACTION/TARGET della richiesta, esposta in
+>   `matchViewerDebug().azioneCorrente`); `m.recuperiAutomatici` (Fase 6 ora esplicitamente separato
+>   da `m.recuperi`, che resta sempre conseguenza di un click); `contaSceltePendenti()` +
+>   `m.msSimulazioneTotali`/`m.msSimulazioneConSceltaPendente` (misura REALE, non assunta, di quanto
+>   spesso la simulazione avanza mentre una scelta è aperta — la prova che l'avanzamento non dipende
+>   dalla scelta, non la sua correzione).
+> - **Test eseguiti**: `node --check` OK; bot 2 run (25/40 e 40/60), 0 errori/0 violazioni. Dal vivo
+>   in browser — **attesa utente 20s**: momento aperto, nessun click, orologio/palla/possesso
+>   continuano a muoversi e cambiare (minute 46,7→50, ball.x continua a oscillare), 0 warning,
+>   `msSimulazioneConSceltaPendente` cresce coerentemente (61,5% del tempo totale di questo
+>   segmento); **staleness**: vedi sopra, confermato 0m di scarto; **senza narrazione** (addLog/
+>   showMatchEvent soppressi temporaneamente, motore intatto): assist riuscito, tiro parato con
+>   rimbalzo → tutti gli effetti reali (contatori, `ball.owner`, stato FREE) identici a quelli con
+>   narrazione attiva, poi narrazione ripristinata e verificata funzionante; **6 partite complete
+>   automatiche** (0'→25'→intervallo→25'→50', nessun intervento manuale — ridotto da 10 a 6 per il
+>   tempo disponibile, dichiarato onestamente): tutte concluse `finita:true`, 0 coordinate invalide,
+>   0 warning in tutte, giocatori mai oltre 0,5m/frame (limite di velocità mai superato); **anti-
+>   retroazione HOME/AWAY/FREE** (ripetizione esplicita dei test Fase 4/6): home stabile 1-3,8m in un
+>   caso pulito senza clip di volo (60s), away 6,63m, FREE risolta in entrambi i campioni (5,32m →
+>   3,35m, mai bloccata), 0 warning.
+> - **Metriche osservate**: `dipendenzaDaMoments.percentualeConSceltaPendenteMaSimulazioneAttiva`
+>   misurata realmente (61,5% in un segmento di test), non assunta al 100% per definizione.
+> - **Problemi residui, dichiarati esplicitamente senza nasconderli**: nessuna azione che intacca il
+>   punteggio (gol/assist/tackle/tiro) è oggi generabile dal motore senza un click dell'utente — la
+>   dipendenza da `MOMENTS` per QUESTA categoria resta strutturale e totale, non è stata rimossa né
+>   nascosta (sarebbe stato disonesto dichiarare "gioco autonomo" qui, esplicitamente vietato dalla
+>   richiesta stessa). Ciò che è realmente autonomo è la simulazione posizionale/di possesso/di
+>   transizione (Fase 1-6) più il singolo caso del recupero da palla FREE (Fase 6) — non l'intera
+>   partita. `passaggiAutomatici`/`conduzioniAutomatiche`/`tiriAutomatici` restano a 0 per questa
+>   stessa ragione, esposti apposta invece di essere rimossi dalla diagnostica.
+
+> **Aggiornamento 2026-08-10 (Fase 6 — palla contesa, deviazioni e transizioni fisiche).** Su
+> richiesta esplicita dell'utente: introdurre una vera fase FREE della palla (`ball.owner=null`,
+> nessun proxy) dopo una parata deviata o un contrasto, con candidati al recupero geometrici — unico
+> limite strutturale rimasto dichiarato dalla Fase 5.
+> - **Diagnosi**: prima di questa fase, ogni esito (riuscito o fallito) di una scelta era sempre una
+> risoluzione sincrona e completa — un tiro falliva sempre come "fuori" (`off_target`), un contrasto
+>   fallito consegnava sempre la palla al proxy avversario nello stesso istante. La clip `save` e la
+>   variante `outcome:'saved'` esistevano già in `AnimationLibrary` ma non erano mai raggiunte da
+>   nessun percorso reale (codice morto, individuato durante l'audit).
+> - **Architettura FREE**: nessuna macchina a stati parallela — riusa `campo.ball` con tre nuovi campi
+>   (`libera`, `liberaDalMinuto`, `candidati`). `ball.owner===null` resta l'unico segnale autorevole
+>   di "nessuno la controlla" (invariante rispettato: nessun proxy lo sostituisce mai). Per
+>   compatibilità con tutto il resto del motore (che assume `fasePossessoAttuale` sempre `'home'`/
+>   `'away'`), quel campo NON è stato forzato a `null` — resta il segnale "morbido" dell'ultima
+>   squadra coinvolta, mentre `ball.owner` resta quello "duro". Il dado (`calcChance*`/`MOMENTS`) non
+>   è stato toccato: decide come sempre successo/fallimento della scelta; la Fase 6 decide solo la
+>   geometria di COSA succede fisicamente alla palla dopo un fallimento.
+> - **Modifiche** (tutte in `index REV2.html`): `avviaPallaLibera(originXY, contesto)` (marca FREE),
+>   `trovaCandidatiRecuperoPalla(campo, raggioM)` (nessuna funzione equivalente esisteva: le funzioni
+>   di Fase 3 restituiscono UN giocatore di UNA squadra nota, qui servono tutti i candidati reali di
+>   entrambe), `avanzaStatoPallaLibera(deltaMs)` (deriva bounded verso il punto di riposo + respiro,
+>   chiude FREE quando un candidato è a contatto — il PIÙ VICINO vince, nessun secondo sistema di
+>   probabilità: non esiste nel motore un percorso di dado raggiungibile in un tick automatico).
+>   `avanzaPallaLibera` ora smista verso questa nuova funzione quando `campo.ball.libera`, MAI la rete
+>   di sicurezza esistente (che assegnerebbe subito un proxy). `sincronizzaPossesso` chiude `libera`
+>   come valvola di sicurezza ogni volta che assegna un owner reale. Clip `save` estesa con una vera
+>   traiettoria (stessa spezzata di Fase 3); `direzioneDeviazioneParata` (rimbalzo deterministico,
+>   lontano dal lato coperto dal portiere reale, stesso principio di `miraPortaLontanoDalPortiere`).
+>   `emettiTiroParato`: un tiro fallito ha uno split di "flavor" (stesso pattern già accettato per il
+>   gol subito su turnover, 0,4 di probabilità) fra "fuori" (invariato) e "parato" — un tiro parato ha
+>   un secondo split fra "trattenuta" (portiere controlla, nessuna FREE — caso prioritario sez.16) e
+>   "respinta" (rimbalzo vero, FREE). Contrasto fallito: stesso principio, metà dei casi diventa
+>   palla libera invece del proxy immediato. Nuova diagnostica (`palla libera bloccata`) e metriche
+>   (`palleLibere`, `duelliPalla`, `parate` — quest'ultima finalmente derivabile, prima dichiarata
+>   impossibile in Fase 3/5).
+> - **Bug reale trovato e corretto durante la verifica dal vivo**: il primo tentativo faceva
+>   convergere il pressing verso `portatoreXY`, che durante una FREE ereditava ancora il pull "verso
+>   porta" pensato per un portatore che avanza l'azione — creando uno scarto permanente (~8m,
+>   misurato) fra il punto verso cui i giocatori venivano attratti e la posizione VERA della palla:
+>   nessuno arrivava mai entro il raggio di recupero (verificato: palla bloccata per 98+ secondi
+>   simulati). Corretto facendo sì che, durante FREE, il riferimento tattico per tutti i 14 sia la
+>   posizione REALE della palla, non un punto derivato da un'azione che nessuno sta conducendo — dopo
+>   il fix, il recupero è avvenuto in 0,4s nel retest identico. Un secondo problema minore (soglia
+>   diagnostica "palla bloccata" tarata con un errore di unità — confrontava minuti con secondi) è
+>   stato trovato e corretto nello stesso giro di test.
+> - **Test eseguiti**: `node --check` OK; bot 4 run in totale durante l'iterazione (25/40 e 40/60 ad
+>   ogni fix), sempre 0 errori/0 violazioni. Dal vivo in browser — **Test A** (parata semplice,
+>   trattenuta): `outcome:'saved'`, nessuna fase FREE, owner assegnato esplicitamente al portiere
+>   reale, `palleLibere.conteggio` invariato; **Test B** (parata con deviazione): `stato:'FREE'`,
+>   `owner:null` verificato esplicitamente, recupero geometrico reale in 0,4s dopo il fix; **Test C**
+>   (due contendenti): entrambi entro il raggio, vince il più vicino, `duelliPalla` incrementato;
+>   **Test D** (contrasto): FREE immediata (la palla è già lì), risolta quasi istantaneamente, vinta
+>   da una squadra non predeterminata dalla narrazione (puramente geometrica); **stress test dedicato**
+>   (40 round forzati, tiri e contrasti alternati): 20 episodi FREE generati e risolti, 11 con 2+
+>   candidati, 0 coordinate invalide, teletrasporto palla mai oltre 0,2m/frame, giocatori mai oltre
+>   0,5m/frame (limite di velocità, mai superato), 0 warning diagnostici; **partita completa
+>   automatica** (8000 frame, click automatici, nessun intervento manuale): 0 coordinate invalide, 0
+>   warning, conclusa correttamente a `finita:true`. Console pulita in tutti gli scenari.
+> - **Metriche osservate**: `parate` ora derivabile e distinta da "fuori" (prima impossibile);
+>   `palleLibere`/`duelliPalla` coerenti con le azioni realmente avvenute, nessuna statistica
+>   inventata.
+> - **Problemi residui, dichiarati esplicitamente**: il render canvas non differenzia visivamente
+>   una palla FREE da una CONTROLLED (stesso pallino bianco) — lo stato resta corretto e verificabile
+>   via `matchViewerDebug().ball.stato`, coerente con l'approccio già usato in tutte le fasi
+>   precedenti (debug via stato interno, mai un overlay a schermo), ma non c'è un segnale VISIVO
+>   dedicato; il "duello" fra due candidati resta puramente geometrico (il più vicino), non esiste un
+>   percorso di probabilità autonomo da riusare per un vero 50/50 quando le distanze sono quasi
+>   identiche — dichiarato invece di inventarne uno nuovo, come richiesto esplicitamente; l'intercetto
+>   di un passaggio (Fase 3) resta un evento istantaneo, non passa mai dalla fase FREE, esattamente
+>   come richiesto ("non sostituire l'intercettore reale con una nuova logica").
+
+> **Aggiornamento 2026-08-10 (Fase 5 — simulazione continua dei 14 giocatori).** Su richiesta
+> esplicita dell'utente, con audit dell'architettura esistente PRIMA di scrivere codice (richiesto
+> esplicitamente come primo passo): gran parte di quanto chiesto era già vero dalla Fase 1-4
+> (movimento continuo indipendente dagli eventi, tutti e 14 sempre attivi, anti-ball-magnet,
+> marcatura che si aggiorna da sola ogni frame, transizioni immediate) — il lavoro reale di questa
+> fase è stato estendere due punti concreti e aggiungere diagnostica, non costruire da zero.
+> - **Diagnosi — già sufficiente, non toccato**: `sincronizzaTargetCampo`/`avanzaGiocatoriCampo`
+>   girano OGNI frame per tutti e 14 indipendentemente da click/eventi (nessun "movimento congelato
+>   in attesa di un evento", mai stato vero da quando esiste l'orologio continuo); `posizioniConMarcatura()`
+>   ricalcola `fasePossessoAttuale`/marcatura/pressing da zero ad ogni chiamata — un turnover cambia
+>   comportamento al frame successivo, non serve alcuna logica di transizione dedicata; l'anti-ball-
+>   magnet (un solo portatore, gli altri su heatmap+intent) era già verificato in Fase 2.
+> - **Diagnosi — lacune reali trovate**: (1) lo smarcamento (`UNMARK`) scattava solo in base alla
+>   PROPRIA distanza dal marcatore più vicino, mai in base a se la LINEA di passaggio verso quel
+>   giocatore fosse coperta da un difensore altrove sul segmento; (2) il proxy dell'away (quando non
+>   esiste ancora un owner reale esplicito) era sempre il CEN fisso, indipendentemente da dove si
+>   trovasse davvero la palla; (3) `verificaCoerenzaPossesso()` copriva solo l'owner, non le
+>   coordinate/i limiti dei 14 giocatori né l'area dei portieri; (4) nessuna diagnostica su
+>   distanza media palla-giocatori/struttura di squadra/continuità del possesso.
+> - **Modifiche** (tutte in `index REV2.html`): nuova costante `LINEA_PASSAGGIO_CHIUSA_M=5`;
+>   `MovementDecisionEngine.decide()` accetta un nuovo input opzionale `lineaChiusa` — se vero,
+>   l'intent diventa `UNMARK` anche senza marcatura stretta, con lo scarto laterale calcolato da un
+>   riferimento di fallback (`ballPosition`) quando non c'è un marcatore vicino da cui allontanarsi;
+>   `posizioniConMarcatura()` calcola `lineaChiusa` per ogni compagno non portatore riusando
+>   `distanzaPuntoSegmentoM` (stessa geometria della Fase 3, nessuna nuova). `giocatorePortatoreCorrente()`:
+>   il fallback per l'away (quando lo sticky-check non trova un owner reale) ora sceglie il compagno
+>   di movimento geometricamente più vicino alla palla invece del CEN fisso — nessun rischio di
+>   retroazione (qui si LEGGE soltanto `campo.ball`, non lo si scrive mai in funzione di questa
+>   scelta) e nessuna oscillazione frame-per-frame (lo sticky-check della Fase 4 blocca il risultato
+>   finché l'owner non cambia davvero). Nuova `verificaCoerenzaCampo()` (stesso pattern "un warning,
+>   mai una correzione" di `verificaCoerenzaPossesso`): coordinate valide e limiti di campo per tutti
+>   i 14, portiere entro la propria area — chiamata da `avanzaStatoCampo` ogni frame. Nuova
+>   `calcolaMetrichePosizionali()` (pura, sola lettura, mai usata per decidere movimento):
+>   `distanzaMediaGiocatoriPallaM`, `numeroGiocatoriEntro5m/10m`, struttura di squadra
+>   (larghezza/profondità/baricentro) per entrambe le squadre — esposta in `matchViewerDebug()`.
+>   `sincronizzaPossesso()` traccia `turnoverCount`/`possessoDalMinuto` (solo a un vero cambio di
+>   squadra, mai sulle chiamate generiche ripetute della rete di sicurezza); `possessoStreak`
+>   incrementato nel punto già esistente di un assist riuscito — esposti come `continuitaPossesso`.
+> - **Cosa NON è stato toccato**: `calcChance*`/`MOMENTS`/`BEHAVIOR_MATRIX`/heatmap (invariati);
+>   `avanzaPallaLibera` (il suo meccanismo resta quello, già stabile, della Fase 1/4); nessun nuovo
+>   motore/matrice/sistema di probabilità/macchina a stati — le due estensioni sopra vivono
+>   interamente dentro `MovementDecisionEngine`/`posizioniConMarcatura`/`giocatorePortatoreCorrente`
+>   già esistenti.
+> - **Test eseguiti**: `node --check` OK; bot 2 run (25/40 e 40/60), 0 errori/0 violazioni in
+>   entrambi (2889 partite nel run più ampio). Dal vivo in browser: **unit test isolato di
+>   `lineaChiusa`** — stesso avversario a 18m (troppo lontano per marcatura/pressing), l'intent passa
+>   da SUPPORT a UNMARK cambiando solo quel flag, target laterale coerente; **proxy away geometrico**
+>   — spostata la palla vicino a un ATT poi a un DIF avversario su stato pulito, il fallback ha
+>   scelto correttamente il giocatore reale più vicino in entrambi i casi; **partita completa
+>   automatica** (7000 frame ≈ 350s simulati, click automatici su scelte/bottone secondo tempo,
+>   nessun intervento manuale sul possesso) fino a `finita:true`/schermata risultato: 0 coordinate
+>   invalide, 0 warning diagnostici (`verificaCoerenzaPossesso`+`verificaCoerenzaCampo` insieme),
+>   **anti-freeze**: il tratto più lungo senza alcun movimento rilevato (palla O giocatori) è stato
+>   un solo frame (50ms) — mai un vero congelamento; **anti-teleport**: giocatori mai oltre 0,50m/50ms
+>   (esattamente il limite di velocità 10m/s, mai superato), palla mai oltre 5,26m/50ms (coerente con
+>   l'accelerazione cubica finale di un tiro, non un teletrasporto); **anti-feedback HOME e AWAY
+>   separati** (test esplicitamente richiesto dopo il bug reale trovato in Fase 4): distanza massima
+>   palla↔portatore osservata 14,98m (home, durante il volo di un passaggio lungo verso un ricevitore
+>   reale — bounded alla durata della clip) e 6,37m (away) — nessuna delle due in crescita nel corso
+>   della partita, nessun loop.
+> - **Metriche osservate** (partita di test, poche occasioni per via del tempo compresso): distanza
+>   media giocatori-palla 12-15m nel corso della partita, struttura di squadra stabile (larghezza
+>   ~20-26m, profondità ~27-34m per entrambe le squadre, mai un collasso né un'espansione patologica),
+>   1 turnover osservato con contatori coerenti (`passTentati:1, passIntercettati:1`).
+> - **Problemi residui, dichiarati esplicitamente**: (1) "palla libera contendibile da più giocatori"
+>   (sez.15-17 della richiesta) NON è stata costruita come vero stato multi-frame — `ball.owner` non
+>   resta MAI genuinamente `null` per più di un istante nell'architettura attuale (ogni transizione
+>   di possesso assegna sempre qualcuno, sincronamente): non esiste oggi un innesco reale (nessun
+>   rimbalzo/seconda palla dopo una parata, gap già dichiarato in Fase 3) che produca una palla
+>   davvero contesa da più giocatori in campo. Costruirlo avrebbe richiesto introdurre un evento
+>   'saved' distinto da 'off_target' mai esistito, un cambiamento più ampio del perimetro di questa
+>   fase — non implementato, dichiarato qui invece di essere forzato artificialmente; (2) i momenti
+>   narrativi scriptati (MOMENTS) restano l'unica fonte di NUOVE situazioni di gioco — la squadra
+>   ospite non ha mai un'azione autonoma spontanea, come già dichiarato in Fase 4; (3) `possessoStreak`
+>   supera quasi sempre 1 solo nei test che incatenano passaggi manualmente (Fase 4): nel gioco reale
+>   un assist riuscito porta sempre a un gol immediato, quindi in condizioni organiche la sequenza
+>   "passaggi consecutivi" resta corta per costruzione del gioco, non per un limite di questa
+>   diagnostica.
+
+> **Aggiornamento 2026-08-10 (Fase 4 — chiusura della catena palla→giocatore→possesso, possesso
+> sticky).** Su richiesta esplicita dell'utente, per risolvere il limite lasciato dichiaratamente
+> aperto in Fase 3: dopo la clip di un intercetto, il possesso tornava al proxy generico di reparto
+> invece di restare al giocatore reale che aveva davvero recuperato palla.
+> - **Diagnosi**: il proxy veniva reintrodotto in DUE punti distinti, non uno solo. (1)
+>   `giocatorePortatoreCorrente()` (chiamata da `sincronizzaPossesso(fase)` ogni volta che viene
+>   invocata SENZA un giocatore esplicito — in particolare dalla rete di sicurezza per-frame di
+>   `avanzaPallaLibera`) ricalcolava sempre da zero self/CEN fisso, ignorando un owner reale già
+>   assegnato: bastava un frame perché l'intercettore sparisse. (2) `posizioniConMarcatura()` — che
+>   alimenta `MovementDecisionEngine` — aveva una SECONDA logica hardcoded e duplicata (mai
+>   `campo.ball.owner`) sempre e solo "il CEN fisso per l'away": anche dove `ball.owner` fosse già
+>   corretto, il sistema di posizionamento/pull-verso-porta restava comunque centrato sul proxy.
+> - **Correzione**: `giocatorePortatoreCorrente(campo, fase)` ora controlla PRIMA se
+>   `campo.ball.owner` è già un giocatore reale della squadra giusta (per riferimento id, filtrato
+>   per team — un owner della squadra avversaria rimasto per errore non può mai essere letto) e lo
+>   restituisce, ricadendo sul proxy solo se non esiste. Questo rende `sincronizzaPossesso(fase)`
+>   (senza secondo parametro) "sticky" per costruzione, senza toccare `avanzaPallaLibera` né
+>   duplicare logica. `posizioniConMarcatura()` ora deriva `portatoreSlot` da
+>   `giocatorePortatoreCorrente()` (stessa funzione, non più duplicata) invece della sua copia
+>   hardcoded — così `MovementDecisionEngine` riconosce immediatamente l'intercettore/ricevitore
+>   reale come portatore (`isBallCarrier`). Nuovo controllo diagnostico `verificaCoerenzaPossesso()`
+>   (chiamato da `avanzaStatoCampo` ogni frame, mai una correzione silenziosa, un solo warning per
+>   tipo di problema, stesso pattern di `segnalaCoordinataInvalida`): verifica che l'owner esista in
+>   `campo.players` e che il suo team coincida con `ball.possessionTeam` e `fasePossessoAttuale`.
+>   Nuovi contatori derivati `m.recuperi`/`m.tiriTotali`/`m.tiriInPorta` (stessi punti già toccati in
+>   Fase 3, nessun evento fittizio); `matchViewerDebug().currentEvent` ora espone anche `target`.
+> - **Bug scoperto e corretto DURANTE la verifica dal vivo** (non nella diagnosi iniziale): il primo
+>   tentativo di far leggere a `MovementDecisionEngine` la posizione LIVE del portatore reale usava
+>   la posizione del giocatore stesso come base del pull verso porta — per l'away, mai fatto prima
+>   (era sempre uno slot statico immobile). Misurato in test dal vivo: il divario fra palla e
+>   portatore cresceva SENZA LIMITE (fino a 24m+ in 16s), perché il target del portatore dipendeva
+>   dalla sua stessa posizione dell'istante prima, pullata verso porta ad ogni frame senza alcun
+>   aggancio esterno che la fermasse — lo stesso rischio di "loop di retroazione" identificato e
+>   deliberatamente evitato per l'home fin dalla Fase 1 (dove la base del pull è sempre la posizione
+>   della PALLA, non del giocatore, perché la palla è vincolata da `avanzaPallaLibera` entro
+>   `DERIVA_PORTATORE_IDLE_M`=4m dal suo anchor). Corretto usando `posizionePortatorePalla()` (la
+>   posizione della palla, già vincolata) come base per ENTRAMBE le squadre, non solo per l'home come
+>   prima — stesso principio, ora davvero esteso all'away invece di restare sullo slot statico.
+>   Riverificato dopo il fix: il divario oscilla in modo limitato (0,5-4,5m), mai in crescita.
+> - **Cosa NON è stato toccato**: `calcChance*`/`MOMENTS`/`BEHAVIOR_MATRIX` (il dado resta l'unica
+>   autorità su successo/fallimento, verificato non intaccato); `avanzaPallaLibera` (il suo
+>   meccanismo di deriva bounded resta quello della Fase 1, non riscritto — solo la SUA fonte di
+>   "chi è il portatore" ora è sticky grazie al fix su `giocatorePortatoreCorrente`); i momenti
+>   narrativi scriptati (`rivelaMomentoCorrente`) continuano a usare il proxy generico quando
+>   assegnano il possesso per una NUOVA situazione scriptata — classificato esplicitamente come
+>   "proxy ancora necessario" (nessuna identità individuale è mai scritta in un MOMENTS, per design).
+> - **Test eseguiti**: `node --check` OK; bot 2 run (25/40 e 40/60), 0 errori/0 violazioni in
+>   entrambi (2863 partite nel run più ampio). Dal vivo in browser: **catena A→B→D→E→F** (5 passaggi
+>   reali in sequenza fra compagni home, nessun intervento manuale sul possesso oltre le funzioni
+>   reali) — ogni ricevitore resta owner dopo i tick, coerente ad ogni passo; **intercetto persistente**
+>   — un vero avversario resta owner per l'intera clip PIÙ 2000ms di idle successivi (prima di questo
+>   fix: sarebbe tornato al proxy al primo frame); **conduzione+passaggio reale C→D** (away→away, via
+>   un vero evento con clip, non solo un flag) — coerente; **intercetto inverso D→E** (away→home) —
+>   coerente; **intercetto→conduzione→tiro→gol→ricalcio** — l'intercettore resta owner durante la
+>   conduzione, il tiro (self) segna per davvero (`myGoals` incrementato, contatori tiri coerenti),
+>   il ricalcio riassegna correttamente al proxy dell'avversario (situazione nuova, nessun individuo
+>   noto — corretto, non un bug); **intervallo/cambio campo** — un intercettore reale resta owner
+>   fino al 25' incluso, e resta owner ANCHE dopo "Inizia il secondo tempo" (side-effect positivo
+>   della stickiness: prima sarebbe tornato al proxy anche lì); **continuità 60s** (un'unica chiamata
+>   sincrona, click automatici sulle scelte quando appaiono, nessun intervento manuale sul possesso):
+>   0 coordinate invalide, 0 teletrasporti sospetti (soglia 15m/frame), 0 warning diagnostici, un
+>   turnover reale catturato correttamente a metà run. Console pulita in tutti gli scenari (nessun
+>   errore JS).
+> - **Metriche**: `passTentati/passCompletati/passIntercettati` (Fase 3) più i nuovi
+>   `recuperi/tiriTotali/tiriInPorta`, tutti derivati dalle azioni reali, verificati coerenti nei
+>   test sopra. `parate` esplicitamente NON introdotto: il modello non distingue oggi un tiro parato
+>   da un tiro fuori bersaglio (stesso `outcome:'off_target'` per entrambi) — derivarlo richiederebbe
+>   inventare una distinzione che il motore non fa, dichiarato come limite invece di forzarlo.
+>   `possessi` (percentuale di possesso) non introdotto: richiederebbe integrare nel tempo, non è
+>   "facilmente derivabile" da un singolo punto di codice come gli altri contatori.
+> - **Problemi residui**: i momenti narrativi scriptati continuano, per design, a usare il proxy
+>   quando assegnano il possesso per una situazione che il motore non individualizza mai (nessun
+>   MOMENTS conosce un giocatore avversario specifico) — classificato esplicitamente come proxy
+>   ancora necessario, non un difetto residuo di questa fase; la squadra ospite non ha mai un'azione
+>   autonoma propria (nessun "C passa a D" spontaneo nel gioco reale: ogni passaggio/intercetto
+>   avviene solo come conseguenza di una TUA scelta) — i test di catena su più passaggi consecutivi
+>   dell'away sono stati eseguiti richiamando direttamente le stesse funzioni reali usate dal motore
+>   (nessuna nuova IA), non attraverso un'azione spontanea del gioco, che non esiste e non è stata
+>   costruita (vietato esplicitamente).
+
+> **Aggiornamento 2026-08-10 (Fase 3 — geometria reale di passaggio/intercetto/tiro).** Su richiesta
+> esplicita e molto dettagliata dell'utente (30 sezioni), con un fork architetturale reale segnalato
+> e chiarito PRIMA di scrivere codice via domanda esplicita: chi decide se un passaggio/tiro riesce?
+> L'utente ha confermato il dado esistente (`calcChance*`, attributi reali) come unica autorità — la
+> geometria diventa la CONSEGUENZA VISIVA di un esito già deciso, mai un secondo sistema di
+> probabilità. Vincolo "nessun nuovo motore" rispettato: solo estensioni bounded a funzioni esistenti.
+> - **Diagnosi**: un assist riuscito mandava la palla a una zona nominale fissa (`'box'`), non a un
+>   vero compagno disegnato in campo; un assist fallito non aveva animazione — evento generico
+>   `possession/lost`, il testo diceva "intercettato" ma visivamente nulla si muoveva, nessun
+>   avversario reale veniva mai scelto; un gol mirava sempre al centro fisso della porta, ignorando
+>   la posizione reale (già dinamica) del portiere avversario.
+> - **Modifiche** (tutte in `index REV2.html`): nuovi helper geometrici puri accanto a
+>   `giocatorePortatoreCorrente` — `distanzaPuntoSegmentoM` (distanza punto-segmento), `scegliRicevitoreReale`
+>   (compagno reale più vicino alla destinazione, POR e passatore esclusi), `trovaIntercettoreReale`
+>   (avversario reale più vicino alla LINEA origine→destinazione, POR escluso) — entrambi
+>   deterministici, nessun `Math.random`, stesso principio già richiesto per `MovementDecisionEngine`.
+>   `sincronizzaPossesso(nuovaFase, giocatoreEsplicito)` — nuovo secondo parametro opzionale per
+>   impostare owner su un giocatore specifico invece del proxy generico di reparto (ogni chiamata
+>   esistente, senza il parametro, resta identica). `interpretMatchEvent` — nuovo campo opzionale
+>   `evt.destinationXY` che scavalca la zona nominale quando il motore ha già una posizione reale.
+>   Nuova `miraPortaLontanoDalPortiere(faseTiro)` — un tiro a segno punta al lato OPPOSTO rispetto a
+>   dove si trova realmente il portiere avversario (`decidiPosizionePortiere`), bounded dentro lo
+>   stesso specchio di porta di `ZONES.goal_line`. `applyChoiceOutcome`: assist riuscito ora usa
+>   `scegliRicevitoreReale` come `destinationXY`; assist fallito (nuova `emettiPassaggioFallito`,
+>   richiamata dai due rami di fallimento) emette una VERA clip `pass_short`/`pass_long` con
+>   `outcome:'intercepted'` verso l'intercettore reale trovato da `trovaIntercettoreReale`, che
+>   diventa esplicitamente il nuovo portatore; tiro a segno usa `miraPortaLontanoDalPortiere`. Nuovi
+>   contatori derivati (mai eventi fittizi): `m.passTentati/passCompletati/passIntercettati`, esposti
+>   anche in `matchViewerDebug().metriche`.
+> - **Cosa NON è stato toccato**: `calcChance*`/`MOMENTS`/`BEHAVIOR_MATRIX`/`MovementDecisionEngine`
+>   (il dado resta l'unica autorità su successo/fallimento); `avanzaPallaLibera` — un tentativo di
+>   agganciare la palla 1:1 alla posizione del portatore è stato scartato in fase di analisi: il
+>   target del portatore 'home' dipende già dalla posizione della palla (`posizionePortatorePalla`
+>   in `posizioniConMarcatura`), quindi farla anche dipendere all'inverso avrebbe chiuso un loop di
+>   retroazione (portatore→palla→portatore→...) capace di far avanzare da soli portatore e palla
+>   fino in porta durante un'attesa lunga — esattamente il difetto che `avanzaPallaLibera` era già
+>   stato costruito per evitare (vedi aggiornamento Fase 1). Scartato per rischio, non per pigrizia.
+> - **Limite noto e dichiarato**: l'identità dell'intercettore reale resta valida solo per la durata
+>   della clip (~0,6-1,1s); a clip conclusa, la rete di sicurezza di `avanzaPallaLibera` (esistente,
+>   non toccata) riporta il possesso al proxy generico di reparto della squadra avversaria (sempre
+>   anonima per design, mai un secondo motore per i suoi 7 giocatori) — comportamento verificato,
+>   non un bug: la squadra avversaria non ha mai avuto una simulazione individuale continua.
+> - **Test eseguiti**: `node --check` OK; bot 2 run (25/40 e 40/60 carriere/settimane), 0 errori/0
+>   violazioni in entrambi (2810 partite nel run più ampio, in linea con la baseline). Dal vivo in
+>   browser (carriera forzata, partita forzata, `applyChoiceOutcome` chiamata direttamente con esito
+>   forzato per testare entrambi i rami): **assist riuscito** — destinazione geometrica reale (il
+>   centrocampista più vicino, dato che l'attaccante che passa è escluso in quanto passatore);
+>   **assist fallito** — evento `pass_short`/`outcome:'intercepted'` con un vero avversario (CEN
+>   reale) come nuovo owner, `sincronizzaPossesso` correttamente su `'away'`, contatori aggiornati
+>   (tentati/completati/intercettati); tick manuali della clip: la palla percorre davvero la
+>   traiettoria verso l'intercettore reale, owner resta su di lui per tutta la clip; **tiro** —
+>   portiere spostato manualmente sopra/sotto il centro, verificato che la mira si sposta sempre sul
+>   lato opposto, bounded dentro lo specchio di porta; tick fino a fine `goal_celebration` + ricalcio,
+>   nessun errore. Console pulita in tutti gli scenari.
+> - **Problemi residui**: nessuna vera decisione autonoma di conduzione/tiro per i 12 giocatori di
+>   movimento (resta un layer geometrico sopra gli esiti del dado, non un'IA che decide lei stessa le
+>   giocate — esplicitamente fuori perimetro anche in questo aggiornamento); l'intercettore reale
+>   "vince" solo il breve istante della clip, poi la squadra avversaria torna anonima (vedi sopra);
+>   nessuna modalità di debug visivo (linea di passaggio/bersaglio, sez.27 della richiesta, esplicitamente
+>   opzionale) — verificato solo via stato interno (`matchViewerDebug`), non via overlay a schermo;
+>   `recupero`/`possesso` falliti restano generici (nessuna geometria di intercetto): scelta
+>   deliberata, non sono passaggi (un contrasto perso o un controllo fallito non hanno una "linea" da
+>   intercettare, la geometria si applica solo a un vero passaggio, `out:'assist'`).
+
+> **Aggiornamento 2026-08-10 (Fase 2 — comportamento emergente: la squadra segue la palla, i
+> portieri si muovono, il portatore reagisce alla pressione).** Su richiesta esplicita dell'utente,
+> dopo audit dei sistemi esistenti (heatmap/`BEHAVIOR_MATRIX`/`MovementDecisionEngine`/marcatura,
+> nessuno riscritto). Vincolo rispettato: nessun nuovo AI/movement/tactical engine — 3 estensioni
+> puntuali, tutte bounded, sui sistemi già presenti.
+> - **Diagnosi**: HEATMAP/MATRICE/CONTESTO (marcatura, pressing, smarcamento) erano già presenti e
+>   funzionanti — non riscritti. Tre lacune concrete trovate: (1) il baricentro di reparto
+>   (`HEATMAP_CENTROIDI_RUOLO`) era un punto FISSO per ruolo/fase, mai modulato dalla posizione reale
+>   della palla — "palla a destra" e "palla a sinistra" producevano la stessa struttura; (2) il
+>   portatore avanzava verso porta con un pull fisso (`PULL_AVANZAMENTO_PORTATORE`), indifferente a
+>   un avversario che lo stesse già pressando; (3) i portieri, esclusi per design da heatmap/matrice
+>   (nessuna voce prevista per POR), restavano quindi COMPLETAMENTE fermi sul proprio slot per
+>   l'intera partita — mai un adattamento alla palla.
+> - **Modifiche** (tutte in `index REV2.html`): nuove costanti `CENTROIDE_BALL_SHIFT_X/Y` (0.18/0.28)
+>   in `MovementDecisionEngine.decide()` — il baricentro di reparto (`puntoHeatmap`) si sposta di una
+>   frazione bounded verso la posizione reale della palla, per entrambe le fasi (chi difende scorre
+>   anche lui quando cambia lato, non solo chi attacca); nuova `FATTORE_AVANZAMENTO_SOTTO_PRESSIONE`
+>   (0.35) in `posizioniConMarcatura()` — se un avversario di movimento è già entro
+>   `RAGGIO_PRESSING_M` (8m, soglia esistente riusata) dal portatore, l'avanzamento verso porta si
+>   riduce invece di restare un pull fisso; nuova `decidiPosizionePortiere()` — i portieri seguono
+>   lateralmente la palla (±0.12 normalizzato) e si staccano leggermente dalla linea quando la palla
+>   è lontana (±0.03), restando sempre in area — chiamata da `posizioniConMarcatura()` al posto del
+>   percorso `MovementDecisionEngine` (che per POR resta correttamente un no-op, non toccato). **Non
+>   toccati**: heatmap/matrice/marcatura/pressing/smarcamento esistenti, `AnimationLibrary`,
+>   `AnimationManager`, renderer, `sincronizzaPossesso`, orologio/intervallo/cambio campo.
+> - **Cosa NON è stato costruito, e perché**: decisione autonoma di passaggio/conduzione/tiro con
+>   ricevitore nominato e geometria di intercetto (punti 14-19 della richiesta) — il motore attuale
+>   non simula passaggi individuali fra giocatori nominati: gol/assist/recupero restano esiti di una
+>   TUA scelta a probabilità (il sistema MOMENTS/choice-card, cuore del gioco), non di un'IA che
+>   decide per 12 giocatori di movimento. Costruire una simulazione di passaggio continua con
+>   intercetti geometrici sarebbe stato, nella sostanza, un nuovo motore di simulazione — esplicitamente
+>   vietato dal vincolo 29 della richiesta stessa. Le tre estensioni sopra restano nel perimetro
+>   "arricchire il movimento esistente", non "decidere le giocate".
+> - **Test eseguiti**: `node --check` OK; bot 2 run (25/40 e 40/60), 0 errori/0 violazioni in
+>   entrambi. Dal vivo in browser: **palla lato opposto** — stessa profondità, y=0.15 vs y=0.85:
+>   tutta la struttura offensiva (non marcata) si sposta lateralmente in modo netto, i difensori
+>   IMPEGNATI in una marcatura restano ancorati al proprio riferimento (comportamento corretto:
+>   marcatura ha priorità sullo shift di zona); **pressione sul portatore** — stesso punto di
+>   partenza, nessun avversario vicino vs un difensore a 0,65m: avanzamento pieno (x 0.5→0.575) vs
+>   ridotto (x 0.5→0.526), coerente col fattore 0.35; **portiere** — 4 scenari (palla vicina/lontana
+>   dalla propria porta, palla sulle due fasce): il portiere resta sempre in area, si stacca dalla
+>   linea solo quando la palla è lontana, si sposta lateralmente entro ±0,12 mai oltre; **anti-ball-
+>   magnet** — 3s di gioco vivo, campionati i 14 giocatori: solo 2 entro 5m dalla palla (portatore +
+>   un marcatore), 9 oltre 15m, nessun "assembramento"; **partita completa simulata** (auto-clic su
+>   tutte le scelte/eventi, 3126 frame, 50 minuti simulati): 0 coordinate invalide su palla e
+>   giocatori in ogni frame, tutti e 6 gli intent tattici osservati (SUPPORT/UNMARK/DEPTH/MARK/
+>   PRESS/WIDTH), intervallo e cambio campo attraversati correttamente, partita conclusa 4-3. Zero
+>   errori console in tutti i test.
+> - **Metriche**: nessun sistema di raccolta statistiche (possessi/passaggi/intercetti/tackle)
+>   esiste nel motore attuale — non introdotto, perché richiederebbe modellare esplicitamente eventi
+>   che oggi non esistono (passaggi individuali, intercetti geometrici, vedi sopra). I soli dati
+>   osservabili restano quelli già esistenti (`myGoals`/`oppGoals`/`attempts`/`successes` in
+>   `state.matchTemp`, già usati per il voto di fine partita) e gli intent (`matchViewerDebug()`).
+> - **Problemi residui**: (1) come dichiarato sopra, non esiste una vera decisione di
+>   passaggio/conduzione/tiro con geometria — il "calcio" percepito nel Match Viewer resta un
+>   layer di movimento plausibile sopra un motore a scelte, non una simulazione di gioco autonoma;
+>   (2) le stesse due debolezze già segnalate in aggiornamenti precedenti restano: i turnover
+>   "normali" senza gol non hanno un segnale di intercetto/geometria dedicato (il possesso comunque
+>   si sincronizza correttamente, vedi aggiornamento precedente, ma non c'è un evento "intercetto"
+>   distinto da un generico turnover); il marcatore del portatore in fase away resta guidato dalla
+>   logica di marcatura esistente, non dal nuovo shift di zona quando è impegnato a marcare (per
+>   design, marcatura ha priorità — vedi test sopra).
+
+> **Aggiornamento 2026-08-10 (fix del possesso alla fonte + verifica di coerenza della simulazione).**
+> Su richiesta esplicita dell'utente, fase di controllo dopo l'introduzione dell'orologio continuo.
+> - **Diagnosi (bug prioritario)**: `applyChoiceOutcome()` non aggiornava MAI `fasePossessoAttuale`
+>   per un contrasto vinto (`out:'recupero'`, successo) — un turnover a NOSTRO favore restava
+>   invisibile al resto del sistema (marcatura/pressing continuavano a comportarsi come se l'avversario
+>   avesse ancora palla). Gli esiti negativi (palla persa) avevano lo stesso problema nella direzione
+>   opposta, tranne il caso "gol subito" (già gestito in un aggiornamento precedente). Causa: il
+>   possesso veniva dedotto SOLO dal campo narrativo del momento (`moment.possesso`, fissato alla
+>   rivelazione), mai aggiornato quando l'ESITO della scelta cambiava chi controllava davvero la palla.
+> - **Correzione, alla fonte (non nel renderer)**: nuova `sincronizzaPossesso(nuovaFase)` (vicino a
+>   `giocatorePortatoreCorrente`), UNICA funzione che scrive `fasePossessoAttuale`+`ball.owner`+
+>   `ball.possessionTeam` insieme — sostituiti tutti gli assegnamenti diretti sparsi nel codice
+>   (`rivelaMomentoCorrente`, `avviaSecondoTempo`, il ricalcio dopo un gol, `avanzaPallaLibera`) con
+>   chiamate a questa funzione: zero duplicazione, one source of truth come richiesto. In
+>   `applyChoiceOutcome()`, una riga nuova subito dopo la risoluzione della zona:
+>   `sincronizzaPossesso(success ? 'home' : 'away')` — regola unica per ogni tipo di scelta
+>   (gol/assist/recupero/possesso): successo = la palla resta a noi, fallimento = va all'avversario
+>   (per 'recupero' corrisponde esattamente a "vinto/perso il contrasto"). Il ramo "gol subito" (che
+>   rimette in gioco noi, non l'avversario) sovrascrive esplicitamente a `'home'` subito dopo, invariato
+>   nella logica.
+> - **Possesso — fonte unica di verità**: `ball.owner` (id del giocatore che la porta, dedotto con la
+>   stessa regola già usata per il rendering: il protagonista se il possesso è nostro, il centrocampista
+>   centrale avversario altrimenti — nessuna seconda regola) e `ball.possessionTeam` sono ora sempre
+>   coerenti con `fasePossessoAttuale` nello STESSO istante in cui cambia, non al frame successivo:
+>   verificato che `MovementDecisionEngine`/`posizioniConMarcatura` (che rileggono `fasePossessoAttuale`
+>   ogni volta che vengono chiamati, non modificati) reagiscono immediatamente, senza aspettare un
+>   altro evento.
+> - **Verifica dei 14 giocatori**: confermato con conteggio diretto a runtime — 14 totali (7+7), 2
+>   portieri (1 per squadra), 12 di movimento (6 per squadra), tutti con coordinate valide. Il "13"
+>   comparso in un report di una sessione precedente era testo di un commento storico pre-audit
+>   (`posizioniConMarcatura` prima del 2026-08-09 restituiva 13 posizioni + il protagonista da un
+>   percorso separato, causa C4 dell'audit, già risolta allora) riportato per errore nel riepilogo
+>   testuale di questa sessione — non un bug nel codice attuale, che è già unificato su tutti e 14
+>   dallo stesso `campo.players`. Nessuna modifica alla formazione necessaria.
+> - **File/funzioni modificati** (tutti in `index REV2.html`): nuova `sincronizzaPossesso()`;
+>   `applyChoiceOutcome` (nuova riga di sincronizzazione + il ramo gol-subito ora la usa);
+>   `rivelaMomentoCorrente`, `avviaSecondoTempo`, il followup `goal_celebration` in
+>   `AnimationManager.tick`, `avanzaPallaLibera` — tutti aggiornati per passare dalla stessa funzione
+>   invece di scrivere `fasePossessoAttuale`/`ball.owner`/`ball.possessionTeam` singolarmente. **Non
+>   toccati**: Match Engine/`MOMENTS`, heatmap, `BEHAVIOR_MATRIX`, `MovementDecisionEngine`,
+>   `posizioniConMarcatura`, `AnimationLibrary`, i 4 renderer, gating, formazione/`FORMAZIONE_TATTICA_7`,
+>   orologio continuo/intervallo/cambio campo (invariati, solo riusati).
+> - **Test eseguiti**: `node --check` OK; bot 2 run (25 carriere/40 settimane, 40 carriere/60
+>   settimane), 0 errori/0 violazioni in entrambi (~2900-3000 partite, baseline invariata). Dal vivo
+>   in browser: 14/2/12 giocatori confermati con conteggio diretto; 6 casi di turnover testati uno per
+>   uno (tackle vinto/perso, assist intercettato, tiro parato/fuori, possesso mantenuto, gol segnato) —
+>   possesso e owner sempre coerenti e immediati in ognuno; conseguenza tattica immediata verificata
+>   (protagonista passa da intent `DEPTH` a `MARK` nello stesso istante in cui perdiamo palla, un
+>   centrocampista avversario da `MARK` a `WIDTH`); transizione completa su 3 secondi di simulazione
+>   viva (costruzione→turnover→costruzione avversaria→recupero→ripartenza) — palla sempre valida, mai
+>   congelata, direzione di avanzamento coerente con la fase di possesso in ogni tratto; continuità
+>   pura su 60 secondi reali — 1819 posizioni distinte della palla, 0 coordinate invalide su palla e
+>   giocatori in nessuno dei 3750 frame; intervallo raggiunto naturalmente all'interno dello stesso
+>   test, gestito correttamente (aspetta la fine della scelta/animazione in corso, poi si ferma
+>   davvero). Zero errori console in tutti i test.
+> - **Problemi residui**: nessuno nuovo rispetto a quanto già segnalato nell'aggiornamento precedente
+>   (turnover "normale" — già coperto ora, vedi sopra — quindi quella voce è da considerarsi risolta).
+
+> **Aggiornamento 2026-08-10 (cambio di architettura — orologio di partita continuo, intervallo,
+> cambio campo).** Su richiesta esplicita dell'utente, dopo conferma via domanda diretta: il tempo
+> di gioco non deve più dipendere da quando il giocatore clicca una scelta.
+> - **Prima**: `m.minute` saltava di colpo dentro `nextMoment()`, chiamata SOLO al click di
+>   "Continua"; un tween puramente cosmetico del testo bloccava la rivelazione del momento successivo
+>   per tutta la sua durata. Il tempo, di fatto, avanzava solo in risposta a un click.
+> - **Ora**: `m.minute` avanza da solo, un frame alla volta, via `avanzaOrologioContinuo()` (dentro
+>   `avanzaStatoCampo`, quindi sempre attivo sulla schermata partita — durante la lettura di una
+>   scelta, l'esultanza, l'attesa), stesso ritmo di prima (1 minuto simulato = 1 secondo reale). I
+>   momenti/scelte non sono più "il clock": sono soglie (`m.prossimoMomentoMinuto`, ricalcolata in
+>   `resolveChoice()` appena una scelta si risolve, MENTRE il giocatore legge ancora l'esito) che
+>   l'orologio può superare da solo. `nextMoment()` (stesso nome, stessi 4 punti di chiamata) non
+>   salta più il minutaggio: dichiara "sono pronto per il prossimo momento" — se l'orologio ha già
+>   superato la soglia (probabile, dato che scorreva anche durante la lettura) rivela subito,
+>   altrimenti resta "in attesa" (`m.attesaProssimoMomento`) finché `provaRivelaMomento()` (chiamata
+>   ad ogni frame) non rileva il traguardo raggiunto.
+> - **Intervallo (2x25', non 45'/90' come nel testo originale della richiesta — regola reale del
+>   gioco, confermata con l'utente)**: al 25' l'orologio si ferma DAVVERO (`m.inIntervallo`, unica
+>   vera pausa della simulazione continua, esplicitamente richiesta) — bottone reale "Inizia il
+>   secondo tempo ▸" (stesso pattern del "Continua ▸" già esistente: elemento DOM con `onclick`
+>   reale, non stringa, quindi intercettato dal bot headless senza toccare `bot-helpers.js`).
+> - **Cambio campo**: `avviaSecondoTempo()` imposta `state.matchTemp.latoInvertito=true`, ricentra la
+>   palla, rimette in gioco `away` (chi non ha dato il calcio d'inizio del primo tempo, sempre
+>   `home` in questo motore). Trasformazione **centralizzata in un solo punto**: `CameraManager.
+>   toPixel()` specchia l'asse x (`x'=1-x`, l'asse della lunghezza campo — verificato: `home` tira
+>   verso x≈1) SOLO in fase di resa a schermo. Zone/heatmap/`BEHAVIOR_MATRIX`/`MovementDecisionEngine`/
+>   marcatura continuano a ragionare "in casa attacca verso x=1" per tutta la partita, primo e
+>   secondo tempo — zero formule toccate, zero rischio per quei sistemi già verificati: si specchia
+>   solo ciò che si vede, non la simulazione sottostante (scelta esplicita per rispettare il vincolo
+>   "non duplicare la logica di inversione nei renderer" restando nel perimetro consentito).
+> - **3 bug trovati e corretti durante la verifica** (nessuno visibile finché non si è testato un
+>   ciclo di gioco reale, non solo la sintassi):
+>   1. Momenti esauriti prima del cancello duro (es. un subentro dalla panchina con solo 2 momenti):
+>      il codice si rimetteva "in attesa" di un ticker che in headless non esiste → bot bloccato per
+>      sempre. Fix: `provaRivelaMomento()` forza il minuto alla soglia anche in questo ramo, in
+>      headless.
+>   2. `m.prossimoMomentoMinuto` non veniva mai ricalcolato dopo la prima rivelazione (dimenticato in
+>      `resolveChoice()`): il target restava quello del momento precedente, già superato, facendo
+>      rivelare ogni momento successivo istantaneamente al click invece che quando l'orologio lo
+>      raggiunge davvero. Fix: ricalcolato in `resolveChoice()`.
+>   3. `avviaIntervallo()` non impostava mai `primoTempoFinito`, quindi `provaRivelaMomento()` lo
+>      richiamava ad ogni `nextMoment()` successivo → loop infinito fra "fine primo tempo" e il
+>      bottone che avrebbe dovuto superarlo (osservato nel bot: 400 passi esauriti, "STUCK"). Fix:
+>      introdotto `m.inIntervallo` (pausa vera) distinto da `m.primoTempoFinito` (secondo tempo
+>      davvero iniziato, impostato solo in `avviaSecondoTempo()`) — senza questa distinzione il
+>      secondo bug si presentava capovolto: l'orologio ripartiva verso il 50' PRIMA che il giocatore
+>      cliccasse il bottone (misurato: già a 31' al momento del click, invece di restare fermo a 25').
+> - **File/funzioni modificati** (tutti in `index REV2.html`): `CameraManager.toPixel` (specchio
+>   laterale), `creaStatoCampo`/`beginMatch`/`beginMatchAsSub` (nuovi campi su `matchTemp`),
+>   `muoviPallaEvento` (invariato, già presente), rimossi `animaOrologioPartita`/
+>   `orologioPartitaAttivo`, nuovi `nextMoment` (riscritta), `provaRivelaMomento`,
+>   `avanzaOrologioContinuo`, `rivelaMomentoCorrente` (corpo invariato, scorporato dal tween),
+>   `avviaIntervallo`, `avviaSecondoTempo`, `resolveChoice` (nuovo calcolo del target),
+>   `avanzaStatoCampo` (chiama il nuovo ticker), `frame()` in `avviaCanvasPartita` (evita un giro di
+>   rAF residuo se `finishMatch()` scatta sincrono dall'interno del loop). **Non toccati**: Match
+>   Engine/`MOMENTS`, heatmap, `BEHAVIOR_MATRIX`, `MovementDecisionEngine`, `posizioniConMarcatura`,
+>   `AnimationLibrary`, `FieldRenderer`/`PlayerRenderer`/`BallRenderer`, gating/`whenDrained`, zone.
+> - **Test eseguiti**: `node --check` OK; bot 2 run (25 carriere/40 settimane e 40 carriere/60
+>   settimane), 0 errori/0 violazioni in entrambi, ~2900-3000 partite giocate (in linea con la
+>   baseline storica, prova che i 3 bug sopra sono stati risolti e non solo mascherati). Dal vivo in
+>   browser: orologio continuo verificato (14.4s reali → 14.52' simulati); scelta letta per 4.8s
+>   reali senza cliccare → il minuto avanza comunque, il momento resta lì; momento successivo rivelato
+>   automaticamente al raggiungimento della soglia, MAI al click; intervallo — orologio fermo
+>   ESATTAMENTE (25.200 immutato per 4.8s reali di attesa senza click); cambio campo — verificato
+>   `CameraManager.toPixel({x:0.2,y:0.5})`: pixel 94 senza specchio → 346 con specchio (simmetrico
+>   rispetto al canvas, 440 di larghezza); calcio d'inizio 2° tempo — palla a centrocampo, possesso
+>   `away`; fine gara — `finishMatch()` scatta esattamente al 50', schermata risultato mostrata dopo
+>   il consueto `setTimeout(200)` invariato. Zero errori console in tutti i test.
+> - **Problemi residui**: (1) come nell'aggiornamento precedente, i turnover "normali" (non un gol
+>   subito) non invertono il possesso — preesistente, non introdotto qui; (2) la heatmap/matrice
+>   comportamentale non sono state duplicate per il lato invertito perché non serve: ragionano ancora
+>   "in casa attacca x=1" e restano corrette anche nel secondo tempo, essendo lo specchio solo
+>   visivo — nessun problema noto qui, annotato solo per chiarezza di design; (3) un vero "match
+>   phase" a 13 stati nominali (KICKOFF/BUILDUP/ATTACK/...) e una macchina a stati della palla a 9
+>   valori (CONTROLLED/DRIBBLING/...), entrambi presenti nel testo della richiesta originaria, non
+>   sono stati introdotti come costrutti espliciti nel codice: il comportamento che descrivono
+>   (costruzione continua, conduzione, palla libera, ecc.) è già coperto dai sistemi esistenti
+>   (`avanzaPallaLibera`, heatmap, `MovementDecisionEngine`) senza bisogno di nominarli come enum a
+>   sé — introdurli sarebbe stato un secondo sistema di stato parallelo, esplicitamente vietato dal
+>   vincolo 23 della richiesta.
+
+> **Aggiornamento 2026-08-10 (Match Viewer 2D — simulazione continua fra un evento e l'altro).**
+> Richiesta estesa dell'utente: il viewer alternava "evento → animazione → campo statico → evento",
+> non una partita viva. Vincolo esplicito: nessun secondo match engine, riuso di quanto esiste.
+>
+> **Diagnosi (audit prima di toccare codice).** Il motore produce il tempo a "momenti" discreti
+> (`MOMENTS`, ~8 per partita, `m.minute` salta di 9-13' a ogni momento) rivelati dopo un tween del
+> minutaggio (`animaOrologioPartita`, ~1s reale per minuto simulato: 9-13s reali fra un momento e il
+> successivo). Lo stato persistente del campo (`state.matchTemp.campo`, dall'audit del 2026-08-09)
+> già dava continuità ai **13 giocatori di formazione**: `sincronizzaTargetCampo`/`avanzaGiocatoriCampo`
+> (heatmap+`BEHAVIOR_MATRIX`+`MovementDecisionEngine`) e `offsetRespiroTattico` (respiro deterministico)
+> girano OGNI FRAME via `avanzaStatoCampo`, indipendentemente da `currentEvent` — quella parte
+> dell'audit era già a posto, non toccata. Il vero buco era **solo la palla**: fuori da una clip
+> d'animazione, `campo.ball` non veniva mai aggiornato — restava congelata sull'ultima posizione
+> (kickoff, zona del momento, fine dell'ultima clip) per tutta l'attesa (il tween del minutaggio, la
+> lettura della scelta, l'eventuale evento ◆ MATCH_EVENTS) per poi TELEPORTARE alla zona del momento
+> successivo. Aggravanti: 3 dei 4 esiti di scelta per momento (`possesso`/`recupero`-vinto/`tackle`)
+> e diversi tipi di evento (`possession`,`foul`,`card`,`injury`,`turnover` non-gol) non hanno mai
+> avuto una clip in `eventClipMap` — quelle risoluzioni non muovevano la palla di un pixel. Il render
+> loop (`renderMatchCanvas`) disegna già incondizionatamente campo/giocatori/palla ad ogni frame,
+> quindi NON dipendeva da `currentEvent` — anche questo già a posto.
+>
+> **Soluzione.** Nuovo passo `avanzaPallaLibera()` in `avanzaStatoCampo()`, attivo SOLO quando nessuna
+> clip è in corso (stessa guardia di `sincronizzaPallaCampo`, mai in contemporanea): la palla si
+> muove verso un punto vicino alla sua ultima posizione **autorevole** (`campo.ball.anchor`, nuovo
+> campo aggiornato da `muoviPallaEvento` a ogni kickoff/nuovo momento/fine clip/ricalcio dopo gol) —
+> un piccolo avanzamento verso la porta della fase in corso (**capped in metri, non in percentuale
+> della distanza**: `DERIVA_PORTATORE_IDLE_M=4`, altrimenti un'attesa lunga farebbe percorrere tutto
+> il campo da sola) più lo stesso respiro deterministico già usato per i 13 giocatori
+> (`offsetRespiroTattico`, seed dedicato `'ball_libera'`), a una velocità di conduzione più realistica
+> di quella di riposizionamento (`VELOCITA_DRIBBLING_MPS=3.5` invece dei 10 m/s dei giocatori senza
+> palla). Nessun ciclo che si autoalimenta: il bersaglio deriva dall'ANCORA fissa, mai dalla posizione
+> corrente della palla, quindi non c'è rischio di deriva illimitata durante attese lunghe. `campo.ball`
+> guadagna anche `owner` (id del giocatore che la "porta": il protagonista se in possesso home, il
+> centrocampista centrale avversario se in possesso away — stessa regola già usata da
+> `posizioniConMarcatura()` per il rendering del portatore, duplicata in 2 righe in
+> `giocatorePortatoreCorrente()` invece di refactorare quella funzione già verificata) e
+> `possessionTeam` (rispecchia `state.matchTemp.fasePossessoAttuale`). Per rendere corretta anche la
+> DIREZIONE del possesso dopo un gol, il ricalcio (già introdotto in un aggiornamento precedente) ora
+> imposta anche `fasePossessoAttuale` alla squadra che rimette in gioco (`away` dopo un nostro gol,
+> `home` dopo averlo subito) — senza questo la squadra appena battuta sarebbe sembrata ripartire
+> subito in avanti, direzione sbagliata.
+>
+> **Eventi collegati (nessuno nuovo, tutti già nel motore).** `shot`/`pass_short`/`pass_long`/`tackle`
+> restano guidati dalla propria clip mentre animano (invariato); TUTTI gli altri tipi già emessi dal
+> motore (`possession`, `turnover`, `foul`, `card`, `injury`, `whistle`) ora, semplicemente non
+> avendo una clip, lasciano la palla nella modalità di vita continua invece che ferma — nessuna nuova
+> categoria di evento creata, nessun MATCH_EVENTS toccato (TACTICAL/PHYSICAL/PROVINCIAL_LIFE restano
+> puramente narrativi, coerente col punto 9 della richiesta: "possono rimanere non animati, ma non
+> devono rompere la continuità" — ora infatti non la rompono più).
+>
+> **Stato continuo.** Palla: `campo.ball` (`x,y,visible,moving,anchor,owner,possessionTeam`), un solo
+> oggetto, nessuna struttura parallela. Giocatori: `campo.players[]` (invariato, già continuo).
+> Possesso: `state.matchTemp.fasePossessoAttuale` (invariato come sorgente, ora anche riflesso su
+> `campo.ball.possessionTeam` e corretto dopo un gol). Target: `pl.targetX/Y` (invariato). Fase di
+> gioco: `state.matchTemp.zonaGolAttuale`/`fasePossessoAttuale` (invariati). `matchViewerDebug()`
+> esteso con `ball.owner`, `ball.possessionTeam`, `ball.anchor`, `matchMinute`, `fasePossessoAttuale`
+> (diagnostica, punto 15 della richiesta).
+>
+> **File/funzioni modificati** (tutti in `index REV2.html`): `creaStatoCampo` (nuovi campi su
+> `campo.ball`), `muoviPallaEvento` (aggiorna anche `anchor`), nuove `giocatorePortatoreCorrente()` e
+> `avanzaPallaLibera()`, `avanzaStatoCampo` (chiama la nuova funzione), `AnimationManager.tick` (il
+> followup `goal_celebration` ora imposta anche `fasePossessoAttuale`), `applyChoiceOutcome` (stesso,
+> ramo gol subito), `matchViewerDebug`. NON toccati (verificato, come richiesto dal vincolo 18):
+> Match Engine/`MOMENTS`, heatmap, `BEHAVIOR_MATRIX`, `MovementDecisionEngine`, `posizioniConMarcatura`,
+> `AnimationLibrary`, `CameraManager`/`FieldRenderer`/`PlayerRenderer`/`BallRenderer`, gating/`whenDrained`.
+>
+> **Test eseguiti.** `node --check` OK; bot 25 carriere/40 settimane, 0 errori/0 violazioni (invariato
+> da prima di questo intervento — nessuna funzione toccata è raggiungibile dal bot headless, tutte
+> dietro il guard `requestAnimationFrame`). Dal vivo in browser: **Scenario A** (15s continui senza
+> alcun evento) — 436 posizioni distinte della palla campionate (mai statica), sempre dentro
+> `[0,1]`, owner/possessionTeam coerenti, giocatore-portatore sempre nelle vicinanze. **Scenario B**
+> (costruzione DC→MC→ME con 2 passaggi e 3 fasi idle intermedie) — la palla si muove in OGNI fase
+> idle, non solo durante le clip. **Scenario C** (intercetto/tackle perso senza gol) — nessun
+> congelamento dopo la clip `tackle`. **Scenario D** (gol nostro e gol subito, verificati entrambi) —
+> dopo il ricalcio la palla deriva nella direzione corretta (verso la porta avversaria dopo un nostro
+> gol, verso la nostra dopo averlo subito), confermando il flip di `fasePossessoAttuale`. Test dei
+> limiti: ancora forzata in un angolo estremo del campo (0.98, 0.02) — 600 frame, 0 coordinate
+> invalide, la palla converge dentro i limiti di `limitiGiocatore` senza mai uscire visivamente dal
+> rettangolo di gioco. Zero errori console in tutti i test.
+>
+> **Problemi residui.** (1) Un turnover "normale" (palla persa senza gol subito, l'80% dei falli ad
+> alto rischio) non inverte `fasePossessoAttuale`: il motore non modella esplicitamente un cambio di
+> possesso per quel caso (mai stato tracciato prima di questo intervento), quindi la palla continua a
+> "respirare" nella direzione di chi l'aveva prima di perderla, finché il prossimo momento non la
+> corregge — non introdotto da questo intervento, preesistente, segnalato invece di risolto
+> silenziosamente (avrebbe richiesto toccare `applyChoiceOutcome` oltre il perimetro del gol, non
+> esplicitamente richiesto). (2) In fase di possesso `away`, il marcatore del portatore disegnato da
+> `posizioniConMarcatura()` resta guidato dalla logica esistente (heatmap/marcatura, non toccata per
+> vincolo) e non insegue pixel-per-pixel la nuova deriva della palla come fa invece il protagonista in
+> fase `home` (che la legge direttamente da `campo.ball`): entrambi restano vivi/coerenti ma non
+> perfettamente incollati in quel caso — accettato per non toccare un sistema esistente già verificato
+> fuori dal perimetro di questo intervento.
+
+> **Aggiornamento 2026-08-10 (Match Viewer 2D — la palla torna al centrocampo dopo ogni gol).** Su
+> richiesta esplicita dell'utente ("l'inizio partita e ogni volta che viene segnato un gol la palla
+> va a centrocampo, uguale all'inizio secondo tempo").
+> - **Gol segnato con tiro diretto** (`choice.out==='goal'`): nessuna modifica al trigger, la clip
+>   `shot` aveva già `variants:{goal:{followup:'goal_celebration'}}`. Il ricentraggio è agganciato
+>   in `AnimationManager.tick()`: quando si accoda il followup `goal_celebration`, gli viene passato
+>   un `onDone` che chiama `muoviPallaEvento({x:0.5,y:0.5}, 'ricalcio dopo gol')` — scatta quando
+>   l'esultanza finisce davvero (1200ms), non quando parte (il gating/`whenDrained` non aspetta
+>   l'esultanza, resta invariato). Un solo punto, vale per qualunque clip futura che dichiari lo
+>   stesso followup.
+> - **Gol segnato su assist** (`choice.out==='assist'`, clip `pass_short`/`pass_long`): PRIMA non
+>   accodava mai `goal_celebration` (le due clip non avevano `variantField`/`variants`, a differenza
+>   di `shot`) — un assist vincente non faceva esultanza né ricentraggio. Aggiunto lo stesso
+>   `variantField:'outcome'`/`variants:{goal:{followup:'goal_celebration'}}` anche a queste due clip:
+>   ora un assist-gol si comporta esattamente come un tiro-gol.
+> - **Gol subito** (`turnover`, ramo `Math.random()<0.4` in `applyChoiceOutcome`): questo tipo di
+>   evento non ha mai avuto una clip (`eventClipMap` non lo mappa), quindi nessuna animazione da
+>   aspettare — il ricentraggio è diretto, subito dopo `emitMatchEvent`, non tramite il followup.
+> - **Verificato**: `node --check` OK; bot 25 carriere/40 settimane, 0 errori/0 violazioni; dal vivo
+>   in browser — tiro-gol: palla ferma sulla linea di porta per tutta l'esultanza (0.995,0.5), poi
+>   scatto esatto a (0.5,0.5) al termine dei 2000ms totali (800 tiro + 1200 esultanza), non prima;
+>   assist-gol: stesso comportamento sui 1800ms totali (600 passaggio + 1200 esultanza); gol subito
+>   (forzato il ramo con `Math.random` mockato): palla a (0.5,0.5) immediatamente, nessuna clip di
+>   mezzo. Zero errori console in tutti i test.
+> - **Non implementato**: un vero "secondo tempo" (intervallo, kickoff separato a metà gara) non
+>   esiste nel motore (la partita scorre come un unico flusso 0-50', 2x25' solo narrativo) — l'utente
+>   lo citava come termine di paragone per il comportamento della palla dopo un gol, non è stata
+>   richiesta esplicitamente una meccanica di intervallo a sé; da riconsiderare se servirà davvero.
+
+> **Aggiornamento 2026-08-10 (Match Viewer 2D — spezzata di vettori per la palla, conduzione dietro
+> la palla, primo paint sincrono).** Su richiesta esplicita dell'utente.
+> - **Traiettoria della palla → spezzata di vettori**: le clip `pass_short`/`pass_long`/`shot`
+>   (`AnimationLibrary.clips`) non calcolano più la posizione con una formula parametrica continua
+>   (lerp/seno campionati a `t`) ma con una vera spezzata — `costruisciSpezzata(origin, dest, arcoM)`,
+>   nuova, vicino a `distanzaMetriTraPunti`: un vettore ogni `PASSO_VETTORE_M=1,5` metri REALI
+>   (valore fornito esplicitamente dall'utente) lungo retta+arco laterale in metri (stesso profilo
+>   `sin(π·t)` già usato dal cross, ora espresso in metri invece che in unità normalizzate).
+>   `puntoSuSpezzata(spezzata, distanzaM)` interpola fra i due vettori più vicini a una distanza
+>   reale percorsa. Ogni clip calcola `distanza = distanzaTotaleM · easing(t)` (stesso easing di
+>   prima per ciascuna clip) e legge la spezzata a quella distanza.
+> - **Portatore in conduzione dietro la palla**: nuova costante `DISTANZA_CONDUZIONE_M` (= un passo
+>   di vettore, 1,5m — "poco indietro" richiesto dall'utente senza un valore esatto, scelto da me
+>   coerente con la risoluzione della spezzata). Le tre clip restituiscono ora anche `playerPos =
+>   puntoSuSpezzata(spezzata, distanza - DISTANZA_CONDUZIONE_M)`: STESSA spezzata della palla, letta
+>   più indietro — non un secondo calcolo indipendente, come richiesto ("vettori equivalenti ma
+>   semplicemente traslati poco indietro"). `shot` mantiene in aggiunta il limite di sicurezza
+>   preesistente (il tiratore non entra in porta), ora espresso come cap sulla distanza reale
+>   (`min(distanza-1.5, distanzaTotale·0.85)`) invece che sulla frazione di `t`.
+> - **Bug "il pallone non compare all'inizio della partita ma col primo evento"**: lo stato
+>   (`campo.ball`) risultava già corretto (visibile, centrocampo) fin da `beginMatch()` — verificato
+>   che un render manuale a quel punto disegna correttamente il pallone. La causa più probabile è una
+>   corsa fra il primo `requestAnimationFrame` del canvas e il toggle di visibilità di `screen-match`
+>   (comune su alcuni browser mobile: il primo paint di un canvas appena reso visibile può restare un
+>   frame indietro). Fix difensivo in `avviaCanvasPartita()`: un `renderMatchCanvas()` SINCRONO subito
+>   dopo aver inizializzato palla/entità, prima ancora di programmare il loop rAF — il canvas ha già i
+>   pixel giusti nell'istante in cui lo schermo diventa visibile, senza dipendere dalla vittoria di
+>   quella corsa.
+> - **Verificato**: `node --check` OK; bot 25 carriere/40 settimane, 0 errori/0 violazioni; dal vivo in
+>   browser — `costruisciSpezzata` produce passo esattamente 1,5m su tratto retto (39m → 26 segmenti)
+>   e ~1,5m su tratto con arco (min 1,42/max 1,64/medio 1,52 su 48m); portatore esattamente a 1,5m
+>   dalla palla lungo la spezzata; tiro reale via `emitMatchEvent`, 40 frame campionati: il portatore
+>   resta fermo con la palla finché questa non ha percorso 1,5m (clamp a 0, non un secondo calcolo
+>   indipendente), poi lo segue a 1,5m costanti, poi si ferma prima della porta (cap 85%) mentre la
+>   palla prosegue fino alla linea — nessuna coordinata invalida in nessun campione; canvas con pixel
+>   del pallone già presenti subito dopo `beginMatch()`, senza bisogno di alcun frame di rAF
+>   successivo; zero errori console.
+> - Non toccati: motore/eventi, `tackle`/`save`/`goal_celebration` (nessun movimento), gating,
+>   heatmap/`MovementDecisionEngine`/marcatura, bot headless.
+
 > **Aggiornamento 2026-08-09 (Match Viewer 2D — audit completo, stato persistente del campo).**
 > Audit dell'intera pipeline motore→stato→eventi→animazioni→rendering, poi correzione delle cause.
 > **Cause trovate (audit, prima di toccare il codice):** C1 nessuno stato persistente dei giocatori
@@ -2786,18 +3519,25 @@ il numero di settimane richiesto (`--weeks`).
   squadra.
 - I 4 momenti chiave "core" di un giocatore di movimento (`MOMENTS`) restano fissi (sempre gli stessi 4,
   non pescati da un pool più ampio come ora fa il Portiere con `GK_MOMENTS_POOL`) — possibile
-  miglioramento futuro simmetrico. I nuovi 12 eventi trade-off aggiungono varietà come intermezzi, ma non
-  sostituiscono questo pool fisso.
-- Solo 12 dei ~22 eventi di movimento originariamente proposti sono stati implementati (categorie
-  TACTICAL/PHYSICAL/PROVINCIAL_LIFE ancora mancanti) — architettura pronta per estendere senza toccare il
-  motore.
+  miglioramento futuro simmetrico (proposto nella roadmap 2026-08-07, non ancora avviato). I 12 eventi
+  trade-off + i 40 per ruolo + i 10 di colore aggiungono varietà come intermezzi, ma non sostituiscono
+  questo pool fisso di 4.
+- Rischio panchina per skill (`rischioPanchinaPerSkill`) confronta solo l'overall pesato con gli altri
+  giocatori reali del proprio ruolo — non tiene conto di anzianità, rapporto col mister o andamento
+  recente (stesso TODO della roadmap 2026-08-07, non ancora avviato).
+- Match Viewer 2D: nessuna vera decisione di passaggio/conduzione/tiro con ricevitore nominato e
+  geometria di intercetto — il "calcio" visibile nel viewer resta un layer di movimento plausibile
+  (heatmap + matrice comportamentale + marcatura/pressing, reattivo alla palla e al possesso) sopra il
+  motore a scelte esistente, non una simulazione autonoma di 22 giocatori. Costruirla richiederebbe un
+  secondo motore di simulazione, esplicitamente escluso su richiesta dell'utente (vedi aggiornamento
+  2026-08-10 "Fase 2"). Nessun sistema di metriche di partita (possessi/passaggi/intercetti) per lo
+  stesso motivo: richiederebbe eventi che il motore non modella.
 
 ---
-*Nota di processo: l'utente ha chiesto di aggiornare questo file ogni 5 suoi messaggi. Questo aggiornamento
-(2026-08-04) è stato richiesto esplicitamente ("aggiorna riepilogo.md"), dopo una sessione che ha
-introdotto: l'integrazione del database territoriale contemporaneo bresciano (95 elementi, 7 eventi-template
-generici su ruoli/rarità/modalità), il fix di cartellino rosso/fischio arbitrale (ora conseguenza diretta di
-un contrasto fisico fallito, non più casuali), il minuto d'ingresso dalla panchina variabile (20'-40'), il
-gruppo sociale dello spogliatoio che può cambiare nel tempo in base a scelte ripetute, e l'espansione della
-modalità Telefono in 3 direzioni (rispondere agli eventi di agente/famiglia da lì, filtri per categoria,
-chat di gruppo); il conteggio del ciclo riparte da qui.*
+*Nota di processo: l'utente ha chiesto di aggiornare questo file ogni 5 suoi messaggi. Aggiornamento
+più recente: 2026-08-10, sessione dedicata quasi interamente al Match Viewer 2D — collegamento della
+simulazione continua (orologio indipendente dagli eventi, palla sempre attiva, intervallo/cambio campo
+a 25'), fix del possesso alla fonte (`sincronizzaPossesso`), e "Fase 2" di comportamento emergente
+(baricentro di reparto che segue la palla, portatore che rallenta sotto pressione, portieri che si
+muovono) — vedi i relativi blocchi "Aggiornamento 2026-08-10" in cima al documento per il dettaglio
+completo di ciascuno. Il conteggio del ciclo dei 5 messaggi riparte da qui.*
