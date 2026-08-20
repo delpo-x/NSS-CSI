@@ -1,0 +1,4128 @@
+# Carriera CSI — Riepilogo progetto
+
+> **Aggiornamento 2026-08-17 (Fasi 12-50 — motore di partita: FREE, palle inattive, 1v1,
+> conduzione del portatore).** Sessione lunga e incrementale, interamente in stile audit-prima-di-
+> modificare: ogni fase con test reali su codice reale (non solo letture), regression su partite
+> complete, hash del file confrontato prima/dopo quando richiesto. Nota di numerazione: come per
+> l'addendum Fasi 8-11 sotto, questa numerazione collide con quella già in uso in questo documento
+> per altri sistemi (es. "Fase 8" investimenti) — consigliato rinominare (es. "Fase M12-M50") prima
+> di una riscrittura definitiva.
+>
+> **Blocco A — FREE, movimento, portiere, distribuzione azioni (Fasi 12-19).**
+> - **Fase 12**: corretta la competizione autonoma NPC↔self — un `return` totale in
+>   `valutaAzioniAutonome()` impediva anche la raccolta dei pressori avversari quando self ha
+>   palla. 15/19 cambi SELF→NPC confermati su 5 partite.
+> - **Fase 13**: audit "teletrasporti" della palla — nessun vero teletrasporto, tutti i 26 eventi
+>   >10m/frame riconducibili a `muoviPallaEvento()` intenzionale.
+> - **Fase 14**: collegate le 7 formule GK esistenti ma mai richiamate al ramo TIRO-fallito;
+>   trovato e corretto un bug in `calcChancePassaggioPortiere` (pressione hardcoded su self/away).
+> - **Fase 15**: FREE bloccata vicino porta — `decidiPosizionePortiere()` non distingueva la
+>   tolleranza durante FREE; FREE vicino porta non recuperati: 0/5 (era 4/5).
+> - **Fase 16**: FREE bloccata in zona centrale — solo 2 giocatori ricevevano mai un target verso
+>   la palla durante FREE; nuovo calcolo `recuperatoreLibero` (il non-POR più vicino, entrambe le
+>   squadre). Warning FREE: 0/5 (era 1/5).
+> - **Fase 17**: hardening del sistema FREE, nessun bug trovato, nessuna modifica.
+> - **Fase 18**: trovato e corretto un falso positivo diagnostico in `verificaCoerenzaCampo()` mai
+>   allineato al raggio di inseguimento della Fase 15. Warning: 0/5 (era 10).
+> - **Fase 19**: ping-pong dei passaggi riprodotto e classificato come comportamento emergente
+>   legittimo (100/100 volte scelta l'alternativa migliore quando disponibile) — nessuna modifica.
+>
+> **Blocco B — Audit statistico globale e correzioni (Fasi 20-26).**
+> - **Fase 20**: audit su 20 partite, nessuna modifica. Tre anomalie candidate: possesso
+>   Home 66,8%/Away 29,3%; conversione tiri 80,3%; bug riproducibile — 7,5% delle squadre (21/280)
+>   senza portiere reale in rosa.
+> - **Fase 21**: fix minimo in `attributiRealiGiocatore()` per il bug del portiere senza rosa
+>   (istanza tattica genera attributi da portiere, ruolo database mai alterato). 21/21 squadre
+>   verificate OK. Isolato che il possesso squilibrato è dovuto alla durata del possesso di SELF,
+>   non a un'asimmetria Home/Away strutturale.
+> - **Fase 22**: diagnosi mirata — portiere fuori area è isteresi diagnostica (stato temporale);
+>   tiro quantizzato isolato parzialmente in `zonaPiuVicinaAttacco()`.
+> - **Fase 23-24**: dimostrato che la "contaminazione fra tiratori" osservata era interamente un
+>   artefatto dell'esecuzione di più partite nello stesso processo Node — mai un bug del motore.
+>   Creato il modello **una partita = un processo** (`child_process.spawnSync`), adottato in tutte
+>   le fasi successive. 10/10 partite isolate: 0 contaminazioni.
+> - **Fase 25**: audit statistico definitivo del tiro con harness multi-processo — 340 tiri
+>   validati su 90 partite: chance continua 29-96%, conversione 78,2% vs teorica 79,2% — formula
+>   sana, il finding "quantizzato" delle Fasi 21-22 era interamente un artefatto dell'harness.
+> - **Fase 26**: hardening diagnostico definitivo — distinzione esplicita
+>   `REAL_PLAYER`/`SYNTHETIC_FALLBACK`/`INVALID`. Causa di fondo: 12/280 squadre con rose reali
+>   incomplete, fallback sintetico già esistente e voluto.
+>
+> **Blocco C — Palle inattive: rimessa, rinvio, corner (Fasi 27-35).**
+> - **Fase 27**: mappa tecnica (solo audit) — nessuna meccanica di uscita dal campo esistente;
+>   `calcChancePunizione`/`calcChanceCalcioAngolo`/`calcChanceUnoControUno` tutte dormienti.
+> - **Fase 28**: nuovo `ball.state` ('in_play'/'dead_ball'), `lastTouchPlayerId`, rilevamento
+>   uscita, rimessa laterale completa e deterministica. Un bug reale corretto
+>   (`avanzaStatoPallaLibera()` senza guard proprio). 9/9 test, 10 partite senza regressioni.
+> - **Fase 29**: rinvio dal fondo (`ball.deadBallType`); corner riconosciuto ma non eseguito
+>   (fuori scope dichiarato). 7/7 test.
+> - **Fase 30**: corner implementato (`eseguiCalcioAngolo`), `calcChanceCalcioAngolo` collegata
+>   realmente. Limite noto dichiarato: overall difensore/portiere hardcoded su `state.matchTemp.opp`,
+>   corner away impreciso.
+> - **Fase 31**: corretta la simmetria del corner — nuovo parametro `squadraDifendente` +
+>   `overallMiglioreRuoloSquadra()` (lookup team-aware), formula matematica invariata.
+> - **Fase 32**: stessa correzione applicata a `condizioneUnoControUno()`/`calcChanceUnoControUno()`
+>   (dormienti), parametro `squadraAttaccante` con default per compatibilità totale.
+> - **Fase 33**: validazione rigorosa e deterministica del fix 1v1 — nessuna modifica al codice, i
+>   test precedenti erano metodologicamente deboli, non la correzione.
+> - **Fase 34**: dimostrato che `zonaCoordinate()` è correttamente relativa alla porta d'attacco
+>   per design, non un bug — isolato che il vero problema era solo nel chiamante
+>   `condizioneUnoControUno()`.
+> - **Fase 35**: fix geometrico definitivo dell'1v1 — conversione esplicita relativo→fisico dentro
+>   la sola `condizioneUnoControUno()`, simmetria HOME/AWAY dimostrata su geometrie reali.
+>
+> **Blocco D — Trigger 1v1 e movimento del portatore (Fasi 36-50).**
+> - **Fase 36**: audit del trigger 1v1 — scoperto che il portatore non avanza mai attivamente col
+>   pallone, quindi un "sorpasso" dinamico del difensore non può mai accadere nel motore attuale.
+> - **Fase 37**: collegato il trigger 1v1 NPC in `decidiAzioneAutonoma` (soglia dedicata 14m,
+>   prima del TIRO). 13/13 test superati, ma il trigger risulta dormiente nel campione osservato.
+> - **Fase 38**: audit quantitativo — il trigger non è dormiente, è raro (0,5% delle valutazioni
+>   soddisfa la combinazione soglia+corridoio), causa strutturale confermata dalla Fase 36.
+> - **Fase 39**: trovata nel codice stesso la causa esatta di `isBallCarrier→target=posizione
+>   attuale`: un esperimento precedente già tentato e scartato per instabilità (loop di
+>   retroazione). Classificazione: intenzionale, non residuo né lacuna.
+> - **Fase 40**: confrontati tre modelli di conduzione condizionale; raccomandato il Modello C
+>   (condizionale, riusa la rivalutazione già esistente, nessuno stato persistente necessario).
+> - **Fase 41**: la posizione della palla come possibile anchor stabile — scartata: durante
+>   possesso normale è semplicemente `campo.ball.x/y`, congelata fra eventi, con salti fino a
+>   6,8m/tick ai cambi di possesso.
+> - **Fase 42**: specifica progettuale — l'anchor deve nascere nel punto di esecuzione (mai in
+>   `decidiAzioneAutonoma`, dichiarata pura), coordinata fissa per player.id.
+> - **Fase 43**: implementata la conduzione condizionale NPC — nuova costante isolata
+>   `FRAZIONE_CONDUZIONE_NPC=0.12`, anchor con ciclo di vita esplicito, protezione self nel punto
+>   di applicazione del target. Verificato: avanzamento reale, nessun feedback loop.
+> - **Fase 44**: misura quantitativa — velocità media 1,94 m/s, durata media 2,8s, distanza media
+>   3,7m su 12 partite. Classificazione: implementazione riuscita, calibrazione ancora aperta.
+> - **Fase 45**: strumentazione della causa di terminazione resa affidabile (ancorata alla vera
+>   decisione eseguita, non a una cache che poteva restare congelata).
+> - **Fase 46**: scoperta che ridefinisce la Fase 44 — la velocità istantanea di conduzione è
+>   sempre il tetto fisico (10 m/s), poi il giocatore si ferma; `FRAZIONE_CONDUZIONE_NPC` governa
+>   la distanza del punto di arresto, non la velocità.
+> - **Fase 47**: causa dei test falliti isolata parzialmente — manipolare le posizioni senza
+>   sincronizzare lo slot statico rompe il riconoscimento di isBallCarrier nei test isolati.
+> - **Fase 48**: trovato e corretto un bug nell'harness (`decide()` restituisce `targetX/targetY`
+>   separati, non un oggetto `target`). Con la correzione: 1795 tick reali, **100% coerenti** con
+>   `target = anchor + (obiettivoPorta−anchor)×frazione` su 30 partite isolate.
+> - **Fase 49**: 132 sessioni su 48 partite (4 frazioni) — distanza e durata sostanzialmente
+>   identiche fra tutte le frazioni; i dati **suggeriscono** (non dimostrano) che il ritmo di
+>   ri-decisione sia il fattore dominante.
+> - **Fase 50**: mappa verificata del ciclo `avanzaStatoCampo()` — 1 tick di latenza strutturale,
+>   mai cumulativo. Su 36 sessioni reali: 94,9% dei tick con movimento fisico reale, 0% fermo sul
+>   target, 0/36 sessioni che raggiungono il target. La sessione (dominata dalla ri-decisione,
+>   mediana 13 tick) termina sempre prima che il target venga raggiunto, indipendentemente dalla
+>   frazione.
+>
+> **Stato finale (fine Fase 50)**: `FRAZIONE_CONDUZIONE_NPC = 0.12` invariata, nessuna
+> calibrazione applicata. La relazione anchor→target→movimento→ri-decisione è caratterizzata
+> quantitativamente end-to-end. L'eventuale scelta di una distanza di avanzamento per sessione
+> appartiene a una futura fase di design comportamentale, non a un problema tecnico ancora
+> aperto — nessun debito tecnico aperto su questo filone.
+>
+> **Chiarimento (non una fase)**: i "colpi di testa" esistono solo come etichetta narrativa in 4
+> voci del pool eventi self (MOMENTS), stesso motore a dado generico di ogni altra scelta —
+> nessun collegamento con il motore autonomo NPC del corner (Fase 30).
+>
+> **Nota di onestà sui warning residui**: alcuni run nelle Fasi 43-50 hanno mostrato un piccolo
+> numero di warning "portiere fuori area" (isteresi diagnostica, Fasi 18/22). Nessuna evidenza di
+> correlazione con la conduzione NPC è stata osservata; la correlazione non è stata ricercata
+> attivamente in queste fasi — da trattare come "non indagato", non come "escluso".
+>
+> **Fase 51** — misurazione da gameplay naturale (0 modifiche a `index_REV2.html`,
+> `FRAZIONE_CONDUZIONE_NPC=0.12` invariata): 288 sessioni CONDUZIONE su 100 partite reali. Cause di
+> fine osservate: CONDIZIONALE 89,9% (TIRO 138, PASSAGGIO 121), FINE_INTERVALLO 7,3% (rilevata
+> tramite wrapping della reale chiamata a `avviaSecondoTempo`), ATTIVA 2,8%, CONTATTO 0% e
+> ALTRO_NON_CLASSIFICATA 0%. Il dato CONTATTO è 0/288 nonostante 449 CONTRASTO reali nello stesso
+> campione: nessuno dei 449 CONTRASTO è caduto durante una sessione CONDUZIONE aperta dello stesso
+> portatore. Mediana 13 tick/sessione. Il target non è mai stato raggiunto tramite lo snap esatto
+> previsto da `avanzaGiocatoriCampo`: 0/280 sessioni concluse, coerente con Fase 50 (0/36) usando la
+> stessa definizione operativa. Il 30,7% delle sessioni è arrivato entro un passo di movimento
+> (1,0 m) dal target senza effettuare lo snap. Nessun errore, coordinata invalida o teletrasporto;
+> warning diagnostici solo del fenomeno preesistente del portiere fuori area, senza correlazione con
+> la conduzione ricercata attivamente in questa fase.
+>
+> **Audit successivo Fase 52 — distinzione fra target decisionale e target di movimento**: è stato
+> verificato che, per il portatore, `posizioniConMarcatura()` assegna sistematicamente
+> `pl.targetX/Y` a `portatoreXY` (con offset tattico), mentre il target calcolato dal ramo
+> CONDUZIONE di `MovementDecisionEngine.decide()` tramite `FRAZIONE_CONDUZIONE_NPC` non viene
+> utilizzato dal movimento fisico del portatore. Su 6417 tick con anchor attivo, il target
+> realmente assegnato e quello teorico derivato dall'anchor coincidono entro 3 m solo nel 38,4% dei
+> casi; distanza fra i due target: mediana 3,96 m, p75 6,88 m, massimo 10,02 m. Il solo offset
+> tattico (2,5 m) non spiega la discrepanza.
+>
+> Conseguenza: le misure precedenti relative a distanza dal target teorico — inclusi lo 0/280 di
+> snap esatto e il 30,7% entro 1 m della Fase 51 e le successive metriche `quotaPercorsa` della
+> Fase 52 — non possono essere interpretate come misure dell'avanzamento fisico verso il target
+> effettivamente consumato dal motore. Restano valide le osservazioni indipendenti dal target di
+> movimento: durata e cause delle sessioni, 94,9% dei tick con movimento fisico reale, andamento
+> della distanza dai difensori e assenza di coincidenza fra CONTRASTO e CONDUZIONE nel campione
+> osservato. Fase 51/52 non sono da considerarsi errate: erano misure reali, ma rispondevano a una
+> domanda diversa da quella a cui pensavamo rispondessero.
+>
+> Stato: nessuna modifica a `index_REV2.html`, nessuna modifica a `FRAZIONE_CONDUZIONE_NPC`; nessun
+> fix o calibrazione applicata. La relazione fra `FRAZIONE_CONDUZIONE_NPC` e movimento fisico reale
+> del portatore richiede una nuova misura prima di qualsiasi decisione di design.
+>
+> **Fase 54 — audit del collegamento decisione → movimento reale**: tracciata la catena completa,
+> riga per riga: `FRAZIONE_CONDUZIONE_NPC` → ramo CONDUZIONE di `MovementDecisionEngine.decide()` →
+> risultato scartato per il portatore (riga 5592, `xy = portatoreXY`, incondizionato) → `portatoreXY`
+> (righe 5537-5539, usa `PULL_AVANZAMENTO_PORTATORE`, non `FRAZIONE_CONDUZIONE_NPC`) →
+> `portatoreBaseXY` → `posizionePortatorePalla()` → priorità 1: `campo.ball.x/y` (riga 5141) → chi lo
+> muove fuori da una clip/FREE è `avanzaPallaLibera()` (righe 5922-5926), che usa `campo.ball.anchor`
+> e `DERIVA_PORTATORE_IDLE_M=4` — un sistema di anchor/frazione completamente separato da
+> `_conduzioneAnchor`. `campo.ball.anchor` viene scritto in un solo punto di tutto il file,
+> `muoviPallaEvento()` (riga 4711), innescato da eventi discreti (passaggio, tiro, gol, calcio
+> d'inizio, rimessa) — mai da `eseguiAzioneAutonoma()` o da alcun punto legato a `_conduzioneAnchor`.
+>
+> **Conclusione — Esito 3, nessun collegamento**: `FRAZIONE_CONDUZIONE_NPC` e `_conduzioneAnchor`
+> appartengono esclusivamente al sistema decisionale (nascita/durata/causa di fine della sessione
+> CONDUZIONE). Il movimento fisico reale del portatore (e della palla) è governato da un sistema
+> preesistente e del tutto parallelo (`campo.ball.anchor`, `DERIVA_PORTATORE_IDLE_M`,
+> `PULL_AVANZAMENTO_PORTATORE`), che ignora l'esistenza di `_conduzioneAnchor`. Nessun collegamento
+> diretto né indiretto rilevato nel codice attuale.
+>
+> Conseguenza per l'ordine dei prossimi passi: non ha senso scegliere un nuovo valore di
+> `FRAZIONE_CONDUZIONE_NPC` sulla base di metri percorsi o percentuale del target — quel parametro
+> non controlla oggi quella grandezza. La domanda di design corretta, prima di qualunque
+> calibrazione, è se si vuole che `FRAZIONE_CONDUZIONE_NPC` abbia un ruolo nel movimento fisico
+> reale; solo dopo ha senso stabilire quale esperienza di CONDUZIONE ottenere e calibrare il
+> parametro che effettivamente la governa. Nessuna modifica a `index_REV2.html`, `0.12` invariato.
+>
+> **Fase 55-58 — sistema a 16 zone (calcio posizionale), filone separato da CONDUZIONE, solo audit
+> e misurazione, nessuna implementazione.** Perimetro fissato: griglia 4×4 comune (65×40m, 16,25×10m
+> per zona), MAX 1 giocatore per zona come filtro permanente di occupazione (non anti-collisione
+> istantanea) applicato ai 6 giocatori di movimento, portatore e POR esclusi (Fase 54 impone questa
+> esclusione: il target del portatore non passa da `MovementDecisionEngine.decide()`), attrazione
+> dominante verso la zona a punteggio più alto disponibile, eleggibilità per ruolo (es.
+> ALA_SX↔fascia destra) esplicitamente rinviata a una fase successiva.
+>
+> **Fase 55 — baseline (40 partite, 14.950 tick in possesso)**: 56,2% dei tick ha almeno una zona
+> condivisa da 2+ compagni; oltre metà di tutte le posizioni cade in sole 2 zone su 16 (zone 5 e 9,
+> colonne centrali). I quattro angoli del campo non vengono mai occupati.
+>
+> **Fase 56 — scomposizione per ruolo (stesso campione)**: la sovrapposizione è per il 99,8% fra
+> ruoli diversi (DC+CC+ATT convergono tutti sul corridoio centrale), non fra giocatori dello stesso
+> ruolo (0,2%) — conferma che MAX 1 deve valere sui 6 giocatori insieme, non per ruolo. DC 69,9% in
+> zone 5+9, CC 57,9%, ATT 50,8%, ALA solo 24,6% (le fasce sono già ben distribuite).
+>
+> **Fase 57 — discriminazione dei segnali candidati (20 partite, 2.603 tick)**: distanza porta
+> (range 49,3m, statico), distanza palla (range mediano 32,3m, dinamico), spazio difensivo (range
+> mediano 13,9m) discriminano bene; direzione azione (`CENTROIDE_BALL_SHIFT`) confermata con
+> correlazione 0,574 fra lato Y della palla e riga occupata. Linea di passaggio generalizzata a
+> livello di zona risultata inutilizzabile (0% di zone aperte su tutto il campione) — limite della
+> misura, non del gameplay; esclusa dal modello per ora. Scoperta strutturale: nessuno dei quattro
+> segnali dipende dal giocatore specifico — il punteggio grezzo è identico per tutti e 6 in un dato
+> tick, la differenziazione deve venire dall'assegnazione MAX 1, non dal punteggio individuale.
+>
+> **Fase 58 — simulazione offline del ranking, nessuna modifica al motore.** Modello: bersaglio =
+> porta deformata verso la palla (`CENTROIDE_BALL_SHIFT_X=0,18`, costante reale del motore), zone
+> comparabili = entro una finestra relativa alla zona migliore (non fasce a terzili, rivelatesi
+> troppo larghe: mettevano a confronto zone a 5,8m e 15,6m dal bersaglio come "comparabili",
+> promuovendo gli angoli mai visitati sopra le zone centrali sotto porta), spazio come discriminante
+> solo dentro il gruppo comparabile. Verificato su 6 scenari mirati (pressione forte, palla vicina a
+> ciascuna porta, palla larga sui due lati, transizione a campo aperto): il principio della
+> comparabilità produce gruppi piccoli e plausibili in tutti i casi.
+>
+> **Nota aperta — deformazione della profondità**: la finestra di comparabilità relativa alla zona
+> migliore produce gruppi piccoli e plausibili nei sei scenari testati. Tuttavia, con palla molto
+> arretrata (x≈0,067), il `CENTROIDE_BALL_SHIFT_X=0,18` esistente non sposta sufficientemente il
+> bersaglio attraverso la griglia discreta 4×4: le zone 7/11 restano le candidate principali
+> nonostante la posizione profondamente difensiva della palla. Il dato dimostra un limite dell'uso
+> di quella costante nel nuovo modello, non determina ancora quale soluzione adottare. Nuova
+> costante o diversa trasformazione restano decisioni successive.
+>
+> Stato: nessuna modifica a `index_REV2.html`, nessun parametro di gameplay toccato, nessuna
+> implementazione del sistema a zone. Prossimo passo: definire con regole ordinate (non ancora
+> numeriche) cosa significa "zona desiderabile" per la squadra in possesso.
+>
+> **Fase 59 — cascata a precedenza (non somma) per la funzione di attrazione, verificata sui sei
+> scenari di Fase 58.** Struttura: Direzione → Profondità → Distanza dalla palla → Spazio, ciascun
+> livello applicato SOLO al sottoinsieme ammesso dal precedente (mai una somma pesata) — MAX 1 e
+> isteresi restano fuori dalla cascata, non sono segnali di desiderabilità ma meccanismi separati
+> (vincolo di assegnazione il primo, stabilizzazione temporale il secondo).
+>
+> - **Direzione** — segnale = differenza assoluta fra distanza-zona-porta-pura e distanza-zona-
+>   bersaglio-deformato (porta spostata verso la palla di `CENTROIDE_BALL_SHIFT_X=0,18`, costante
+>   reale del motore). Testata anche una versione relativa (rapporto anziché differenza): fallisce
+>   nel caso critico (palla vicina alla propria porta), premiando sistematicamente le zone già
+>   vicine alla porta avversaria per un artefatto aritmetico del denominatore, invece di favorire il
+>   proprio terzo difensivo. **Definizione congelata: differenza assoluta.**
+> - **Profondità** — preferenza per la zona più avanzata, applicata solo dentro il sottoinsieme
+>   ammesso dalla direzione. Verificato su 6 scenari (pressione forte, palla vicina a ciascuna
+>   porta, palla larga sui due lati, transizione a campo aperto) e due coppie di margini: 0/6 casi
+>   di una zona esclusa dalla direzione rientrata tramite la profondità. Nel caso critico (palla
+>   vicina propria porta) la cascata seleziona correttamente le zone più avanzate *dentro* il
+>   proprio lato campo, non le zone assolutamente più vicine alla porta avversaria — risolve
+>   l'effetto collaterale che la nota precedente (deformazione della profondità) aveva segnalato
+>   come problema del modello a bersaglio unico. **Congelata.**
+> - **Distanza dalla palla** e **Spazio** — nessun difetto proprio osservato in nessuno dei 6
+>   scenari; lo spazio non ha mai potuto scegliere fra zone di profondità diversa (garanzia
+>   strutturale confermata empiricamente, non solo dedotta dalla costruzione della cascata).
+>
+> **Nota aperta — ampiezza della cascata**: nei sei scenari testati, direzione + profondità
+> restringono quasi sempre il ventaglio a 1-2 zone prima che palla e spazio entrino in gioco (in 4
+> scenari su 6, uno dei due ultimi livelli riceve una sola zona, senza nulla da scegliere). Nessun
+> comportamento indesiderato osservato, ma non è determinato se questa riduzione derivi dal ruolo
+> volutamente subordinato di palla/spazio oppure da margini provvisori troppo restrittivi nei
+> livelli precedenti. Da affrontare in fase di calibrazione, non ora.
+>
+> Stato: nessuna modifica a `index_REV2.html`, nessun margine numerico fissato, nessuna
+> implementazione. Prossimo passo: MAX 1 come vincolo di assegnazione (separato dalla cascata),
+> poi isteresi come meccanismo temporale — verificati uno alla volta, non insieme.
+>
+> **Fase 60 — MAX 1 come vincolo di assegnazione, verifica esaustiva (non a campione) su tutte le
+> 720 permutazioni dell'ordine dei 6 giocatori, sui sei scenari di Fase 58 (4.320 esecuzioni
+> totali).** Ranking condiviso prodotto dalla cascata Direzione→Profondità→Palla→Spazio (Fase 59),
+> ordine totale sulle 16 zone senza margini (ordinamento lessicografico sui quattro segnali
+> continui, nello stesso ordine di precedenza — nessun nuovo parametro). Assegnazione greedy: ogni
+> giocatore prende la prima zona libera nel ranking condiviso.
+>
+> - **MAX 1 assoluto**: nessun duplicato in nessuna delle 4.320 esecuzioni.
+> - **Indipendenza dall'ordine**: le 720 permutazioni producono sempre lo stesso identico insieme
+>   di 6 zone assegnate, in ciascuno dei 6 scenari (1 solo insieme distinto osservato su 720, per
+>   scenario). Conseguenza diretta della scoperta di Fase 57 (nessun segnale dipende dal giocatore
+>   specifico): con una graduatoria condivisa, l'insieme delle zone prese è sempre lo stesso,
+>   cambia solo quale giocatore ottiene quale zona in base all'ordine.
+> - **Prima scelta persa**: sempre 5 giocatori su 6, in ogni scenario e ogni permutazione — atteso,
+>   non un difetto: con una graduatoria identica per tutti, solo uno può ottenere il vero primo
+>   posto. La differenziazione fra i sei giocatori non viene dal punteggio grezzo (identico) ma
+>   interamente dal meccanismo di assegnazione esclusiva.
+>
+> Esito: MAX 1 validato come meccanismo separato — distribuzione sempre valida, deterministica,
+> indipendente dall'ordine. Due strati ora distinti e verificati: desiderabilità della zona
+> (cascata) → assegnazione esclusiva (MAX 1). Nessuna modifica a `index_REV2.html`, nessun
+> parametro di gameplay toccato. Prossimo passo: isteresi (terzo strato, meccanismo temporale),
+> tutto il resto congelato.
+>
+> **Fase 61 — audit dell'isteresi su gameplay reale (25 partite, 249 eventi di cambio zona),
+> nessuna soglia scelta.** Applicata la cascata congelata (Fase 59) + MAX 1 (Fase 60) a ogni tick
+> di possesso reale, con identità stabile dei 6 giocatori (DC1/DC2/CC/ALA_SX/ALA_DX/ATT via
+> `bucketComportamento`, stessa funzione reale del motore) e ordine di processing fisso (legittimo:
+> Fase 60 ha già dimostrato che l'ordine non cambia l'insieme di zone assegnate). Misurata la
+> distribuzione naturale di durata permanenza, vantaggio di rango al cambio, e oscillazione
+> A→B→A — senza introdurre alcun filtro.
+>
+> Durata permanenza prima del cambio: mediana 2 tick, p75 10 tick. Oscillazione A→B→A entro 3 tick:
+> 34,1% dei cambi (85/249) — sintomo osservato, conservato senza attribuirlo a una causa unica.
+>
+> **Scoperta principale — l'isteresi non può essere un semplice filtro sul vantaggio della nuova
+> zona, perché i cambi osservati appartengono a due fenomeni distinti:**
+> 1. **Quasi-pareggio** (108/249, 43,4%) — vantaggio di rango minimo (+1 posizione su 16). Candidato
+>    naturale per una soglia di isteresi classica.
+> 2. **Spiazzamento da riassegnazione** (112/249, 45,0%) — vantaggio di rango **negativo**: la
+>    nuova zona è peggiore di quella abbandonata. Non misurabile con una soglia sul vantaggio,
+>    perché il giocatore spiazzato non ha alcun miglioramento da confrontare — è stato scavalcato
+>    da un compagno elaborato prima nell'ordine di assegnazione, che ha preso una zona ancora
+>    valida per lui. È un problema di continuità dell'assegnazione, non di isteresi temporale.
+>
+> Stato: nessuna priorità di mantenimento né soglia introdotta. Nessuna modifica a
+> `index_REV2.html`. Prossimo passo: isolare l'effetto dell'ordine di processing sullo
+> spiazzamento, lasciando invariati cascata, MAX 1 e dati di input — solo dopo si potrà distinguere
+> cosa appartiene davvero all'isteresi e cosa all'assegnazione.
+>
+> **Fase 62 — isolamento dell'effetto dell'ordine di processing sullo spiazzamento (stessi 25
+> match, stessa cascata, stesso MAX 1, nessuna isteresi), confrontando tre ordini fissi (originale,
+> invertito, arbitrario).** Aggiunta una misura più precisa del "vero spiazzamento": la zona
+> precedente del giocatore viene rivendicata da un ALTRO giocatore nello stesso tick — distinta dal
+> semplice vantaggio di rango negativo usato in Fase 61.
+>
+> - **Il vero spiazzamento è l'86,5-89,7% di tutti i cambi in tutti e tre gli ordini** — non il
+>   45,0% misurato in Fase 61 tramite il solo vantaggio negativo. Spiazzamento e vantaggio negativo
+>   NON sono sinonimi: nella maggioranza dei casi in cui un giocatore perde la propria zona a
+>   favore di un compagno, atterra comunque su una zona di rango uguale o migliore — il movimento
+>   resta comunque forzato, non è una scelta libera, semplicemente non viene penalizzato nel
+>   punteggio. Solo il 10-14% dei cambi è un vero movimento per preferenza autonoma (vecchia zona
+>   rimasta libera, superata da un'opzione migliore).
+> - **La proporzione di spiazzamento è stabile fra i tre ordini** (86,5% / 88,3% / 89,7%) → è un
+>   problema strutturale della riassegnazione da zero a ogni tick, non un artefatto di quale ordine
+>   fisso specifico si usa.
+> - **Il volume totale di cambi invece varia del 27% fra gli ordini** (274 / 309 / 348) → l'ordine
+>   di processing non è irrilevante, influenza quanto churn complessivo si genera, pur non
+>   cambiando la natura del fenomeno dominante.
+>
+> Conclusione: una semplice isteresi sul miglioramento di ranking non è sufficiente — non
+> intercetterebbe l'86-90% dei cambi che sono vero spiazzamento con vantaggio non negativo. Serve
+> probabilmente una logica di continuità dell'assegnazione (priorità a chi occupa già una zona
+> ancora valida) distinta dall'isteresi temporale. Struttura aggiornata:
+> **Cascata → MAX 1 → continuità dell'assegnazione → isteresi**, con continuità e isteresi ancora
+> entrambe da progettare, esplicitamente non fuse in un unico meccanismo.
+>
+> Stato: nessun algoritmo cambiato, nessuna priorità di mantenimento introdotta. Risultato
+> diagnostico, non una soluzione. Nessuna modifica a `index_REV2.html`.
+>
+> **Fase 63 — confronto di tre principi puri di continuità dell'assegnazione (stessi 25 match,
+> stessa cascata, stesso MAX 1, stesso ordine fisso — unica variabile: la regola di continuità).**
+>
+> | | Nessuna continuità | Priorità assoluta | Priorità condizionata (margine=2, illustrativo) |
+> |---|---|---|---|
+> | Cambi totali | 250 | 0 | 71 (−71,6%) |
+> | Durata permanenza (mediana) | 2 tick | mai (∞) | 41 tick |
+> | Oscillazione A→B→A | 32,4% | n/a | **0,0%** |
+> | Vero spiazzamento | 90,0% | n/a | 76,1% |
+> | Ottiene la vera prima scelta | 11,6% | n/a | 23,9% |
+>
+> - **Priorità assoluta**: riferimento estremo, troppo rigida — zero adattamento durante l'intero
+>   possesso, utile solo come limite di confronto.
+> - **Nessuna continuità**: baseline instabile già nota da Fase 61/62.
+> - **Priorità condizionata**: elimina completamente l'oscillazione A→B→A (0/71) e riduce il churn
+>   del 71,6%, senza congelare la struttura. Un giocatore conserva la propria zona a meno che la
+>   propria migliore alternativa non la superi di un margine di rango — margine testato solo a
+>   titolo illustrativo (2 posizioni su 16), non un valore da congelare.
+> - **Distribuzione spaziale aggregata**: sostanzialmente invariata fra i tre modelli (dominata
+>   sempre dalle stesse 4-5 zone centrali) — la continuità stabilizza il sistema nel tempo senza
+>   alterare dove la squadra tende a posizionarsi in aggregato.
+>
+> **Nota aperta**: la priorità condizionata non elimina completamente lo spiazzamento — 36 casi
+> residui di vantaggio negativo (su 71 cambi) mostrano che la continuità applicata a valle non
+> basta a rendere l'assegnazione pienamente consapevole dello stato precedente fin dal primo passo.
+>
+> Struttura aggiornata: Fase 59 (cascata) → Fase 60 (MAX 1) → Fase 62 (diagnosi riassegnazione da
+> zero) → Fase 63 (principio di continuità condizionata, non ancora calibrato). Prossimo passo:
+> chiudere il comportamento della continuità prima di affrontare l'isteresi vera e propria, per non
+> usarla a compensare un difetto dell'assegnazione. Nessuna modifica a `index_REV2.html`, nessun
+> coefficiente scelto.
+>
+> **Fase 64 — audit contestuale dei 40 casi di vantaggio negativo residuo sotto priorità
+> condizionata (stessi 25 match), nessuna nuova regola introdotta.** Per ciascun caso: spostamento
+> della palla dal tick precedente, variazione di lato (Y) e di profondità (X), spazio disponibile
+> nella zona precedente/nuova, durata della permanenza precedente, finestra temporale di posizione
+> della palla (-3/+3 tick).
+>
+> - Spostamento palla dal tick precedente: mediana 0,34m — minimo.
+> - Variazione di lato (Y): mediana 0,004 (≈0,16m su 40m) — trascurabile.
+> - Variazione di profondità (X): mediana 0,001 (≈0,07m su 65m) — trascurabile.
+> - Nessuna correlazione fra i 40 casi e transizioni, cambi di lato o grandi movimenti della palla.
+>
+> **Esito: Categoria B — nessun pattern tattico riconoscibile.** Verificata anche la causa
+> meccanica: nel modello a priorità condizionata, un cambio può avvenire solo per due vie — (a) la
+> propria alternativa supera il margine (vantaggio sempre positivo per costruzione, mai negativo),
+> oppure (b) la zona precedente è già stata rivendicata da un compagno elaborato prima nell'ordine
+> fisso. Tutti e 40 i casi appartengono necessariamente alla via (b) — è la stessa meccanica di
+> spiazzamento da ordine di processing della Fase 62, ridotta di frequenza (da 112 a 40) ma non
+> cambiata nella natura. Non è un evento tattico da rilevare: è un residuo strutturale dell'ordine
+> fisso, non risolvibile con una regola contestuale.
+>
+> Conseguenza: non serve un secondo meccanismo di continuità legato al rilevamento di transizioni.
+> Il residuo può restare accettato così com'è nello stato attuale del progetto, oppure — se lo si
+> vuole eliminare — la via coerente è rendere l'assegnazione stessa consapevole della continuità
+> fin dal primo passo (priorità di elaborazione, non solo di conservazione), non aggiungere una
+> nuova regola. Nessuna modifica a `index_REV2.html`, nessun algoritmo cambiato.
+>
+> **Fase 65 — isteresi come soglia TEMPORALE, distinta dalla continuità condizionata (soglia
+> spaziale/intensità, margine=2 invariato). Confronto controllato: N=1/3/5/10 calcolati nella
+> STESSA passata, sugli stessi tick, stessa cascata — non simulazioni separate (corregge il limite
+> di `Math.random()` non seedato per questo confronto specifico).**
+>
+> | | N=1 | N=3 | N=5 | N=10 |
+> |---|---|---|---|---|
+> | Cambi totali | 75 | 47 | 48 | 46 |
+> | Vero spiazzamento | 57 | 36 | 36 | 36 |
+> | Oscillazione A→B→A (3/5/10 tick) | 0/0/0 | 0/0/0 | 0/0/0 | 0/0/0 |
+> | Ritardo mediana dei cambi commessi | 1 | 3 | 5 | 10 |
+> | Candidati effimeri prevenuti | 0 | 9 | 9 | 8 |
+>
+> - **La priorità condizionata da sola ha già eliminato l'oscillazione A→B→A** (0 anche a N=1,
+>   senza isteresi) — non va accreditata all'isteresi temporale, che su questo specifico fenomeno
+>   non aggiunge nulla.
+> - **Funzione propria dell'isteresi: filtra i candidati migliori ma effimeri** (9 casi su 25
+>   partite in cui un'alternativa appare per 1-2 tick e sparisce prima di diventare un cambio
+>   reale) — riduzione netta dei cambi totali (75→47) rispetto alla sola continuità condizionata.
+> - **Da N=3 in poi il vero spiazzamento si stabilizza a 36 casi**: ulteriore persistenza non
+>   risolve il fenomeno strutturale (Fase 62/64) — conferma sperimentale pulita che isteresi
+>   temporale e continuità dell'assegnazione restano due problemi distinti, non intercambiabili.
+> - **Costo esplicito**: ogni cambio reale viene ritardato di esattamente N tick (per costruzione).
+>
+> Precisazione metodologica da mantenere: "nessun ritardo erroneo" è vero solo rispetto alla
+> definizione dell'algoritmo (nessun cambio genuinamente persistente viene bloccato oltre N tick) —
+> non equivale a dire che un ritardo di N tick sia tatticamente accettabile. Quella è una
+> valutazione successiva, non ancora fatta.
+>
+> Struttura finale: **cascata (Fase 59) → MAX 1 (Fase 60) → continuità condizionata (Fase 63) →
+> isteresi temporale (Fase 65)**, ciascuno strato con un effetto misurato separatamente. Nessun N
+> scelto come parametro di produzione. Prossimo passo: definire il criterio con cui un N diventa
+> accettabile, prima di guardare quale valore lo soddisfa. Nessuna modifica a `index_REV2.html`.
+
+> **Fase 66 — criterio di accettabilità per N, senza ancora sceglierlo come parametro.**
+>
+> Criterio: il più piccolo N oltre il quale l'incremento di persistenza non produce benefici
+> misurabili aggiuntivi sui candidati effimeri prevenibili (rendimento marginale nullo).
+>
+> Applicato ai dati di Fase 65 (25 partite): N=1→0 candidati prevenuti, N=3→9, N=5→9, N=10→8. Il
+> gomito osservato è N=3, con beneficio marginale nullo passando a N=5/10 in questo campione. Il
+> ritardo reale corrispondente (300ms a `DELTA_MS=100ms`) resta un controllo di plausibilità, non
+> la giustificazione primaria della scelta.
+>
+> **Non congelato**: N=3 è dove punta il criterio applicato a un solo campione di 25 partite, non
+> ancora un parametro. Il registro distingue tre passaggi separati: Fase 65 ha misurato l'effetto
+> di N; Fase 66 definisce come si giudicherà N; una fase successiva dovrà verificare se il criterio
+> continua a indicare lo stesso valore su un campione più ampio, prima di congelare il parametro.
+> Nessuna modifica a `index_REV2.html`, nessun N scelto come definitivo.
+
+> **Decisioni di design registrate (non ancora tradotte in misurazione o codice):**
+>
+> - **CONDUZIONE**: confermata l'esperienza "Significativa" (fra breve/interrotta, significativa,
+>   fino al target) come obiettivo di design. Resta comunque subordinata alla Fase 54: nessun
+>   collegamento esiste oggi fra `FRAZIONE_CONDUZIONE_NPC` e il movimento fisico reale del
+>   portatore, quindi questa scelta non è ancora implementabile finché quel collegamento non viene
+>   costruito.
+> - **Fase 54, direzione della soluzione**: la futura soluzione al collegamento mancante
+>   `FRAZIONE_CONDUZIONE_NPC → movimento reale` dovrebbe basarsi su posizione in campo e ruolo del
+>   giocatore — il sistema decisionale dovrà decidere coerentemente con questi due fattori. Non
+>   ancora un audit, solo l'indirizzo di design da seguire quando si affronterà quella fase.
+> - **Linea di passaggio (Fase 57)**: segnalata per essere ripresa. La generalizzazione usata in
+>   Fase 57 (segmento palla→centroide zona, soglia 5m) si era rivelata inutilizzabile (0% di zone
+>   aperte su tutto il campione, per pura geometria di segmenti lunghi) — non scartata come segnale
+>   di per sé, ma da ridefinire con un metodo diverso prima di poter essere reintegrata nella
+>   cascata di attrazione a zone.
+
+> **Fase 67 — scoperta metodologica critica: "6 giocatori di movimento" era un conteggio errato in
+> tutte le Fasi 55-66. Correzione durante il primo tentativo di implementazione reale in
+> `index_REV2.html` (non durante l'audit offline, dove l'errore non era mai stato notato).**
+>
+> La formazione (`FORMAZIONE_TATTICA_7`) ha solo 6 slot non-portiere in totale (2 DIF + 3 CEN + 1
+> ATT). Il portatore è SEMPRE uno di questi 6, non un settimo ruolo separato — escludendo portiere
+> e portatore restano quindi **5** giocatori di movimento nella stragrande maggioranza dei tick
+> (verificato: 757/780, 97,1%), non 6. Il conteggio arriva a 6 solo nei rari tick di palla libera
+> senza possessore chiaro (23/780, 2,9%). Tutti gli harness offline delle Fasi 55-66 usavano un
+> controllo `if(length !== 6) return` che scartava sistematicamente il 97% dei tick, misurando di
+> fatto solo la rara condizione di palla libera — non il gameplay normale con possesso stabilito.
+>
+> **Conseguenza: nessuna delle misure numeriche delle Fasi 55-66 è considerata congelata.**
+> Restano non validate: baseline di concentrazione (Fase 55), distribuzione nelle 16 zone (Fase 55),
+> sovrapposizioni (Fase 55/56), dimensione/comportamento dei gruppi comparabili (Fase 58/59),
+> comportamento della cascata Direzione→Profondità→Palla→Spazio sotto il conteggio corretto (Fase
+> 59), MAX 1 (Fase 60 — con 5 giocatori e 16 zone, il risultato corretto da verificare è "5 zone
+> distinte", non più 6), continuità condizionata (Fase 63/64), isteresi e criterio di rendimento
+> marginale (Fase 65/66).
+>
+> **Le proprietà concettuali restano valide e utili**: la distinzione cascata → MAX 1 → continuità
+> dell'assegnazione → isteresi, il principio "MAX 1 come vincolo di assegnazione non come segnale di
+> attrazione", la separazione fra vero spiazzamento e vantaggio negativo, il principio "priorità
+> condizionata prima, isteresi temporale poi" — nessuna di queste architetture concettuali dipende
+> dal numero esatto di giocatori. Solo i numeri e le soglie derivate vanno rifatti.
+>
+> **Osservazione aggiuntiva emersa dallo stesso tentativo di implementazione, anch'essa da
+> verificare col conteggio corretto**: il ramo della cascata (SUPPORT/WIDTH/DEPTH/COVER) copre solo
+> l'8,8% delle decisioni reali osservate (MARK 43,9%, UNMARK 39,6%, PRESS 6,0% — tutti esclusi per
+> design dal sistema a zone). Questo dato resta da rimisurare con la baseline a 5 giocatori prima di
+> trarre qualunque conclusione sull'effetto pratico del sistema — al momento è mischiato con
+> l'errore di conteggio, non isolabile.
+>
+> **Sequenza per la fase diagnostica successiva** (non ancora eseguita):
+> 1. Correggere la baseline (Fase 55 → 5 giocatori di movimento).
+> 2. Ripetere la misurazione della copertura degli intent (MARK/UNMARK/PRESS/SUPPORT/WIDTH/DEPTH)
+>    con il conteggio corretto.
+> 3. Solo dopo, verificare l'effetto reale dell'implementazione già scritta in `index_REV2.html`.
+>
+> Questo permetterà di distinguere tre cose oggi mischiate: sistema a zone corretto → frequenza con
+> cui viene invocato → effetto spaziale quando viene invocato. Il codice implementato in
+> `index_REV2.html` gestisce già correttamente un numero variabile di giocatori (il fix applicato
+> durante questo stesso tentativo rimuove il vincolo rigido `=== 6`, sostituito con una soglia
+> minima) — non richiede ulteriori modifiche per questa correzione, solo la ri-validazione.
+>
+> **Fase 68 — baseline spaziale ricostruita sul conteggio corretto (5 giocatori di movimento),
+> stesso protocollo esatto di Fase 55, sistema a zone neutralizzato via override del sandbox
+> (nessuna modifica al file). 40 partite, 14.986 tick in possesso.** Concentrazione zone 5+9: 50,4%
+> (Fase 55, non congelata: 51,4%). Tick con zona condivisa: 53,6% (Fase 55: 56,2%). Angoli mai
+> visitati: 0% in entrambe. Cambi di zona per possesso e durata media sostanzialmente invariati.
+> Osservazione: i numeri corretti a 5 sono molto vicini a quelli originari di Fase 55 — il bug di
+> conteggio ha cambiato quali tick venivano campionati, non sembra aver alterato sostanzialmente
+> cosa quei tick mostravano; non rende comunque la Fase 55 retroattivamente congelata. Questa è la
+> nuova baseline di riferimento.
+>
+> **Fase 69 — copertura reale degli intent, scoping esatto ai 5 giocatori di movimento della
+> squadra in possesso (portatore e squadra senza palla esclusi). 15 partite, 29.547 osservazioni.**
+> UNMARK 94,8%, SUPPORT 2,7%, DEPTH 2,0%, RECUPERO_LIBERO 0,5%, WIDTH 0%, COVER 0%. COVER a zero per
+> scoping (è l'intent di base fuori possesso, fuori dal dominio osservato qui), non perché non
+> esista nel motore. WIDTH a zero confermato empiricamente (gli ALA non raggiungono mai il ramo
+> base: marcatura stretta o linea chiusa li intercettano sempre prima).
+>
+> **Conclusione, con la precisione terminologica corretta: nel campione osservato, il sistema a zone
+> è potenzialmente operativo nel 4,7% delle decisioni normali della squadra in possesso — una quota
+> campionaria, non un limite teorico assoluto del sistema.** Conseguenza per il test successivo: non
+> ci si può aspettare che una modifica alla cascata produca un grande effetto sulla concentrazione
+> aggregata dell'intera squadra; va misurato anche l'effetto condizionato alla sola attivazione del
+> ramo, per distinguere "il sistema funziona poco" da "il sistema funziona, ma viene invocato
+> raramente" (95,3% dei casi normali è assorbito da UNMARK, fuori dal controllo delle zone). Nessuna
+> modifica al codice, nessun algoritmo cambiato.
+>
+> **Fase 70 — confronto motore con zone attive vs baseline Fase 68, due metriche in parallelo. 40
+> partite, stesso protocollo, nessuna modifica al codice, nessuna ricalibrazione.**
+>
+> - **Aggregato** (tutti i tick, n=15.137): 54,2% sovrapposizione, contro 53,6% della baseline —
+>   nessuna differenza misurabile, coerente con la copertura del 4,7% (Fase 69).
+> - **Condizionato** (solo tick con 2+ giocatori simultaneamente in SUPPORT/DEPTH, n=31): **0,0%
+>   sovrapposizione** — ogni volta che il sistema a zone ha governato 2+ giocatori nello stesso
+>   tick, non si sono mai sovrapposti. Limite onesto: campione piccolo (n=31), prova forte ma non
+>   enorme.
+>
+> **Conclusione**: non "il sistema funziona poco" ma "il sistema funziona, ma viene invocato
+> raramente" — l'effetto aggregato nullo deriva dalla bassa frequenza di attivazione (4,7%), non da
+> un difetto del meccanismo, che rispetta MAX 1 al 100% sulle posizioni reali (non solo sui target
+> assegnati) in tutti i casi osservati. Nessuna modifica al codice, nessun algoritmo cambiato.
+
+> **Aggiornamento 2026-08-15 (Fasi 8-11 — attributi reali dal dataset + azioni autonome dei 14
+> giocatori).** Nota di numerazione: questa numerazione collide con quella già in uso in questo
+> documento per altri sistemi (es. "Fase 8" investimenti) — consigliato rinominare (es.
+> "Fase M8-M11") prima di una riscrittura definitiva.
+> - **Fase 8**: verificato che il dataset reale (`data-squadre.js`, 5.513 giocatori) contiene solo
+>   `{nome, ruolo, ovr}` — nessun attributo granulare nella fonte dati.
+> - **Fase 8-bis/ter/quater**: `generateAttributesFromOverall(player)`/`verifyOverall(player)`
+>   (pure, deterministiche, seed = nome), riusano `ROLE_WEIGHTS`/`GK_ROLE_WEIGHTS` esistenti.
+>   Testato su tutti i 5.513 giocatori reali: errore 0, 5.513/5.513 validi.
+> - **Fase 9**: `calcChanceTiro`/`calcChanceAssist`/`calcChancePossesso`/`calcChance()` ora
+>   accettano un `player` opzionale — comportamento su self identico a prima se assente.
+> - **Fase 10/10-bis**: motore decisionale autonomo (`decidiAzioneAutonoma`/`eseguiAzioneAutonoma`)
+>   agganciato al frame loop reale. Scoperta critica: la squadra Away non aveva mai nomi reali
+>   (`nome:null` su tutti e 7 gli slot), difetto preesistente di `calcolaPosizioniTattiche()`.
+> - **Fase 10-ter**: `roseSquadraPerFormazione()`/`pescaGiocatoreSlot()` — tutti e 14 gli slot
+>   pescano giocatori reali dalla rosa. Testato: 14/14 identità reali, 0 anonimi, 0 duplicati.
+> - **Fase 11**: corretto il possesso di partenza (finiva sempre al protagonista per un fallback
+>   preesistente). Nuova `assegnaPossessoIniziale(campo)`, riusa `sincronizzaPossesso()` esistente.
+>
+> Problemi residui aperti dichiarati in questo addendum (poi ripresi nel blocco Fasi 12-50 sopra,
+> leggere in ordine cronologico inverso rispetto alla posizione in questo documento): il gate dei
+> 25' non si sblocca da solo a zero-click; il protagonista poteva mantenere la palla indefinitamente
+> finché non arriva un click (poi risolto in Fase 12); `test-bot.js` mai caricato in quella sessione.
+
+
+> **Aggiornamento 2026-08-10 (Fase 7 — emergenza del gioco: MOMENT come rappresentazione, non
+> motore).** Su richiesta esplicita dell'utente, con audit PRIMA del codice (come richiesto): questa
+> fase è stata prevalentemente diagnosi/misurazione/instrumentazione, non nuova meccanica — l'audit
+> ha trovato che la parte importante (simulazione continua indipendente dai momenti) era già vera
+> dalla Fase 1-6, e che l'unico dubbio concreto avanzato dalla richiesta (scelte risolte su stato
+> "vecchio") non corrispondeva a un bug reale nel codice attuale.
+> - **Diagnosi — SIMULAZIONE vs EVENTO/OUTCOME vs NARRAZIONE**: verificato che i tre livelli sono già
+>   separati nel codice. La SIMULAZIONE (`avanzaStatoCampo`: orologio, target dei 14, movimento,
+>   palla, coerenza) gira in `avviaCanvasPartita`'s `frame()` con un'unica guardia — lo schermo attivo
+>   è `screen-match` — MAI condizionata dalla presenza di scelte pendenti o da `MOMENTS`. L'EVENTO/
+>   OUTCOME (`applyChoiceOutcome`/`emitMatchEvent`) resta sempre e solo innescato da un click reale
+>   (nessuna azione narrata — gol, assist, tackle, tiro — nasce oggi senza un click, ECCETTO il
+>   recupero geometrico di una palla FREE, Fase 6, l'unica azione realmente autonoma del motore). La
+>   NARRAZIONE (`addLog`/`showMatchEvent`/scelte mostrate) è un layer puramente di presentazione:
+>   verificato con un test dal vivo che sopprime `addLog`/`showMatchEvent` (stub temporaneo, MAI
+>   permanente) per un'intera partita — il motore produce identiche conseguenze reali (contatori,
+>   possesso, stato della palla) senza alcun testo mostrato.
+> - **Dipendenza da MOMENTS**: onestamente ancora totale per qualunque azione che intacca il
+>   punteggio/le statistiche di carriera (gol, assist, tackle vinto/perso, tiro) — tutte richiedono
+>   un click che attraversi `resolveChoice`→`applyChoiceOutcome`, perché `calcChance*` (l'unica
+>   autorità sull'esito, non toccata) è costruita esclusivamente sugli attributi di `self` e non ha
+>   un equivalente per nessun altro dei 14 giocatori. Non è stata costruita una generazione autonoma
+>   di passaggi/conduzioni/tiri per giocatori diversi da `self` — sarebbe stata, nella sostanza, una
+>   nuova IA (vietata esplicitamente sez.4), anche riusando `scegliRicevitoreReale`/
+>   `trovaIntercettoreReale`/`miraPortaLontanoDalPortiere`, perché non esiste alcun dado da riusare
+>   per decidere l'esito di quell'azione autonoma. Dichiarato qui invece di essere nascosto o
+>   forzato: **passaggiAutomatici/conduzioniAutomatiche/tiriAutomatici restano 0** (nuovi contatori
+>   introdotti apposta per esporre onestamente questo limite, non per nasconderlo).
+> - **Azioni autonome reali**: la posizione dei 14 (ogni frame, sempre), il possesso persistente
+>   (`ball.owner`, Fase 4), le transizioni immediate (`posizioniConMarcatura` ricalcola da zero ad
+>   ogni frame da `fasePossessoAttuale` corrente, nessuna logica di transizione dedicata necessaria),
+>   il recupero geometrico di una palla FREE (Fase 6, l'unica azione "motore" senza click) — tutte
+>   verificate ancora attive e indipendenti da `MOMENTS` in questa fase.
+> - **Verificato (non un bug)**: il timore esplicito della richiesta ("scelta risolta su coordinate
+>   vecchie") non corrisponde a un problema reale — `calcChance*` non legge mai `campo.ball`/
+>   `campo.players` (solo attributi statici + nome della zona, fissi per l'intero momento), e ogni
+>   funzione geometrica in `applyChoiceOutcome` (`scegliRicevitoreReale`, `miraPortaLontanoDalPortiere`,
+>   il portiere in `emettiTiroParato`) chiama `statoCampoCorrente()` al momento dell'ESECUZIONE (cioè
+>   al click), non a quello della rivelazione del momento — già corretto per costruzione fin dalla
+>   Fase 3. Confermato con un test dal vivo (non solo lettura del codice): momento rivelato, 20s di
+>   attesa reale-equivalente, un compagno spostato manualmente in un angolo completamente diverso del
+>   campo, poi click — il ricevitore selezionato coincide esattamente (0m di scarto) con la posizione
+>   manipolata appena prima del click, non con quella di 20s prima.
+> - **Modifiche** (tutte in `index REV2.html`, tutte diagnostica pura — nessuna nuova decisione di
+>   gioco): `azioneCorrenteDebug()` (BALL/OWNER/PHASE/ACTION/TARGET della richiesta, esposta in
+>   `matchViewerDebug().azioneCorrente`); `m.recuperiAutomatici` (Fase 6 ora esplicitamente separato
+>   da `m.recuperi`, che resta sempre conseguenza di un click); `contaSceltePendenti()` +
+>   `m.msSimulazioneTotali`/`m.msSimulazioneConSceltaPendente` (misura REALE, non assunta, di quanto
+>   spesso la simulazione avanza mentre una scelta è aperta — la prova che l'avanzamento non dipende
+>   dalla scelta, non la sua correzione).
+> - **Test eseguiti**: `node --check` OK; bot 2 run (25/40 e 40/60), 0 errori/0 violazioni. Dal vivo
+>   in browser — **attesa utente 20s**: momento aperto, nessun click, orologio/palla/possesso
+>   continuano a muoversi e cambiare (minute 46,7→50, ball.x continua a oscillare), 0 warning,
+>   `msSimulazioneConSceltaPendente` cresce coerentemente (61,5% del tempo totale di questo
+>   segmento); **staleness**: vedi sopra, confermato 0m di scarto; **senza narrazione** (addLog/
+>   showMatchEvent soppressi temporaneamente, motore intatto): assist riuscito, tiro parato con
+>   rimbalzo → tutti gli effetti reali (contatori, `ball.owner`, stato FREE) identici a quelli con
+>   narrazione attiva, poi narrazione ripristinata e verificata funzionante; **6 partite complete
+>   automatiche** (0'→25'→intervallo→25'→50', nessun intervento manuale — ridotto da 10 a 6 per il
+>   tempo disponibile, dichiarato onestamente): tutte concluse `finita:true`, 0 coordinate invalide,
+>   0 warning in tutte, giocatori mai oltre 0,5m/frame (limite di velocità mai superato); **anti-
+>   retroazione HOME/AWAY/FREE** (ripetizione esplicita dei test Fase 4/6): home stabile 1-3,8m in un
+>   caso pulito senza clip di volo (60s), away 6,63m, FREE risolta in entrambi i campioni (5,32m →
+>   3,35m, mai bloccata), 0 warning.
+> - **Metriche osservate**: `dipendenzaDaMoments.percentualeConSceltaPendenteMaSimulazioneAttiva`
+>   misurata realmente (61,5% in un segmento di test), non assunta al 100% per definizione.
+> - **Problemi residui, dichiarati esplicitamente senza nasconderli**: nessuna azione che intacca il
+>   punteggio (gol/assist/tackle/tiro) è oggi generabile dal motore senza un click dell'utente — la
+>   dipendenza da `MOMENTS` per QUESTA categoria resta strutturale e totale, non è stata rimossa né
+>   nascosta (sarebbe stato disonesto dichiarare "gioco autonomo" qui, esplicitamente vietato dalla
+>   richiesta stessa). Ciò che è realmente autonomo è la simulazione posizionale/di possesso/di
+>   transizione (Fase 1-6) più il singolo caso del recupero da palla FREE (Fase 6) — non l'intera
+>   partita. `passaggiAutomatici`/`conduzioniAutomatiche`/`tiriAutomatici` restano a 0 per questa
+>   stessa ragione, esposti apposta invece di essere rimossi dalla diagnostica.
+
+> **Aggiornamento 2026-08-10 (Fase 6 — palla contesa, deviazioni e transizioni fisiche).** Su
+> richiesta esplicita dell'utente: introdurre una vera fase FREE della palla (`ball.owner=null`,
+> nessun proxy) dopo una parata deviata o un contrasto, con candidati al recupero geometrici — unico
+> limite strutturale rimasto dichiarato dalla Fase 5.
+> - **Diagnosi**: prima di questa fase, ogni esito (riuscito o fallito) di una scelta era sempre una
+> risoluzione sincrona e completa — un tiro falliva sempre come "fuori" (`off_target`), un contrasto
+>   fallito consegnava sempre la palla al proxy avversario nello stesso istante. La clip `save` e la
+>   variante `outcome:'saved'` esistevano già in `AnimationLibrary` ma non erano mai raggiunte da
+>   nessun percorso reale (codice morto, individuato durante l'audit).
+> - **Architettura FREE**: nessuna macchina a stati parallela — riusa `campo.ball` con tre nuovi campi
+>   (`libera`, `liberaDalMinuto`, `candidati`). `ball.owner===null` resta l'unico segnale autorevole
+>   di "nessuno la controlla" (invariante rispettato: nessun proxy lo sostituisce mai). Per
+>   compatibilità con tutto il resto del motore (che assume `fasePossessoAttuale` sempre `'home'`/
+>   `'away'`), quel campo NON è stato forzato a `null` — resta il segnale "morbido" dell'ultima
+>   squadra coinvolta, mentre `ball.owner` resta quello "duro". Il dado (`calcChance*`/`MOMENTS`) non
+>   è stato toccato: decide come sempre successo/fallimento della scelta; la Fase 6 decide solo la
+>   geometria di COSA succede fisicamente alla palla dopo un fallimento.
+> - **Modifiche** (tutte in `index REV2.html`): `avviaPallaLibera(originXY, contesto)` (marca FREE),
+>   `trovaCandidatiRecuperoPalla(campo, raggioM)` (nessuna funzione equivalente esisteva: le funzioni
+>   di Fase 3 restituiscono UN giocatore di UNA squadra nota, qui servono tutti i candidati reali di
+>   entrambe), `avanzaStatoPallaLibera(deltaMs)` (deriva bounded verso il punto di riposo + respiro,
+>   chiude FREE quando un candidato è a contatto — il PIÙ VICINO vince, nessun secondo sistema di
+>   probabilità: non esiste nel motore un percorso di dado raggiungibile in un tick automatico).
+>   `avanzaPallaLibera` ora smista verso questa nuova funzione quando `campo.ball.libera`, MAI la rete
+>   di sicurezza esistente (che assegnerebbe subito un proxy). `sincronizzaPossesso` chiude `libera`
+>   come valvola di sicurezza ogni volta che assegna un owner reale. Clip `save` estesa con una vera
+>   traiettoria (stessa spezzata di Fase 3); `direzioneDeviazioneParata` (rimbalzo deterministico,
+>   lontano dal lato coperto dal portiere reale, stesso principio di `miraPortaLontanoDalPortiere`).
+>   `emettiTiroParato`: un tiro fallito ha uno split di "flavor" (stesso pattern già accettato per il
+>   gol subito su turnover, 0,4 di probabilità) fra "fuori" (invariato) e "parato" — un tiro parato ha
+>   un secondo split fra "trattenuta" (portiere controlla, nessuna FREE — caso prioritario sez.16) e
+>   "respinta" (rimbalzo vero, FREE). Contrasto fallito: stesso principio, metà dei casi diventa
+>   palla libera invece del proxy immediato. Nuova diagnostica (`palla libera bloccata`) e metriche
+>   (`palleLibere`, `duelliPalla`, `parate` — quest'ultima finalmente derivabile, prima dichiarata
+>   impossibile in Fase 3/5).
+> - **Bug reale trovato e corretto durante la verifica dal vivo**: il primo tentativo faceva
+>   convergere il pressing verso `portatoreXY`, che durante una FREE ereditava ancora il pull "verso
+>   porta" pensato per un portatore che avanza l'azione — creando uno scarto permanente (~8m,
+>   misurato) fra il punto verso cui i giocatori venivano attratti e la posizione VERA della palla:
+>   nessuno arrivava mai entro il raggio di recupero (verificato: palla bloccata per 98+ secondi
+>   simulati). Corretto facendo sì che, durante FREE, il riferimento tattico per tutti i 14 sia la
+>   posizione REALE della palla, non un punto derivato da un'azione che nessuno sta conducendo — dopo
+>   il fix, il recupero è avvenuto in 0,4s nel retest identico. Un secondo problema minore (soglia
+>   diagnostica "palla bloccata" tarata con un errore di unità — confrontava minuti con secondi) è
+>   stato trovato e corretto nello stesso giro di test.
+> - **Test eseguiti**: `node --check` OK; bot 4 run in totale durante l'iterazione (25/40 e 40/60 ad
+>   ogni fix), sempre 0 errori/0 violazioni. Dal vivo in browser — **Test A** (parata semplice,
+>   trattenuta): `outcome:'saved'`, nessuna fase FREE, owner assegnato esplicitamente al portiere
+>   reale, `palleLibere.conteggio` invariato; **Test B** (parata con deviazione): `stato:'FREE'`,
+>   `owner:null` verificato esplicitamente, recupero geometrico reale in 0,4s dopo il fix; **Test C**
+>   (due contendenti): entrambi entro il raggio, vince il più vicino, `duelliPalla` incrementato;
+>   **Test D** (contrasto): FREE immediata (la palla è già lì), risolta quasi istantaneamente, vinta
+>   da una squadra non predeterminata dalla narrazione (puramente geometrica); **stress test dedicato**
+>   (40 round forzati, tiri e contrasti alternati): 20 episodi FREE generati e risolti, 11 con 2+
+>   candidati, 0 coordinate invalide, teletrasporto palla mai oltre 0,2m/frame, giocatori mai oltre
+>   0,5m/frame (limite di velocità, mai superato), 0 warning diagnostici; **partita completa
+>   automatica** (8000 frame, click automatici, nessun intervento manuale): 0 coordinate invalide, 0
+>   warning, conclusa correttamente a `finita:true`. Console pulita in tutti gli scenari.
+> - **Metriche osservate**: `parate` ora derivabile e distinta da "fuori" (prima impossibile);
+>   `palleLibere`/`duelliPalla` coerenti con le azioni realmente avvenute, nessuna statistica
+>   inventata.
+> - **Problemi residui, dichiarati esplicitamente**: il render canvas non differenzia visivamente
+>   una palla FREE da una CONTROLLED (stesso pallino bianco) — lo stato resta corretto e verificabile
+>   via `matchViewerDebug().ball.stato`, coerente con l'approccio già usato in tutte le fasi
+>   precedenti (debug via stato interno, mai un overlay a schermo), ma non c'è un segnale VISIVO
+>   dedicato; il "duello" fra due candidati resta puramente geometrico (il più vicino), non esiste un
+>   percorso di probabilità autonomo da riusare per un vero 50/50 quando le distanze sono quasi
+>   identiche — dichiarato invece di inventarne uno nuovo, come richiesto esplicitamente; l'intercetto
+>   di un passaggio (Fase 3) resta un evento istantaneo, non passa mai dalla fase FREE, esattamente
+>   come richiesto ("non sostituire l'intercettore reale con una nuova logica").
+
+> **Aggiornamento 2026-08-10 (Fase 5 — simulazione continua dei 14 giocatori).** Su richiesta
+> esplicita dell'utente, con audit dell'architettura esistente PRIMA di scrivere codice (richiesto
+> esplicitamente come primo passo): gran parte di quanto chiesto era già vero dalla Fase 1-4
+> (movimento continuo indipendente dagli eventi, tutti e 14 sempre attivi, anti-ball-magnet,
+> marcatura che si aggiorna da sola ogni frame, transizioni immediate) — il lavoro reale di questa
+> fase è stato estendere due punti concreti e aggiungere diagnostica, non costruire da zero.
+> - **Diagnosi — già sufficiente, non toccato**: `sincronizzaTargetCampo`/`avanzaGiocatoriCampo`
+>   girano OGNI frame per tutti e 14 indipendentemente da click/eventi (nessun "movimento congelato
+>   in attesa di un evento", mai stato vero da quando esiste l'orologio continuo); `posizioniConMarcatura()`
+>   ricalcola `fasePossessoAttuale`/marcatura/pressing da zero ad ogni chiamata — un turnover cambia
+>   comportamento al frame successivo, non serve alcuna logica di transizione dedicata; l'anti-ball-
+>   magnet (un solo portatore, gli altri su heatmap+intent) era già verificato in Fase 2.
+> - **Diagnosi — lacune reali trovate**: (1) lo smarcamento (`UNMARK`) scattava solo in base alla
+>   PROPRIA distanza dal marcatore più vicino, mai in base a se la LINEA di passaggio verso quel
+>   giocatore fosse coperta da un difensore altrove sul segmento; (2) il proxy dell'away (quando non
+>   esiste ancora un owner reale esplicito) era sempre il CEN fisso, indipendentemente da dove si
+>   trovasse davvero la palla; (3) `verificaCoerenzaPossesso()` copriva solo l'owner, non le
+>   coordinate/i limiti dei 14 giocatori né l'area dei portieri; (4) nessuna diagnostica su
+>   distanza media palla-giocatori/struttura di squadra/continuità del possesso.
+> - **Modifiche** (tutte in `index REV2.html`): nuova costante `LINEA_PASSAGGIO_CHIUSA_M=5`;
+>   `MovementDecisionEngine.decide()` accetta un nuovo input opzionale `lineaChiusa` — se vero,
+>   l'intent diventa `UNMARK` anche senza marcatura stretta, con lo scarto laterale calcolato da un
+>   riferimento di fallback (`ballPosition`) quando non c'è un marcatore vicino da cui allontanarsi;
+>   `posizioniConMarcatura()` calcola `lineaChiusa` per ogni compagno non portatore riusando
+>   `distanzaPuntoSegmentoM` (stessa geometria della Fase 3, nessuna nuova). `giocatorePortatoreCorrente()`:
+>   il fallback per l'away (quando lo sticky-check non trova un owner reale) ora sceglie il compagno
+>   di movimento geometricamente più vicino alla palla invece del CEN fisso — nessun rischio di
+>   retroazione (qui si LEGGE soltanto `campo.ball`, non lo si scrive mai in funzione di questa
+>   scelta) e nessuna oscillazione frame-per-frame (lo sticky-check della Fase 4 blocca il risultato
+>   finché l'owner non cambia davvero). Nuova `verificaCoerenzaCampo()` (stesso pattern "un warning,
+>   mai una correzione" di `verificaCoerenzaPossesso`): coordinate valide e limiti di campo per tutti
+>   i 14, portiere entro la propria area — chiamata da `avanzaStatoCampo` ogni frame. Nuova
+>   `calcolaMetrichePosizionali()` (pura, sola lettura, mai usata per decidere movimento):
+>   `distanzaMediaGiocatoriPallaM`, `numeroGiocatoriEntro5m/10m`, struttura di squadra
+>   (larghezza/profondità/baricentro) per entrambe le squadre — esposta in `matchViewerDebug()`.
+>   `sincronizzaPossesso()` traccia `turnoverCount`/`possessoDalMinuto` (solo a un vero cambio di
+>   squadra, mai sulle chiamate generiche ripetute della rete di sicurezza); `possessoStreak`
+>   incrementato nel punto già esistente di un assist riuscito — esposti come `continuitaPossesso`.
+> - **Cosa NON è stato toccato**: `calcChance*`/`MOMENTS`/`BEHAVIOR_MATRIX`/heatmap (invariati);
+>   `avanzaPallaLibera` (il suo meccanismo resta quello, già stabile, della Fase 1/4); nessun nuovo
+>   motore/matrice/sistema di probabilità/macchina a stati — le due estensioni sopra vivono
+>   interamente dentro `MovementDecisionEngine`/`posizioniConMarcatura`/`giocatorePortatoreCorrente`
+>   già esistenti.
+> - **Test eseguiti**: `node --check` OK; bot 2 run (25/40 e 40/60), 0 errori/0 violazioni in
+>   entrambi (2889 partite nel run più ampio). Dal vivo in browser: **unit test isolato di
+>   `lineaChiusa`** — stesso avversario a 18m (troppo lontano per marcatura/pressing), l'intent passa
+>   da SUPPORT a UNMARK cambiando solo quel flag, target laterale coerente; **proxy away geometrico**
+>   — spostata la palla vicino a un ATT poi a un DIF avversario su stato pulito, il fallback ha
+>   scelto correttamente il giocatore reale più vicino in entrambi i casi; **partita completa
+>   automatica** (7000 frame ≈ 350s simulati, click automatici su scelte/bottone secondo tempo,
+>   nessun intervento manuale sul possesso) fino a `finita:true`/schermata risultato: 0 coordinate
+>   invalide, 0 warning diagnostici (`verificaCoerenzaPossesso`+`verificaCoerenzaCampo` insieme),
+>   **anti-freeze**: il tratto più lungo senza alcun movimento rilevato (palla O giocatori) è stato
+>   un solo frame (50ms) — mai un vero congelamento; **anti-teleport**: giocatori mai oltre 0,50m/50ms
+>   (esattamente il limite di velocità 10m/s, mai superato), palla mai oltre 5,26m/50ms (coerente con
+>   l'accelerazione cubica finale di un tiro, non un teletrasporto); **anti-feedback HOME e AWAY
+>   separati** (test esplicitamente richiesto dopo il bug reale trovato in Fase 4): distanza massima
+>   palla↔portatore osservata 14,98m (home, durante il volo di un passaggio lungo verso un ricevitore
+>   reale — bounded alla durata della clip) e 6,37m (away) — nessuna delle due in crescita nel corso
+>   della partita, nessun loop.
+> - **Metriche osservate** (partita di test, poche occasioni per via del tempo compresso): distanza
+>   media giocatori-palla 12-15m nel corso della partita, struttura di squadra stabile (larghezza
+>   ~20-26m, profondità ~27-34m per entrambe le squadre, mai un collasso né un'espansione patologica),
+>   1 turnover osservato con contatori coerenti (`passTentati:1, passIntercettati:1`).
+> - **Problemi residui, dichiarati esplicitamente**: (1) "palla libera contendibile da più giocatori"
+>   (sez.15-17 della richiesta) NON è stata costruita come vero stato multi-frame — `ball.owner` non
+>   resta MAI genuinamente `null` per più di un istante nell'architettura attuale (ogni transizione
+>   di possesso assegna sempre qualcuno, sincronamente): non esiste oggi un innesco reale (nessun
+>   rimbalzo/seconda palla dopo una parata, gap già dichiarato in Fase 3) che produca una palla
+>   davvero contesa da più giocatori in campo. Costruirlo avrebbe richiesto introdurre un evento
+>   'saved' distinto da 'off_target' mai esistito, un cambiamento più ampio del perimetro di questa
+>   fase — non implementato, dichiarato qui invece di essere forzato artificialmente; (2) i momenti
+>   narrativi scriptati (MOMENTS) restano l'unica fonte di NUOVE situazioni di gioco — la squadra
+>   ospite non ha mai un'azione autonoma spontanea, come già dichiarato in Fase 4; (3) `possessoStreak`
+>   supera quasi sempre 1 solo nei test che incatenano passaggi manualmente (Fase 4): nel gioco reale
+>   un assist riuscito porta sempre a un gol immediato, quindi in condizioni organiche la sequenza
+>   "passaggi consecutivi" resta corta per costruzione del gioco, non per un limite di questa
+>   diagnostica.
+
+> **Aggiornamento 2026-08-10 (Fase 4 — chiusura della catena palla→giocatore→possesso, possesso
+> sticky).** Su richiesta esplicita dell'utente, per risolvere il limite lasciato dichiaratamente
+> aperto in Fase 3: dopo la clip di un intercetto, il possesso tornava al proxy generico di reparto
+> invece di restare al giocatore reale che aveva davvero recuperato palla.
+> - **Diagnosi**: il proxy veniva reintrodotto in DUE punti distinti, non uno solo. (1)
+>   `giocatorePortatoreCorrente()` (chiamata da `sincronizzaPossesso(fase)` ogni volta che viene
+>   invocata SENZA un giocatore esplicito — in particolare dalla rete di sicurezza per-frame di
+>   `avanzaPallaLibera`) ricalcolava sempre da zero self/CEN fisso, ignorando un owner reale già
+>   assegnato: bastava un frame perché l'intercettore sparisse. (2) `posizioniConMarcatura()` — che
+>   alimenta `MovementDecisionEngine` — aveva una SECONDA logica hardcoded e duplicata (mai
+>   `campo.ball.owner`) sempre e solo "il CEN fisso per l'away": anche dove `ball.owner` fosse già
+>   corretto, il sistema di posizionamento/pull-verso-porta restava comunque centrato sul proxy.
+> - **Correzione**: `giocatorePortatoreCorrente(campo, fase)` ora controlla PRIMA se
+>   `campo.ball.owner` è già un giocatore reale della squadra giusta (per riferimento id, filtrato
+>   per team — un owner della squadra avversaria rimasto per errore non può mai essere letto) e lo
+>   restituisce, ricadendo sul proxy solo se non esiste. Questo rende `sincronizzaPossesso(fase)`
+>   (senza secondo parametro) "sticky" per costruzione, senza toccare `avanzaPallaLibera` né
+>   duplicare logica. `posizioniConMarcatura()` ora deriva `portatoreSlot` da
+>   `giocatorePortatoreCorrente()` (stessa funzione, non più duplicata) invece della sua copia
+>   hardcoded — così `MovementDecisionEngine` riconosce immediatamente l'intercettore/ricevitore
+>   reale come portatore (`isBallCarrier`). Nuovo controllo diagnostico `verificaCoerenzaPossesso()`
+>   (chiamato da `avanzaStatoCampo` ogni frame, mai una correzione silenziosa, un solo warning per
+>   tipo di problema, stesso pattern di `segnalaCoordinataInvalida`): verifica che l'owner esista in
+>   `campo.players` e che il suo team coincida con `ball.possessionTeam` e `fasePossessoAttuale`.
+>   Nuovi contatori derivati `m.recuperi`/`m.tiriTotali`/`m.tiriInPorta` (stessi punti già toccati in
+>   Fase 3, nessun evento fittizio); `matchViewerDebug().currentEvent` ora espone anche `target`.
+> - **Bug scoperto e corretto DURANTE la verifica dal vivo** (non nella diagnosi iniziale): il primo
+>   tentativo di far leggere a `MovementDecisionEngine` la posizione LIVE del portatore reale usava
+>   la posizione del giocatore stesso come base del pull verso porta — per l'away, mai fatto prima
+>   (era sempre uno slot statico immobile). Misurato in test dal vivo: il divario fra palla e
+>   portatore cresceva SENZA LIMITE (fino a 24m+ in 16s), perché il target del portatore dipendeva
+>   dalla sua stessa posizione dell'istante prima, pullata verso porta ad ogni frame senza alcun
+>   aggancio esterno che la fermasse — lo stesso rischio di "loop di retroazione" identificato e
+>   deliberatamente evitato per l'home fin dalla Fase 1 (dove la base del pull è sempre la posizione
+>   della PALLA, non del giocatore, perché la palla è vincolata da `avanzaPallaLibera` entro
+>   `DERIVA_PORTATORE_IDLE_M`=4m dal suo anchor). Corretto usando `posizionePortatorePalla()` (la
+>   posizione della palla, già vincolata) come base per ENTRAMBE le squadre, non solo per l'home come
+>   prima — stesso principio, ora davvero esteso all'away invece di restare sullo slot statico.
+>   Riverificato dopo il fix: il divario oscilla in modo limitato (0,5-4,5m), mai in crescita.
+> - **Cosa NON è stato toccato**: `calcChance*`/`MOMENTS`/`BEHAVIOR_MATRIX` (il dado resta l'unica
+>   autorità su successo/fallimento, verificato non intaccato); `avanzaPallaLibera` (il suo
+>   meccanismo di deriva bounded resta quello della Fase 1, non riscritto — solo la SUA fonte di
+>   "chi è il portatore" ora è sticky grazie al fix su `giocatorePortatoreCorrente`); i momenti
+>   narrativi scriptati (`rivelaMomentoCorrente`) continuano a usare il proxy generico quando
+>   assegnano il possesso per una NUOVA situazione scriptata — classificato esplicitamente come
+>   "proxy ancora necessario" (nessuna identità individuale è mai scritta in un MOMENTS, per design).
+> - **Test eseguiti**: `node --check` OK; bot 2 run (25/40 e 40/60), 0 errori/0 violazioni in
+>   entrambi (2863 partite nel run più ampio). Dal vivo in browser: **catena A→B→D→E→F** (5 passaggi
+>   reali in sequenza fra compagni home, nessun intervento manuale sul possesso oltre le funzioni
+>   reali) — ogni ricevitore resta owner dopo i tick, coerente ad ogni passo; **intercetto persistente**
+>   — un vero avversario resta owner per l'intera clip PIÙ 2000ms di idle successivi (prima di questo
+>   fix: sarebbe tornato al proxy al primo frame); **conduzione+passaggio reale C→D** (away→away, via
+>   un vero evento con clip, non solo un flag) — coerente; **intercetto inverso D→E** (away→home) —
+>   coerente; **intercetto→conduzione→tiro→gol→ricalcio** — l'intercettore resta owner durante la
+>   conduzione, il tiro (self) segna per davvero (`myGoals` incrementato, contatori tiri coerenti),
+>   il ricalcio riassegna correttamente al proxy dell'avversario (situazione nuova, nessun individuo
+>   noto — corretto, non un bug); **intervallo/cambio campo** — un intercettore reale resta owner
+>   fino al 25' incluso, e resta owner ANCHE dopo "Inizia il secondo tempo" (side-effect positivo
+>   della stickiness: prima sarebbe tornato al proxy anche lì); **continuità 60s** (un'unica chiamata
+>   sincrona, click automatici sulle scelte quando appaiono, nessun intervento manuale sul possesso):
+>   0 coordinate invalide, 0 teletrasporti sospetti (soglia 15m/frame), 0 warning diagnostici, un
+>   turnover reale catturato correttamente a metà run. Console pulita in tutti gli scenari (nessun
+>   errore JS).
+> - **Metriche**: `passTentati/passCompletati/passIntercettati` (Fase 3) più i nuovi
+>   `recuperi/tiriTotali/tiriInPorta`, tutti derivati dalle azioni reali, verificati coerenti nei
+>   test sopra. `parate` esplicitamente NON introdotto: il modello non distingue oggi un tiro parato
+>   da un tiro fuori bersaglio (stesso `outcome:'off_target'` per entrambi) — derivarlo richiederebbe
+>   inventare una distinzione che il motore non fa, dichiarato come limite invece di forzarlo.
+>   `possessi` (percentuale di possesso) non introdotto: richiederebbe integrare nel tempo, non è
+>   "facilmente derivabile" da un singolo punto di codice come gli altri contatori.
+> - **Problemi residui**: i momenti narrativi scriptati continuano, per design, a usare il proxy
+>   quando assegnano il possesso per una situazione che il motore non individualizza mai (nessun
+>   MOMENTS conosce un giocatore avversario specifico) — classificato esplicitamente come proxy
+>   ancora necessario, non un difetto residuo di questa fase; la squadra ospite non ha mai un'azione
+>   autonoma propria (nessun "C passa a D" spontaneo nel gioco reale: ogni passaggio/intercetto
+>   avviene solo come conseguenza di una TUA scelta) — i test di catena su più passaggi consecutivi
+>   dell'away sono stati eseguiti richiamando direttamente le stesse funzioni reali usate dal motore
+>   (nessuna nuova IA), non attraverso un'azione spontanea del gioco, che non esiste e non è stata
+>   costruita (vietato esplicitamente).
+
+> **Aggiornamento 2026-08-10 (Fase 3 — geometria reale di passaggio/intercetto/tiro).** Su richiesta
+> esplicita e molto dettagliata dell'utente (30 sezioni), con un fork architetturale reale segnalato
+> e chiarito PRIMA di scrivere codice via domanda esplicita: chi decide se un passaggio/tiro riesce?
+> L'utente ha confermato il dado esistente (`calcChance*`, attributi reali) come unica autorità — la
+> geometria diventa la CONSEGUENZA VISIVA di un esito già deciso, mai un secondo sistema di
+> probabilità. Vincolo "nessun nuovo motore" rispettato: solo estensioni bounded a funzioni esistenti.
+> - **Diagnosi**: un assist riuscito mandava la palla a una zona nominale fissa (`'box'`), non a un
+>   vero compagno disegnato in campo; un assist fallito non aveva animazione — evento generico
+>   `possession/lost`, il testo diceva "intercettato" ma visivamente nulla si muoveva, nessun
+>   avversario reale veniva mai scelto; un gol mirava sempre al centro fisso della porta, ignorando
+>   la posizione reale (già dinamica) del portiere avversario.
+> - **Modifiche** (tutte in `index REV2.html`): nuovi helper geometrici puri accanto a
+>   `giocatorePortatoreCorrente` — `distanzaPuntoSegmentoM` (distanza punto-segmento), `scegliRicevitoreReale`
+>   (compagno reale più vicino alla destinazione, POR e passatore esclusi), `trovaIntercettoreReale`
+>   (avversario reale più vicino alla LINEA origine→destinazione, POR escluso) — entrambi
+>   deterministici, nessun `Math.random`, stesso principio già richiesto per `MovementDecisionEngine`.
+>   `sincronizzaPossesso(nuovaFase, giocatoreEsplicito)` — nuovo secondo parametro opzionale per
+>   impostare owner su un giocatore specifico invece del proxy generico di reparto (ogni chiamata
+>   esistente, senza il parametro, resta identica). `interpretMatchEvent` — nuovo campo opzionale
+>   `evt.destinationXY` che scavalca la zona nominale quando il motore ha già una posizione reale.
+>   Nuova `miraPortaLontanoDalPortiere(faseTiro)` — un tiro a segno punta al lato OPPOSTO rispetto a
+>   dove si trova realmente il portiere avversario (`decidiPosizionePortiere`), bounded dentro lo
+>   stesso specchio di porta di `ZONES.goal_line`. `applyChoiceOutcome`: assist riuscito ora usa
+>   `scegliRicevitoreReale` come `destinationXY`; assist fallito (nuova `emettiPassaggioFallito`,
+>   richiamata dai due rami di fallimento) emette una VERA clip `pass_short`/`pass_long` con
+>   `outcome:'intercepted'` verso l'intercettore reale trovato da `trovaIntercettoreReale`, che
+>   diventa esplicitamente il nuovo portatore; tiro a segno usa `miraPortaLontanoDalPortiere`. Nuovi
+>   contatori derivati (mai eventi fittizi): `m.passTentati/passCompletati/passIntercettati`, esposti
+>   anche in `matchViewerDebug().metriche`.
+> - **Cosa NON è stato toccato**: `calcChance*`/`MOMENTS`/`BEHAVIOR_MATRIX`/`MovementDecisionEngine`
+>   (il dado resta l'unica autorità su successo/fallimento); `avanzaPallaLibera` — un tentativo di
+>   agganciare la palla 1:1 alla posizione del portatore è stato scartato in fase di analisi: il
+>   target del portatore 'home' dipende già dalla posizione della palla (`posizionePortatorePalla`
+>   in `posizioniConMarcatura`), quindi farla anche dipendere all'inverso avrebbe chiuso un loop di
+>   retroazione (portatore→palla→portatore→...) capace di far avanzare da soli portatore e palla
+>   fino in porta durante un'attesa lunga — esattamente il difetto che `avanzaPallaLibera` era già
+>   stato costruito per evitare (vedi aggiornamento Fase 1). Scartato per rischio, non per pigrizia.
+> - **Limite noto e dichiarato**: l'identità dell'intercettore reale resta valida solo per la durata
+>   della clip (~0,6-1,1s); a clip conclusa, la rete di sicurezza di `avanzaPallaLibera` (esistente,
+>   non toccata) riporta il possesso al proxy generico di reparto della squadra avversaria (sempre
+>   anonima per design, mai un secondo motore per i suoi 7 giocatori) — comportamento verificato,
+>   non un bug: la squadra avversaria non ha mai avuto una simulazione individuale continua.
+> - **Test eseguiti**: `node --check` OK; bot 2 run (25/40 e 40/60 carriere/settimane), 0 errori/0
+>   violazioni in entrambi (2810 partite nel run più ampio, in linea con la baseline). Dal vivo in
+>   browser (carriera forzata, partita forzata, `applyChoiceOutcome` chiamata direttamente con esito
+>   forzato per testare entrambi i rami): **assist riuscito** — destinazione geometrica reale (il
+>   centrocampista più vicino, dato che l'attaccante che passa è escluso in quanto passatore);
+>   **assist fallito** — evento `pass_short`/`outcome:'intercepted'` con un vero avversario (CEN
+>   reale) come nuovo owner, `sincronizzaPossesso` correttamente su `'away'`, contatori aggiornati
+>   (tentati/completati/intercettati); tick manuali della clip: la palla percorre davvero la
+>   traiettoria verso l'intercettore reale, owner resta su di lui per tutta la clip; **tiro** —
+>   portiere spostato manualmente sopra/sotto il centro, verificato che la mira si sposta sempre sul
+>   lato opposto, bounded dentro lo specchio di porta; tick fino a fine `goal_celebration` + ricalcio,
+>   nessun errore. Console pulita in tutti gli scenari.
+> - **Problemi residui**: nessuna vera decisione autonoma di conduzione/tiro per i 12 giocatori di
+>   movimento (resta un layer geometrico sopra gli esiti del dado, non un'IA che decide lei stessa le
+>   giocate — esplicitamente fuori perimetro anche in questo aggiornamento); l'intercettore reale
+>   "vince" solo il breve istante della clip, poi la squadra avversaria torna anonima (vedi sopra);
+>   nessuna modalità di debug visivo (linea di passaggio/bersaglio, sez.27 della richiesta, esplicitamente
+>   opzionale) — verificato solo via stato interno (`matchViewerDebug`), non via overlay a schermo;
+>   `recupero`/`possesso` falliti restano generici (nessuna geometria di intercetto): scelta
+>   deliberata, non sono passaggi (un contrasto perso o un controllo fallito non hanno una "linea" da
+>   intercettare, la geometria si applica solo a un vero passaggio, `out:'assist'`).
+
+> **Aggiornamento 2026-08-10 (Fase 2 — comportamento emergente: la squadra segue la palla, i
+> portieri si muovono, il portatore reagisce alla pressione).** Su richiesta esplicita dell'utente,
+> dopo audit dei sistemi esistenti (heatmap/`BEHAVIOR_MATRIX`/`MovementDecisionEngine`/marcatura,
+> nessuno riscritto). Vincolo rispettato: nessun nuovo AI/movement/tactical engine — 3 estensioni
+> puntuali, tutte bounded, sui sistemi già presenti.
+> - **Diagnosi**: HEATMAP/MATRICE/CONTESTO (marcatura, pressing, smarcamento) erano già presenti e
+>   funzionanti — non riscritti. Tre lacune concrete trovate: (1) il baricentro di reparto
+>   (`HEATMAP_CENTROIDI_RUOLO`) era un punto FISSO per ruolo/fase, mai modulato dalla posizione reale
+>   della palla — "palla a destra" e "palla a sinistra" producevano la stessa struttura; (2) il
+>   portatore avanzava verso porta con un pull fisso (`PULL_AVANZAMENTO_PORTATORE`), indifferente a
+>   un avversario che lo stesse già pressando; (3) i portieri, esclusi per design da heatmap/matrice
+>   (nessuna voce prevista per POR), restavano quindi COMPLETAMENTE fermi sul proprio slot per
+>   l'intera partita — mai un adattamento alla palla.
+> - **Modifiche** (tutte in `index REV2.html`): nuove costanti `CENTROIDE_BALL_SHIFT_X/Y` (0.18/0.28)
+>   in `MovementDecisionEngine.decide()` — il baricentro di reparto (`puntoHeatmap`) si sposta di una
+>   frazione bounded verso la posizione reale della palla, per entrambe le fasi (chi difende scorre
+>   anche lui quando cambia lato, non solo chi attacca); nuova `FATTORE_AVANZAMENTO_SOTTO_PRESSIONE`
+>   (0.35) in `posizioniConMarcatura()` — se un avversario di movimento è già entro
+>   `RAGGIO_PRESSING_M` (8m, soglia esistente riusata) dal portatore, l'avanzamento verso porta si
+>   riduce invece di restare un pull fisso; nuova `decidiPosizionePortiere()` — i portieri seguono
+>   lateralmente la palla (±0.12 normalizzato) e si staccano leggermente dalla linea quando la palla
+>   è lontana (±0.03), restando sempre in area — chiamata da `posizioniConMarcatura()` al posto del
+>   percorso `MovementDecisionEngine` (che per POR resta correttamente un no-op, non toccato). **Non
+>   toccati**: heatmap/matrice/marcatura/pressing/smarcamento esistenti, `AnimationLibrary`,
+>   `AnimationManager`, renderer, `sincronizzaPossesso`, orologio/intervallo/cambio campo.
+> - **Cosa NON è stato costruito, e perché**: decisione autonoma di passaggio/conduzione/tiro con
+>   ricevitore nominato e geometria di intercetto (punti 14-19 della richiesta) — il motore attuale
+>   non simula passaggi individuali fra giocatori nominati: gol/assist/recupero restano esiti di una
+>   TUA scelta a probabilità (il sistema MOMENTS/choice-card, cuore del gioco), non di un'IA che
+>   decide per 12 giocatori di movimento. Costruire una simulazione di passaggio continua con
+>   intercetti geometrici sarebbe stato, nella sostanza, un nuovo motore di simulazione — esplicitamente
+>   vietato dal vincolo 29 della richiesta stessa. Le tre estensioni sopra restano nel perimetro
+>   "arricchire il movimento esistente", non "decidere le giocate".
+> - **Test eseguiti**: `node --check` OK; bot 2 run (25/40 e 40/60), 0 errori/0 violazioni in
+>   entrambi. Dal vivo in browser: **palla lato opposto** — stessa profondità, y=0.15 vs y=0.85:
+>   tutta la struttura offensiva (non marcata) si sposta lateralmente in modo netto, i difensori
+>   IMPEGNATI in una marcatura restano ancorati al proprio riferimento (comportamento corretto:
+>   marcatura ha priorità sullo shift di zona); **pressione sul portatore** — stesso punto di
+>   partenza, nessun avversario vicino vs un difensore a 0,65m: avanzamento pieno (x 0.5→0.575) vs
+>   ridotto (x 0.5→0.526), coerente col fattore 0.35; **portiere** — 4 scenari (palla vicina/lontana
+>   dalla propria porta, palla sulle due fasce): il portiere resta sempre in area, si stacca dalla
+>   linea solo quando la palla è lontana, si sposta lateralmente entro ±0,12 mai oltre; **anti-ball-
+>   magnet** — 3s di gioco vivo, campionati i 14 giocatori: solo 2 entro 5m dalla palla (portatore +
+>   un marcatore), 9 oltre 15m, nessun "assembramento"; **partita completa simulata** (auto-clic su
+>   tutte le scelte/eventi, 3126 frame, 50 minuti simulati): 0 coordinate invalide su palla e
+>   giocatori in ogni frame, tutti e 6 gli intent tattici osservati (SUPPORT/UNMARK/DEPTH/MARK/
+>   PRESS/WIDTH), intervallo e cambio campo attraversati correttamente, partita conclusa 4-3. Zero
+>   errori console in tutti i test.
+> - **Metriche**: nessun sistema di raccolta statistiche (possessi/passaggi/intercetti/tackle)
+>   esiste nel motore attuale — non introdotto, perché richiederebbe modellare esplicitamente eventi
+>   che oggi non esistono (passaggi individuali, intercetti geometrici, vedi sopra). I soli dati
+>   osservabili restano quelli già esistenti (`myGoals`/`oppGoals`/`attempts`/`successes` in
+>   `state.matchTemp`, già usati per il voto di fine partita) e gli intent (`matchViewerDebug()`).
+> - **Problemi residui**: (1) come dichiarato sopra, non esiste una vera decisione di
+>   passaggio/conduzione/tiro con geometria — il "calcio" percepito nel Match Viewer resta un
+>   layer di movimento plausibile sopra un motore a scelte, non una simulazione di gioco autonoma;
+>   (2) le stesse due debolezze già segnalate in aggiornamenti precedenti restano: i turnover
+>   "normali" senza gol non hanno un segnale di intercetto/geometria dedicato (il possesso comunque
+>   si sincronizza correttamente, vedi aggiornamento precedente, ma non c'è un evento "intercetto"
+>   distinto da un generico turnover); il marcatore del portatore in fase away resta guidato dalla
+>   logica di marcatura esistente, non dal nuovo shift di zona quando è impegnato a marcare (per
+>   design, marcatura ha priorità — vedi test sopra).
+
+> **Aggiornamento 2026-08-10 (fix del possesso alla fonte + verifica di coerenza della simulazione).**
+> Su richiesta esplicita dell'utente, fase di controllo dopo l'introduzione dell'orologio continuo.
+> - **Diagnosi (bug prioritario)**: `applyChoiceOutcome()` non aggiornava MAI `fasePossessoAttuale`
+>   per un contrasto vinto (`out:'recupero'`, successo) — un turnover a NOSTRO favore restava
+>   invisibile al resto del sistema (marcatura/pressing continuavano a comportarsi come se l'avversario
+>   avesse ancora palla). Gli esiti negativi (palla persa) avevano lo stesso problema nella direzione
+>   opposta, tranne il caso "gol subito" (già gestito in un aggiornamento precedente). Causa: il
+>   possesso veniva dedotto SOLO dal campo narrativo del momento (`moment.possesso`, fissato alla
+>   rivelazione), mai aggiornato quando l'ESITO della scelta cambiava chi controllava davvero la palla.
+> - **Correzione, alla fonte (non nel renderer)**: nuova `sincronizzaPossesso(nuovaFase)` (vicino a
+>   `giocatorePortatoreCorrente`), UNICA funzione che scrive `fasePossessoAttuale`+`ball.owner`+
+>   `ball.possessionTeam` insieme — sostituiti tutti gli assegnamenti diretti sparsi nel codice
+>   (`rivelaMomentoCorrente`, `avviaSecondoTempo`, il ricalcio dopo un gol, `avanzaPallaLibera`) con
+>   chiamate a questa funzione: zero duplicazione, one source of truth come richiesto. In
+>   `applyChoiceOutcome()`, una riga nuova subito dopo la risoluzione della zona:
+>   `sincronizzaPossesso(success ? 'home' : 'away')` — regola unica per ogni tipo di scelta
+>   (gol/assist/recupero/possesso): successo = la palla resta a noi, fallimento = va all'avversario
+>   (per 'recupero' corrisponde esattamente a "vinto/perso il contrasto"). Il ramo "gol subito" (che
+>   rimette in gioco noi, non l'avversario) sovrascrive esplicitamente a `'home'` subito dopo, invariato
+>   nella logica.
+> - **Possesso — fonte unica di verità**: `ball.owner` (id del giocatore che la porta, dedotto con la
+>   stessa regola già usata per il rendering: il protagonista se il possesso è nostro, il centrocampista
+>   centrale avversario altrimenti — nessuna seconda regola) e `ball.possessionTeam` sono ora sempre
+>   coerenti con `fasePossessoAttuale` nello STESSO istante in cui cambia, non al frame successivo:
+>   verificato che `MovementDecisionEngine`/`posizioniConMarcatura` (che rileggono `fasePossessoAttuale`
+>   ogni volta che vengono chiamati, non modificati) reagiscono immediatamente, senza aspettare un
+>   altro evento.
+> - **Verifica dei 14 giocatori**: confermato con conteggio diretto a runtime — 14 totali (7+7), 2
+>   portieri (1 per squadra), 12 di movimento (6 per squadra), tutti con coordinate valide. Il "13"
+>   comparso in un report di una sessione precedente era testo di un commento storico pre-audit
+>   (`posizioniConMarcatura` prima del 2026-08-09 restituiva 13 posizioni + il protagonista da un
+>   percorso separato, causa C4 dell'audit, già risolta allora) riportato per errore nel riepilogo
+>   testuale di questa sessione — non un bug nel codice attuale, che è già unificato su tutti e 14
+>   dallo stesso `campo.players`. Nessuna modifica alla formazione necessaria.
+> - **File/funzioni modificati** (tutti in `index REV2.html`): nuova `sincronizzaPossesso()`;
+>   `applyChoiceOutcome` (nuova riga di sincronizzazione + il ramo gol-subito ora la usa);
+>   `rivelaMomentoCorrente`, `avviaSecondoTempo`, il followup `goal_celebration` in
+>   `AnimationManager.tick`, `avanzaPallaLibera` — tutti aggiornati per passare dalla stessa funzione
+>   invece di scrivere `fasePossessoAttuale`/`ball.owner`/`ball.possessionTeam` singolarmente. **Non
+>   toccati**: Match Engine/`MOMENTS`, heatmap, `BEHAVIOR_MATRIX`, `MovementDecisionEngine`,
+>   `posizioniConMarcatura`, `AnimationLibrary`, i 4 renderer, gating, formazione/`FORMAZIONE_TATTICA_7`,
+>   orologio continuo/intervallo/cambio campo (invariati, solo riusati).
+> - **Test eseguiti**: `node --check` OK; bot 2 run (25 carriere/40 settimane, 40 carriere/60
+>   settimane), 0 errori/0 violazioni in entrambi (~2900-3000 partite, baseline invariata). Dal vivo
+>   in browser: 14/2/12 giocatori confermati con conteggio diretto; 6 casi di turnover testati uno per
+>   uno (tackle vinto/perso, assist intercettato, tiro parato/fuori, possesso mantenuto, gol segnato) —
+>   possesso e owner sempre coerenti e immediati in ognuno; conseguenza tattica immediata verificata
+>   (protagonista passa da intent `DEPTH` a `MARK` nello stesso istante in cui perdiamo palla, un
+>   centrocampista avversario da `MARK` a `WIDTH`); transizione completa su 3 secondi di simulazione
+>   viva (costruzione→turnover→costruzione avversaria→recupero→ripartenza) — palla sempre valida, mai
+>   congelata, direzione di avanzamento coerente con la fase di possesso in ogni tratto; continuità
+>   pura su 60 secondi reali — 1819 posizioni distinte della palla, 0 coordinate invalide su palla e
+>   giocatori in nessuno dei 3750 frame; intervallo raggiunto naturalmente all'interno dello stesso
+>   test, gestito correttamente (aspetta la fine della scelta/animazione in corso, poi si ferma
+>   davvero). Zero errori console in tutti i test.
+> - **Problemi residui**: nessuno nuovo rispetto a quanto già segnalato nell'aggiornamento precedente
+>   (turnover "normale" — già coperto ora, vedi sopra — quindi quella voce è da considerarsi risolta).
+
+> **Aggiornamento 2026-08-10 (cambio di architettura — orologio di partita continuo, intervallo,
+> cambio campo).** Su richiesta esplicita dell'utente, dopo conferma via domanda diretta: il tempo
+> di gioco non deve più dipendere da quando il giocatore clicca una scelta.
+> - **Prima**: `m.minute` saltava di colpo dentro `nextMoment()`, chiamata SOLO al click di
+>   "Continua"; un tween puramente cosmetico del testo bloccava la rivelazione del momento successivo
+>   per tutta la sua durata. Il tempo, di fatto, avanzava solo in risposta a un click.
+> - **Ora**: `m.minute` avanza da solo, un frame alla volta, via `avanzaOrologioContinuo()` (dentro
+>   `avanzaStatoCampo`, quindi sempre attivo sulla schermata partita — durante la lettura di una
+>   scelta, l'esultanza, l'attesa), stesso ritmo di prima (1 minuto simulato = 1 secondo reale). I
+>   momenti/scelte non sono più "il clock": sono soglie (`m.prossimoMomentoMinuto`, ricalcolata in
+>   `resolveChoice()` appena una scelta si risolve, MENTRE il giocatore legge ancora l'esito) che
+>   l'orologio può superare da solo. `nextMoment()` (stesso nome, stessi 4 punti di chiamata) non
+>   salta più il minutaggio: dichiara "sono pronto per il prossimo momento" — se l'orologio ha già
+>   superato la soglia (probabile, dato che scorreva anche durante la lettura) rivela subito,
+>   altrimenti resta "in attesa" (`m.attesaProssimoMomento`) finché `provaRivelaMomento()` (chiamata
+>   ad ogni frame) non rileva il traguardo raggiunto.
+> - **Intervallo (2x25', non 45'/90' come nel testo originale della richiesta — regola reale del
+>   gioco, confermata con l'utente)**: al 25' l'orologio si ferma DAVVERO (`m.inIntervallo`, unica
+>   vera pausa della simulazione continua, esplicitamente richiesta) — bottone reale "Inizia il
+>   secondo tempo ▸" (stesso pattern del "Continua ▸" già esistente: elemento DOM con `onclick`
+>   reale, non stringa, quindi intercettato dal bot headless senza toccare `bot-helpers.js`).
+> - **Cambio campo**: `avviaSecondoTempo()` imposta `state.matchTemp.latoInvertito=true`, ricentra la
+>   palla, rimette in gioco `away` (chi non ha dato il calcio d'inizio del primo tempo, sempre
+>   `home` in questo motore). Trasformazione **centralizzata in un solo punto**: `CameraManager.
+>   toPixel()` specchia l'asse x (`x'=1-x`, l'asse della lunghezza campo — verificato: `home` tira
+>   verso x≈1) SOLO in fase di resa a schermo. Zone/heatmap/`BEHAVIOR_MATRIX`/`MovementDecisionEngine`/
+>   marcatura continuano a ragionare "in casa attacca verso x=1" per tutta la partita, primo e
+>   secondo tempo — zero formule toccate, zero rischio per quei sistemi già verificati: si specchia
+>   solo ciò che si vede, non la simulazione sottostante (scelta esplicita per rispettare il vincolo
+>   "non duplicare la logica di inversione nei renderer" restando nel perimetro consentito).
+> - **3 bug trovati e corretti durante la verifica** (nessuno visibile finché non si è testato un
+>   ciclo di gioco reale, non solo la sintassi):
+>   1. Momenti esauriti prima del cancello duro (es. un subentro dalla panchina con solo 2 momenti):
+>      il codice si rimetteva "in attesa" di un ticker che in headless non esiste → bot bloccato per
+>      sempre. Fix: `provaRivelaMomento()` forza il minuto alla soglia anche in questo ramo, in
+>      headless.
+>   2. `m.prossimoMomentoMinuto` non veniva mai ricalcolato dopo la prima rivelazione (dimenticato in
+>      `resolveChoice()`): il target restava quello del momento precedente, già superato, facendo
+>      rivelare ogni momento successivo istantaneamente al click invece che quando l'orologio lo
+>      raggiunge davvero. Fix: ricalcolato in `resolveChoice()`.
+>   3. `avviaIntervallo()` non impostava mai `primoTempoFinito`, quindi `provaRivelaMomento()` lo
+>      richiamava ad ogni `nextMoment()` successivo → loop infinito fra "fine primo tempo" e il
+>      bottone che avrebbe dovuto superarlo (osservato nel bot: 400 passi esauriti, "STUCK"). Fix:
+>      introdotto `m.inIntervallo` (pausa vera) distinto da `m.primoTempoFinito` (secondo tempo
+>      davvero iniziato, impostato solo in `avviaSecondoTempo()`) — senza questa distinzione il
+>      secondo bug si presentava capovolto: l'orologio ripartiva verso il 50' PRIMA che il giocatore
+>      cliccasse il bottone (misurato: già a 31' al momento del click, invece di restare fermo a 25').
+> - **File/funzioni modificati** (tutti in `index REV2.html`): `CameraManager.toPixel` (specchio
+>   laterale), `creaStatoCampo`/`beginMatch`/`beginMatchAsSub` (nuovi campi su `matchTemp`),
+>   `muoviPallaEvento` (invariato, già presente), rimossi `animaOrologioPartita`/
+>   `orologioPartitaAttivo`, nuovi `nextMoment` (riscritta), `provaRivelaMomento`,
+>   `avanzaOrologioContinuo`, `rivelaMomentoCorrente` (corpo invariato, scorporato dal tween),
+>   `avviaIntervallo`, `avviaSecondoTempo`, `resolveChoice` (nuovo calcolo del target),
+>   `avanzaStatoCampo` (chiama il nuovo ticker), `frame()` in `avviaCanvasPartita` (evita un giro di
+>   rAF residuo se `finishMatch()` scatta sincrono dall'interno del loop). **Non toccati**: Match
+>   Engine/`MOMENTS`, heatmap, `BEHAVIOR_MATRIX`, `MovementDecisionEngine`, `posizioniConMarcatura`,
+>   `AnimationLibrary`, `FieldRenderer`/`PlayerRenderer`/`BallRenderer`, gating/`whenDrained`, zone.
+> - **Test eseguiti**: `node --check` OK; bot 2 run (25 carriere/40 settimane e 40 carriere/60
+>   settimane), 0 errori/0 violazioni in entrambi, ~2900-3000 partite giocate (in linea con la
+>   baseline storica, prova che i 3 bug sopra sono stati risolti e non solo mascherati). Dal vivo in
+>   browser: orologio continuo verificato (14.4s reali → 14.52' simulati); scelta letta per 4.8s
+>   reali senza cliccare → il minuto avanza comunque, il momento resta lì; momento successivo rivelato
+>   automaticamente al raggiungimento della soglia, MAI al click; intervallo — orologio fermo
+>   ESATTAMENTE (25.200 immutato per 4.8s reali di attesa senza click); cambio campo — verificato
+>   `CameraManager.toPixel({x:0.2,y:0.5})`: pixel 94 senza specchio → 346 con specchio (simmetrico
+>   rispetto al canvas, 440 di larghezza); calcio d'inizio 2° tempo — palla a centrocampo, possesso
+>   `away`; fine gara — `finishMatch()` scatta esattamente al 50', schermata risultato mostrata dopo
+>   il consueto `setTimeout(200)` invariato. Zero errori console in tutti i test.
+> - **Problemi residui**: (1) come nell'aggiornamento precedente, i turnover "normali" (non un gol
+>   subito) non invertono il possesso — preesistente, non introdotto qui; (2) la heatmap/matrice
+>   comportamentale non sono state duplicate per il lato invertito perché non serve: ragionano ancora
+>   "in casa attacca x=1" e restano corrette anche nel secondo tempo, essendo lo specchio solo
+>   visivo — nessun problema noto qui, annotato solo per chiarezza di design; (3) un vero "match
+>   phase" a 13 stati nominali (KICKOFF/BUILDUP/ATTACK/...) e una macchina a stati della palla a 9
+>   valori (CONTROLLED/DRIBBLING/...), entrambi presenti nel testo della richiesta originaria, non
+>   sono stati introdotti come costrutti espliciti nel codice: il comportamento che descrivono
+>   (costruzione continua, conduzione, palla libera, ecc.) è già coperto dai sistemi esistenti
+>   (`avanzaPallaLibera`, heatmap, `MovementDecisionEngine`) senza bisogno di nominarli come enum a
+>   sé — introdurli sarebbe stato un secondo sistema di stato parallelo, esplicitamente vietato dal
+>   vincolo 23 della richiesta.
+
+> **Aggiornamento 2026-08-10 (Match Viewer 2D — simulazione continua fra un evento e l'altro).**
+> Richiesta estesa dell'utente: il viewer alternava "evento → animazione → campo statico → evento",
+> non una partita viva. Vincolo esplicito: nessun secondo match engine, riuso di quanto esiste.
+>
+> **Diagnosi (audit prima di toccare codice).** Il motore produce il tempo a "momenti" discreti
+> (`MOMENTS`, ~8 per partita, `m.minute` salta di 9-13' a ogni momento) rivelati dopo un tween del
+> minutaggio (`animaOrologioPartita`, ~1s reale per minuto simulato: 9-13s reali fra un momento e il
+> successivo). Lo stato persistente del campo (`state.matchTemp.campo`, dall'audit del 2026-08-09)
+> già dava continuità ai **13 giocatori di formazione**: `sincronizzaTargetCampo`/`avanzaGiocatoriCampo`
+> (heatmap+`BEHAVIOR_MATRIX`+`MovementDecisionEngine`) e `offsetRespiroTattico` (respiro deterministico)
+> girano OGNI FRAME via `avanzaStatoCampo`, indipendentemente da `currentEvent` — quella parte
+> dell'audit era già a posto, non toccata. Il vero buco era **solo la palla**: fuori da una clip
+> d'animazione, `campo.ball` non veniva mai aggiornato — restava congelata sull'ultima posizione
+> (kickoff, zona del momento, fine dell'ultima clip) per tutta l'attesa (il tween del minutaggio, la
+> lettura della scelta, l'eventuale evento ◆ MATCH_EVENTS) per poi TELEPORTARE alla zona del momento
+> successivo. Aggravanti: 3 dei 4 esiti di scelta per momento (`possesso`/`recupero`-vinto/`tackle`)
+> e diversi tipi di evento (`possession`,`foul`,`card`,`injury`,`turnover` non-gol) non hanno mai
+> avuto una clip in `eventClipMap` — quelle risoluzioni non muovevano la palla di un pixel. Il render
+> loop (`renderMatchCanvas`) disegna già incondizionatamente campo/giocatori/palla ad ogni frame,
+> quindi NON dipendeva da `currentEvent` — anche questo già a posto.
+>
+> **Soluzione.** Nuovo passo `avanzaPallaLibera()` in `avanzaStatoCampo()`, attivo SOLO quando nessuna
+> clip è in corso (stessa guardia di `sincronizzaPallaCampo`, mai in contemporanea): la palla si
+> muove verso un punto vicino alla sua ultima posizione **autorevole** (`campo.ball.anchor`, nuovo
+> campo aggiornato da `muoviPallaEvento` a ogni kickoff/nuovo momento/fine clip/ricalcio dopo gol) —
+> un piccolo avanzamento verso la porta della fase in corso (**capped in metri, non in percentuale
+> della distanza**: `DERIVA_PORTATORE_IDLE_M=4`, altrimenti un'attesa lunga farebbe percorrere tutto
+> il campo da sola) più lo stesso respiro deterministico già usato per i 13 giocatori
+> (`offsetRespiroTattico`, seed dedicato `'ball_libera'`), a una velocità di conduzione più realistica
+> di quella di riposizionamento (`VELOCITA_DRIBBLING_MPS=3.5` invece dei 10 m/s dei giocatori senza
+> palla). Nessun ciclo che si autoalimenta: il bersaglio deriva dall'ANCORA fissa, mai dalla posizione
+> corrente della palla, quindi non c'è rischio di deriva illimitata durante attese lunghe. `campo.ball`
+> guadagna anche `owner` (id del giocatore che la "porta": il protagonista se in possesso home, il
+> centrocampista centrale avversario se in possesso away — stessa regola già usata da
+> `posizioniConMarcatura()` per il rendering del portatore, duplicata in 2 righe in
+> `giocatorePortatoreCorrente()` invece di refactorare quella funzione già verificata) e
+> `possessionTeam` (rispecchia `state.matchTemp.fasePossessoAttuale`). Per rendere corretta anche la
+> DIREZIONE del possesso dopo un gol, il ricalcio (già introdotto in un aggiornamento precedente) ora
+> imposta anche `fasePossessoAttuale` alla squadra che rimette in gioco (`away` dopo un nostro gol,
+> `home` dopo averlo subito) — senza questo la squadra appena battuta sarebbe sembrata ripartire
+> subito in avanti, direzione sbagliata.
+>
+> **Eventi collegati (nessuno nuovo, tutti già nel motore).** `shot`/`pass_short`/`pass_long`/`tackle`
+> restano guidati dalla propria clip mentre animano (invariato); TUTTI gli altri tipi già emessi dal
+> motore (`possession`, `turnover`, `foul`, `card`, `injury`, `whistle`) ora, semplicemente non
+> avendo una clip, lasciano la palla nella modalità di vita continua invece che ferma — nessuna nuova
+> categoria di evento creata, nessun MATCH_EVENTS toccato (TACTICAL/PHYSICAL/PROVINCIAL_LIFE restano
+> puramente narrativi, coerente col punto 9 della richiesta: "possono rimanere non animati, ma non
+> devono rompere la continuità" — ora infatti non la rompono più).
+>
+> **Stato continuo.** Palla: `campo.ball` (`x,y,visible,moving,anchor,owner,possessionTeam`), un solo
+> oggetto, nessuna struttura parallela. Giocatori: `campo.players[]` (invariato, già continuo).
+> Possesso: `state.matchTemp.fasePossessoAttuale` (invariato come sorgente, ora anche riflesso su
+> `campo.ball.possessionTeam` e corretto dopo un gol). Target: `pl.targetX/Y` (invariato). Fase di
+> gioco: `state.matchTemp.zonaGolAttuale`/`fasePossessoAttuale` (invariati). `matchViewerDebug()`
+> esteso con `ball.owner`, `ball.possessionTeam`, `ball.anchor`, `matchMinute`, `fasePossessoAttuale`
+> (diagnostica, punto 15 della richiesta).
+>
+> **File/funzioni modificati** (tutti in `index REV2.html`): `creaStatoCampo` (nuovi campi su
+> `campo.ball`), `muoviPallaEvento` (aggiorna anche `anchor`), nuove `giocatorePortatoreCorrente()` e
+> `avanzaPallaLibera()`, `avanzaStatoCampo` (chiama la nuova funzione), `AnimationManager.tick` (il
+> followup `goal_celebration` ora imposta anche `fasePossessoAttuale`), `applyChoiceOutcome` (stesso,
+> ramo gol subito), `matchViewerDebug`. NON toccati (verificato, come richiesto dal vincolo 18):
+> Match Engine/`MOMENTS`, heatmap, `BEHAVIOR_MATRIX`, `MovementDecisionEngine`, `posizioniConMarcatura`,
+> `AnimationLibrary`, `CameraManager`/`FieldRenderer`/`PlayerRenderer`/`BallRenderer`, gating/`whenDrained`.
+>
+> **Test eseguiti.** `node --check` OK; bot 25 carriere/40 settimane, 0 errori/0 violazioni (invariato
+> da prima di questo intervento — nessuna funzione toccata è raggiungibile dal bot headless, tutte
+> dietro il guard `requestAnimationFrame`). Dal vivo in browser: **Scenario A** (15s continui senza
+> alcun evento) — 436 posizioni distinte della palla campionate (mai statica), sempre dentro
+> `[0,1]`, owner/possessionTeam coerenti, giocatore-portatore sempre nelle vicinanze. **Scenario B**
+> (costruzione DC→MC→ME con 2 passaggi e 3 fasi idle intermedie) — la palla si muove in OGNI fase
+> idle, non solo durante le clip. **Scenario C** (intercetto/tackle perso senza gol) — nessun
+> congelamento dopo la clip `tackle`. **Scenario D** (gol nostro e gol subito, verificati entrambi) —
+> dopo il ricalcio la palla deriva nella direzione corretta (verso la porta avversaria dopo un nostro
+> gol, verso la nostra dopo averlo subito), confermando il flip di `fasePossessoAttuale`. Test dei
+> limiti: ancora forzata in un angolo estremo del campo (0.98, 0.02) — 600 frame, 0 coordinate
+> invalide, la palla converge dentro i limiti di `limitiGiocatore` senza mai uscire visivamente dal
+> rettangolo di gioco. Zero errori console in tutti i test.
+>
+> **Problemi residui.** (1) Un turnover "normale" (palla persa senza gol subito, l'80% dei falli ad
+> alto rischio) non inverte `fasePossessoAttuale`: il motore non modella esplicitamente un cambio di
+> possesso per quel caso (mai stato tracciato prima di questo intervento), quindi la palla continua a
+> "respirare" nella direzione di chi l'aveva prima di perderla, finché il prossimo momento non la
+> corregge — non introdotto da questo intervento, preesistente, segnalato invece di risolto
+> silenziosamente (avrebbe richiesto toccare `applyChoiceOutcome` oltre il perimetro del gol, non
+> esplicitamente richiesto). (2) In fase di possesso `away`, il marcatore del portatore disegnato da
+> `posizioniConMarcatura()` resta guidato dalla logica esistente (heatmap/marcatura, non toccata per
+> vincolo) e non insegue pixel-per-pixel la nuova deriva della palla come fa invece il protagonista in
+> fase `home` (che la legge direttamente da `campo.ball`): entrambi restano vivi/coerenti ma non
+> perfettamente incollati in quel caso — accettato per non toccare un sistema esistente già verificato
+> fuori dal perimetro di questo intervento.
+
+> **Aggiornamento 2026-08-10 (Match Viewer 2D — la palla torna al centrocampo dopo ogni gol).** Su
+> richiesta esplicita dell'utente ("l'inizio partita e ogni volta che viene segnato un gol la palla
+> va a centrocampo, uguale all'inizio secondo tempo").
+> - **Gol segnato con tiro diretto** (`choice.out==='goal'`): nessuna modifica al trigger, la clip
+>   `shot` aveva già `variants:{goal:{followup:'goal_celebration'}}`. Il ricentraggio è agganciato
+>   in `AnimationManager.tick()`: quando si accoda il followup `goal_celebration`, gli viene passato
+>   un `onDone` che chiama `muoviPallaEvento({x:0.5,y:0.5}, 'ricalcio dopo gol')` — scatta quando
+>   l'esultanza finisce davvero (1200ms), non quando parte (il gating/`whenDrained` non aspetta
+>   l'esultanza, resta invariato). Un solo punto, vale per qualunque clip futura che dichiari lo
+>   stesso followup.
+> - **Gol segnato su assist** (`choice.out==='assist'`, clip `pass_short`/`pass_long`): PRIMA non
+>   accodava mai `goal_celebration` (le due clip non avevano `variantField`/`variants`, a differenza
+>   di `shot`) — un assist vincente non faceva esultanza né ricentraggio. Aggiunto lo stesso
+>   `variantField:'outcome'`/`variants:{goal:{followup:'goal_celebration'}}` anche a queste due clip:
+>   ora un assist-gol si comporta esattamente come un tiro-gol.
+> - **Gol subito** (`turnover`, ramo `Math.random()<0.4` in `applyChoiceOutcome`): questo tipo di
+>   evento non ha mai avuto una clip (`eventClipMap` non lo mappa), quindi nessuna animazione da
+>   aspettare — il ricentraggio è diretto, subito dopo `emitMatchEvent`, non tramite il followup.
+> - **Verificato**: `node --check` OK; bot 25 carriere/40 settimane, 0 errori/0 violazioni; dal vivo
+>   in browser — tiro-gol: palla ferma sulla linea di porta per tutta l'esultanza (0.995,0.5), poi
+>   scatto esatto a (0.5,0.5) al termine dei 2000ms totali (800 tiro + 1200 esultanza), non prima;
+>   assist-gol: stesso comportamento sui 1800ms totali (600 passaggio + 1200 esultanza); gol subito
+>   (forzato il ramo con `Math.random` mockato): palla a (0.5,0.5) immediatamente, nessuna clip di
+>   mezzo. Zero errori console in tutti i test.
+> - **Non implementato**: un vero "secondo tempo" (intervallo, kickoff separato a metà gara) non
+>   esiste nel motore (la partita scorre come un unico flusso 0-50', 2x25' solo narrativo) — l'utente
+>   lo citava come termine di paragone per il comportamento della palla dopo un gol, non è stata
+>   richiesta esplicitamente una meccanica di intervallo a sé; da riconsiderare se servirà davvero.
+
+> **Aggiornamento 2026-08-10 (Match Viewer 2D — spezzata di vettori per la palla, conduzione dietro
+> la palla, primo paint sincrono).** Su richiesta esplicita dell'utente.
+> - **Traiettoria della palla → spezzata di vettori**: le clip `pass_short`/`pass_long`/`shot`
+>   (`AnimationLibrary.clips`) non calcolano più la posizione con una formula parametrica continua
+>   (lerp/seno campionati a `t`) ma con una vera spezzata — `costruisciSpezzata(origin, dest, arcoM)`,
+>   nuova, vicino a `distanzaMetriTraPunti`: un vettore ogni `PASSO_VETTORE_M=1,5` metri REALI
+>   (valore fornito esplicitamente dall'utente) lungo retta+arco laterale in metri (stesso profilo
+>   `sin(π·t)` già usato dal cross, ora espresso in metri invece che in unità normalizzate).
+>   `puntoSuSpezzata(spezzata, distanzaM)` interpola fra i due vettori più vicini a una distanza
+>   reale percorsa. Ogni clip calcola `distanza = distanzaTotaleM · easing(t)` (stesso easing di
+>   prima per ciascuna clip) e legge la spezzata a quella distanza.
+> - **Portatore in conduzione dietro la palla**: nuova costante `DISTANZA_CONDUZIONE_M` (= un passo
+>   di vettore, 1,5m — "poco indietro" richiesto dall'utente senza un valore esatto, scelto da me
+>   coerente con la risoluzione della spezzata). Le tre clip restituiscono ora anche `playerPos =
+>   puntoSuSpezzata(spezzata, distanza - DISTANZA_CONDUZIONE_M)`: STESSA spezzata della palla, letta
+>   più indietro — non un secondo calcolo indipendente, come richiesto ("vettori equivalenti ma
+>   semplicemente traslati poco indietro"). `shot` mantiene in aggiunta il limite di sicurezza
+>   preesistente (il tiratore non entra in porta), ora espresso come cap sulla distanza reale
+>   (`min(distanza-1.5, distanzaTotale·0.85)`) invece che sulla frazione di `t`.
+> - **Bug "il pallone non compare all'inizio della partita ma col primo evento"**: lo stato
+>   (`campo.ball`) risultava già corretto (visibile, centrocampo) fin da `beginMatch()` — verificato
+>   che un render manuale a quel punto disegna correttamente il pallone. La causa più probabile è una
+>   corsa fra il primo `requestAnimationFrame` del canvas e il toggle di visibilità di `screen-match`
+>   (comune su alcuni browser mobile: il primo paint di un canvas appena reso visibile può restare un
+>   frame indietro). Fix difensivo in `avviaCanvasPartita()`: un `renderMatchCanvas()` SINCRONO subito
+>   dopo aver inizializzato palla/entità, prima ancora di programmare il loop rAF — il canvas ha già i
+>   pixel giusti nell'istante in cui lo schermo diventa visibile, senza dipendere dalla vittoria di
+>   quella corsa.
+> - **Verificato**: `node --check` OK; bot 25 carriere/40 settimane, 0 errori/0 violazioni; dal vivo in
+>   browser — `costruisciSpezzata` produce passo esattamente 1,5m su tratto retto (39m → 26 segmenti)
+>   e ~1,5m su tratto con arco (min 1,42/max 1,64/medio 1,52 su 48m); portatore esattamente a 1,5m
+>   dalla palla lungo la spezzata; tiro reale via `emitMatchEvent`, 40 frame campionati: il portatore
+>   resta fermo con la palla finché questa non ha percorso 1,5m (clamp a 0, non un secondo calcolo
+>   indipendente), poi lo segue a 1,5m costanti, poi si ferma prima della porta (cap 85%) mentre la
+>   palla prosegue fino alla linea — nessuna coordinata invalida in nessun campione; canvas con pixel
+>   del pallone già presenti subito dopo `beginMatch()`, senza bisogno di alcun frame di rAF
+>   successivo; zero errori console.
+> - Non toccati: motore/eventi, `tackle`/`save`/`goal_celebration` (nessun movimento), gating,
+>   heatmap/`MovementDecisionEngine`/marcatura, bot headless.
+
+> **Aggiornamento 2026-08-09 (Match Viewer 2D — audit completo, stato persistente del campo).**
+> Audit dell'intera pipeline motore→stato→eventi→animazioni→rendering, poi correzione delle cause.
+> **Cause trovate (audit, prima di toccare il codice):** C1 nessuno stato persistente dei giocatori
+> (`posizioniConMarcatura()` ricalcolava un target ogni frame e `drawFormazioneCompleta` lo disegnava
+> direttamente → teletrasporti); C2 l'unico movimento era `nuovoOffsetWander()` con `Math.random()`
+> (il "movimento casuale"), e l'unica cosa persistita era il rumore, non la posizione; C3
+> `AnimationManager.tick()` faceva `this.entities = {ball:startXY, actor:startXY}` sostituendo
+> l'oggetto: con eventi senza zona d'origine (tackle/possession/foul/whistle) diventava `null` →
+> palla e 14° giocatore sparivano; C4 due sistemi paralleli per i giocatori (13 da
+> posizioniConMarcatura, il self da `entities.actor`); C5 `interpretMatchEvent` usava sempre la
+> costante di zona, mai la posizione reale → salto a inizio clip; C6 lo stato finale di
+> un'animazione non veniva mai persistito; C7 nessun guard su NaN/undefined nel rendering.
+> **Correzioni (tutte in `index REV2.html`, single-file preservato):**
+> - Nuovo stato persistente unico `state.matchTemp.campo` = `{ball:{x,y,visible,moving},
+>   players:[14×{id,team,role,x,y,targetX,targetY,visible,base}]}` (`creaStatoCampo`), inizializzato
+>   in `beginMatch`/`beginMatchAsSub` dalle coordinate tattiche già esistenti. `base` è un
+>   RIFERIMENTO allo slot di `posizioniTattiche` (non una copia): la formazione resta la sorgente
+>   tattica immutabile letta da heatmap/MovementDecisionEngine — nessuna struttura parallela.
+> - `slotId` aggiunto agli slot in `calcolaPosizioniTattiche` per ricollegare senza ambiguità le
+>   posizioni desiderate (che sono copie riordinate) al giocatore nello stato.
+> - `sincronizzaTargetCampo` (target da heatmap+matrice+MovementDecisionEngine, invariati),
+>   `avanzaGiocatoriCampo` (current→target a 10 m/s: elimina i teletrasporti), `sincronizzaPallaCampo`
+>   (travaso della posizione interpolata), `muoviPallaEvento` (unico ingresso di stato fuori clip),
+>   `avanzaStatoCampo` (un frame di simulazione, separato dal rendering).
+> - Random-walk rimosso e sostituito da `offsetRespiroTattico`: oscillazione deterministica (fase da
+>   slotId, frequenze in rapporto √2 per non percepire il ciclo), zero `Math.random`.
+> - `AnimationManager`: `entities` non può più diventare null (riparte dall'ultima posizione nota);
+>   la posizione finale della clip viene persistita nello stato alla chiusura della timeline (Fase 8).
+> - `interpretMatchEvent`: origine = posizione reale della palla (zona nominale solo come fallback).
+> - `renderMatchCanvas`/`drawFormazioneCompleta`/`PlayerRenderer`: il renderer è ora pura lettura
+>   dello stato, tutti e 14 i giocatori da un unico percorso; ordine campo→giocatori→palla invariato.
+> - Vincoli fisici: `limitiGiocatore` impedisce ai giocatori di movimento di superare la linea di
+>   porta (`LIMITE_GIOCATORE_X=0.97`, l'area piccola resta raggiungibile); la palla resta libera di
+>   oltrepassarla per gol/tiro fuori.
+> - Difensivi + diagnostica: `coordinataValida`/`segnalaCoordinataInvalida` (un warning per tipo, mai
+>   silenzioso); `matchViewerDebug()` (Fase 14, sola lettura, non usata dall'esecuzione normale).
+> - **Bug preesistente scoperto e corretto**: `finishMatch()` chiude con `setTimeout(...,200)` e in
+>   quella finestra il bottone "Continua" resta cliccabile → la funzione veniva rieseguita (misurate
+>   4 volte) applicando più volte XP/voto/classifica/registraPartita. Aggiunta guardia `m.finita`
+>   (stesso principio di `orologioPartitaAttivo`): nessuna logica di gioco modificata, ora la partita
+>   si chiude una volta sola (verificato: `partiteRegistrate: 1`).
+> **Test eseguiti** (server Python locale; Node non disponibile in questo ambiente → `node --check` e
+> `tools/test-bot.js` NON eseguiti, sostituiti da caricamento in browser senza errori di parsing,
+> zero errori console e test funzionali diretti): T1 14 giocatori+palla presenti e posizionamento
+> tattico corretto/speculare (POR 0.06/0.94, DIF 0.22, CEN 0.48, ATT 0.74, ali y 0.18/0.50/0.82);
+> determinismo (2 run da 120 frame identiche, nessun `Math.random` nel percorso); T2 passaggio
+> (origine = posizione reale, arrivo esatto, errore 0 m); T3 tre passaggi concatenati (errore 0 m
+> ciascuno); T4 tiro (palla a 0.995 oltre la linea, giocatori fermi a 0.97: nessuno entra in porta);
+> T5 gol (gating sbloccato a 750ms, celebrazione eseguita dopo, 14 giocatori integri); T6 parata (la
+> clip non sposta la palla); T7 12 giocatori di movimento con target validi e intent coerenti
+> (SUPPORT/WIDTH/DEPTH/UNMARK in possesso, MARK/PRESS fuori possesso); T8 headless (rAF assente:
+> nessun errore, `matchAnimMgr` resta null, stato campo presente, partita conclusa su screen-result);
+> playthrough reale con canvas (40 snapshot: sempre 14 giocatori, 0 fuori campo, 0 in porta, 0 NaN,
+> 0 diagnostiche, palla in movimento solo durante le clip).
+> **Problemi residui:** (1) `node --check` e le 25 carriere del bot restano da eseguire alla prima
+> occasione utile (Node assente qui); (2) per le scelte assist/recupero/possesso la DESTINAZIONE
+> della clip resta la zona di default di `ZONE_DEFAULT_PER_OUT` (l'origine è ora corretta): allinearla
+> richiederebbe toccare `applyChoiceOutcome`, fuori dal perimetro consentito.
+
+> **Aggiornamento 2026-08-09 (palla "solo con gli eventi" + giocatori scollegati dalla posizione reale).**
+> Bug segnalato subito dopo il fix precedente: "il pallone appare solo con gli eventi, non c'è flusso
+> continuo. i giocatori non rispecchiano la posizione in campo".
+> - **Causa**: `zonaGolAttuale` (la zona che la narrazione del momento descrive già, es. "Ricevi palla
+>   al limite dell'area") veniva risolta da `nextMoment()` solo per calcolare le probabilità delle
+>   scelte — MAI collegata alla posizione visuale di palla/attore. Il fix precedente aveva tolto il
+>   movimento casuale della palla (corretto), ma il risultato era che palla e portatore restavano
+>   congelati sull'ULTIMA destinazione di clip (o al kickoff) per tutta la durata di un momento —
+>   spesso minuti di tempo reale — scollegati da dove la narrazione diceva già che ci si trovava.
+>   `posizioniConMarcatura` (quindi `MovementDecisionEngine`) legge la posizione del portatore dalla
+>   stessa fonte, quindi anche la marcatura/pressing dei giocatori risultava scollegata dalla zona
+>   reale dell'azione.
+>   Primo tentativo (far leggere la zona al renderer ad ogni frame quando idle) scartato durante la
+>   verifica: causava un salto ALL'INDIETRO della palla dopo un gol (tornava alla zona pre-tiro invece
+>   di restare sulla linea di porta) perché la zona resta quella dell'ultimo momento anche a esito
+>   già avvenuto — un problema di priorità fra "ultima zona nota" e "ultima posizione reale nota".
+> - **Correzione definitiva** (`index REV2.html`, `nextMoment()`): quando si risolve `zonaGolAttuale`
+>   per un nuovo momento, si aggiornano nello stesso punto anche `matchAnimMgr.entities.ball/actor`
+>   alla stessa zona — esattamente come fa già `AnimationManager.tick()` quando avvia una clip
+>   (`entities = {ball:startXY, actor:startXY}`), qui applicato al momento in cui inizia una nuova
+>   situazione di gioco invece che a una clip. Da quel punto in poi `entities` resta l'UNICA fonte di
+>   verità (nessuna logica di posizionamento nel renderer): il render (`renderMatchCanvas`) e il
+>   contesto di `posizioniConMarcatura`/`MovementDecisionEngine` tornano a leggere `entities.ball`/
+>   `entities.actor` incondizionatamente, come prima del tentativo scartato. Nessuna nuova animazione:
+>   uno scatto deterministico su un dato di stato già esistente (stessa zona già usata per calcolare
+>   le probabilità), non un secondo sistema di animazione. Nessun momento GK_MOMENTS_POOL ha
+>   `zonaGol`: per quei momenti `entities` non viene toccata, resta quanto lasciato dall'ultima clip.
+> - **Verificato** (server Python locale, Node non disponibile): playthrough reale completo —
+>   (1) alla rivelazione del primo momento la palla passa da centrocampo a `edge_area` (0.75,0.5);
+>   (2) tiro-goal: nessun salto all'inizio della clip (l'origine coincide già con la zona di riposo),
+>   dopo il gol la palla resta esattamente sulla linea di porta per tutta l'esultanza E oltre (13s+),
+>   nessun salto all'indietro; (3) al momento successivo (`flank_right`) palla e "Baglio" (il
+>   portatore) si spostano insieme in fascia, visibilmente vicini — giocatori coerenti con la palla;
+>   (4) campionata l'assenza di movimento per 2s reali all'interno dello stesso momento: posizione
+>   identica byte-per-byte. Zero errori console in tutti i test.
+> - **Limite noto, non toccato** (fuori scope, richiederebbe modificare `applyChoiceOutcome`/
+>   `ZONE_DEFAULT_PER_OUT`, esplicitamente non toccabili): per le scelte 'assist'/'recupero'/
+>   'possesso' l'origine della clip resta il default fisso (`midfield_center`/`own_half`), non
+>   `zonaGolAttuale` — a differenza di 'goal' (dove l'origine è già esplicitamente `zonaGolAttuale`),
+>   quindi per quei tipi di scelta può comparire un breve salto fra la posizione di riposo e l'inizio
+>   della clip. Preesistente, non introdotto da questo fix, segnalato invece di risolto silenziosamente.
+> - Node non disponibile in questo ambiente — da rilanciare `node --check` e `tools/test-bot.js` alla
+>   prima occasione utile.
+
+> **Aggiornamento 2026-08-09 (fisica del pallone — rimosso il movimento autonomo/casuale).**
+> Su richiesta esplicita dell'utente: la palla si muoveva anche senza un evento che la coinvolgesse.
+> - **Causa precisa**: in `renderMatchCanvas()`, quando nessuna clip era attiva (`idle`), la posizione
+>   della palla veniva ricalcolata ogni frame con `posizioneConWander('ball', entities.ball, deltaMs)`
+>   — lo stesso random-walk introdotto per i pallini dei giocatori (aggiornamento precedente), applicato
+>   per errore anche alla palla. Nessun `requestAnimationFrame`/tick "fantasma": il ciclo di rendering
+>   era quello giusto, era la logica AL SUO INTERNO a spostare la palla senza un evento reale.
+> - **Correzione** (`index REV2.html`): rimossa la chiamata a `posizioneConWander` per la palla — ora
+>   `ballPos = entities.ball || {x:0.5,y:0.5}` (solo un'ultima rete di sicurezza, il percorso normale
+>   la trova sempre popolata). Il wander resta invariato per i 13 pallini di formazione e per l'entità
+>   'actor' (non richiesto toccarlo, "comportamento dei giocatori" è esplicitamente fuori scope).
+>   Aggiunta anche l'inizializzazione esplicita di `matchAnimMgr.entities` al calcio d'inizio
+>   (`avviaCanvasPartita`, centrocampo `{x:0.5,y:0.5}`) cosicché la posizione iniziale derivi da un
+>   punto del flusso di gioco (kickoff) invece che da un fallback calcolato ad ogni frame dal renderer.
+>   Non toccati: motore/esito delle azioni, `AnimationLibrary`, `AnimationManager`, `EventInterpreter`,
+>   heatmap, `BEHAVIOR_MATRIX`, `MovementDecisionEngine`, comportamento dei giocatori, gating, bot.
+> - **Verificato** (server Python locale, Node non disponibile — `node --check`/25 carriere via
+>   `test-bot.js` non eseguibili in questo ambiente, sostituiti con caricamento in browser + zero
+>   errori console + test funzionali mirati sull'`AnimationManager` reale):
+>   (1) palla ferma senza eventi — campionata ogni 50ms per 3s reali, sempre esattamente `{x:0.5,y:0.5}`;
+>   (2) passaggio reale in partita — campionata ogni 50ms: ferma finché `current:false`, poi
+>   interpolazione liscia (`easeOutQuad`, clip `pass_short`) fino a destinazione, poi ferma di nuovo
+>   per 15s+ senza il minimo drift;
+>   (3) tiro-goal, tiro-fuori, cross (`pass_long` con arco laterale) — testati via `emitMatchEvent()`
+>   (stesso ingresso usato dal motore reale): traiettorie corrette, deterministiche, destinazioni
+>   diverse per outcome (`goal_line` vs `goal_line_wide`), nessuna casualità nella posizione;
+>   (4) parata/rinvio — dopo un tiro parato la palla resta esattamente ferma alla destinazione del
+>   tiro anche durante l'intera clip di followup `save` (che non sposta la palla, comportamento
+>   preesistente non toccato);
+>   (5) continuità fra eventi consecutivi verificata concettualmente tramite il meccanismo esistente
+>   (non toccato) di `zonaGolAttuale`/origin condivisi fra calcolo della chance e animazione — non è
+>   stato alterato il comportamento (preesistente, in `AnimationManager.tick`, fuori scope) per cui
+>   ogni nuova clip parte dalla zona-origine dell'evento, non da un pixel letterale precedente.
+>   Zero errori console in tutti i test.
+> - Node non disponibile in questo ambiente — da rilanciare `node --check` e 25 carriere con
+>   `tools/test-bot.js` alla prima occasione utile.
+
+> **Aggiornamento 2026-08-09 (Match Viewer — MovementDecisionEngine: integra heatmap + matrice decisionale + contesto).**
+> Su richiesta esplicita dell'utente: i pull ad-hoc introdotti nei due aggiornamenti precedenti
+> (marcatura/pressing/spinta-heatmap in `posizioniConMarcatura`) sono stati unificati in un unico
+> modulo decisionale, senza creare una nuova heatmap né una nuova matrice comportamentale.
+> - **`BEHAVIOR_MATRIX`** (nuovo, `index REV2.html`): codifica finalmente in dati la matrice
+>   qualitativa già fornita dall'utente in chat (DC supporto/costruzione↔marcatura/copertura, ALA
+>   ampiezza/sovrapposizione↔rientro/marcatura, CC supporto/inserimento↔pressione/copertura, ATT
+>   profondità/smarcamento/pivot↔pressione), tradotta nel vocabolario di intent richiesto (SUPPORT,
+>   DEPTH, WIDTH, COVER, PRESS, MARK, UNMARK, RETREAT). Stessi bucket già usati dall'heatmap
+>   (`bucketComportamento`, invariato).
+> - **`MovementDecisionEngine`** (nuovo, isolato, puramente funzionale): `decide(input)` →
+>   `{targetX,targetY,intent,priority}`. Flusso esattamente come richiesto: HEATMAP
+>   (`HEATMAP_CENTROIDI_RUOLO`, invariata) → posizione di riferimento; MATRICE (`BEHAVIOR_MATRIX`) →
+>   intent di base; CONTESTO (chi è il portatore/il pressore, distanza dall'avversario più vicino) →
+>   sostituisce l'intent di base con PRESS (pressore reale entro `RAGGIO_PRESSING_M`, riusato), MARK
+>   (avversario più vicino entro 12m, non possesso) o UNMARK (avversario entro 6m, in possesso — il
+>   giocatore si sposta dal punto heatmap verso lo spazio libero); altrimenti resta l'intent di base
+>   della matrice (COVER/RETREAT/SUPPORT/WIDTH/DEPTH). Soglie (12m, 6m, offset UNMARK) scelte da me,
+>   non fornite, stesso ordine di grandezza delle soglie già esistenti.
+> - **`posizioniConMarcatura()` riscritta** per chiamare il motore per ciascun giocatore invece della
+>   vecchia logica inline duplicata (rimossa `posizioneComportamento`, assorbita nel motore); il
+>   portatore mantiene esattamente la stessa logica di avanzamento verso porta già esistente (non
+>   toccata, solo etichettata con l'intent di base come richiesto). Il Match Viewer
+>   (`drawFormazioneCompleta`/`posizioneConWander`) riceve solo `{x,y}` come prima, nessuna logica
+>   decisionale nel renderer — non toccati `AnimationLibrary`/`AnimationManager`/`EventInterpreter`/
+>   renderer 2D/gating/bot headless.
+> - **Verificato** (server Python locale, Node non disponibile — `node --check`/`test-bot.js` non
+>   eseguibili in questo ambiente, sostituiti con caricamento in browser + zero errori console +
+>   ispezione manuale del codice): tutti e 12 i giocatori di movimento producono target in [0,1] sia
+>   in possesso che fuori possesso (0 invalidi su 2 fasi testate); osservati in una formazione reale
+>   SUPPORT/WIDTH/DEPTH/UNMARK (possesso) e MARK/PRESS (non possesso); COVER e RETREAT verificati
+>   chiamando `MovementDecisionEngine.decide()` direttamente con un avversario oltre i 12m (fallback
+>   alla matrice, come atteso); determinismo verificato (stesso input due volte → stesso output
+>   byte-per-byte); playthrough reale (scelta → esito → continua) senza regressioni, zero errori
+>   console.
+> - Node non disponibile in questo ambiente — da rilanciare `node --check` e `node tools/test-bot.js`
+>   alla prima occasione utile.
+
+> **Aggiornamento 2026-08-09 (Match Viewer — pallone assente/che esce dal campo, clamp ai bordi).**
+> Bug segnalato dall'utente: "il pallone non è presente all'inizio, appena si fa una scelta spawna e
+> si muove a caso dentro e fuori dal campo"; "i giocatori... calcano le aree della heatmap ma si
+> muovono senza una logica, a maggior ragione perché non c'è il pallone".
+> - **Causa 1 (pallone "assente" a inizio partita)**: prima della prima clip d'animazione,
+>   `matchAnimMgr.entities.ball` non esiste ancora e il fallback era un punto fisso `{x:0.5,y:0.5}`
+>   (centrocampo) scollegato da qualunque logica di gioco — da cui l'impressione di un pallone
+>   "assente"/casuale che poi "spawna" al primo evento reale. Fix in `index REV2.html`
+>   (`renderMatchCanvas`): il fallback ora è `posizionePortatorePalla(entities)` (già usata altrove
+>   per il campo di passaggio/la marcatura), cioè la posizione tattica del portatore — il pallone è
+>   presente e coerente con la situazione fin dal primo fotogramma, non un punto morto.
+> - **Causa 2 (esce dal campo)**: il random-walk idle (`posizioneConWander`, introdotto
+>   nell'aggiornamento precedente) non aveva NESSUN clamp ai bordi — un pallino a riposo vicino a una
+>   zona di bordo (corner, six_yard, goal_line, flank...) poteva uscire visivamente dal rettangolo
+>   verde con l'offset di wander (fino a 6m in ogni direzione). Fix: nuova `clampCampo()` (margine
+>   `MARGINE_CAMPO_NORM=0.015`, scelto da me) applicata all'output di `posizioneConWander` — copre sia
+>   il pallone sia i 13 pallini di formazione, un solo punto da correggere.
+> - **Verificato**: (1) screenshot a inizio partita, prima di qualunque scelta — pallone visibile
+>   accanto allo slot del giocatore, non a centrocampo; (2) forzato `entities.ball` a un angolo estremo
+>   (x=0.995,y=0.02) e campionata `posizioneConWander` per 400 step consecutivi — mai uscito da
+>   [0.015, 0.985] su nessuno dei due assi, confermato anche visivamente (pallone fermo appena dentro
+>   il bordo); (3) playthrough reale con un tiro (clip d'animazione) — pallone resta vicino al
+>   giocatore/alla porta, nessun teletrasporto né uscita dal campo. Zero errori console in tutti i test.
+> - **Non implementato in questo intervento**: rimesse laterali/dal fondo. Il motore non modella un
+>   vero stato "palla fuori" (nessun evento/scelta lo rappresenta), quindi introdurle sarebbe una
+>   nuova meccanica di gioco, non un fix — con la palla ora sempre clampata dentro il rettangolo di
+>   gioco il sintomo visivo (palla che esce senza rimessa) non si presenta più, ma il tema resta aperto
+>   se l'utente vuole modellare esplicitamente le rimesse come eventi.
+> - Node non disponibile in questo ambiente (server Python locale usato per tutti i test) — da
+>   rilanciare `node tools/test-bot.js` alla prima occasione utile.
+
+> **Aggiornamento 2026-08-09 (Match Viewer — heatmap di posizionamento per ruolo, da HEATMAP.xlsx).**
+> Implementata la matrice di comportamento per ruolo (DC/CC/ALA/ATT × possesso/non possesso) fornita
+> dall'utente, usando i valori numerici del file `HEATMAP.xlsx` caricato ("scelta 1+heatmap che ti
+> carico dopo" in risposta alla richiesta di chiarimento sulla matrice qualitativa).
+> - **Lettura file**: 2 fogli (IN POSSESSO / NON POSSESSO), 5 blocchi ciascuno (DC, CC, ALA DX, ALA
+>   SX, ATT), ciascuno una griglia 8 righe (larghezza campo) × 13 colonne (lunghezza campo, col.1 =
+>   vicino alla propria porta) di pesi 1-3. Estratti con `openpyxl` (Python, non presente nel
+>   progetto: usato solo per leggere il file offline, nessuna nuova dipendenza runtime).
+> - **Semplificazione dichiarata**: invece di portare tutte le 130×10 celle in `index REV2.html` e
+>   campionarle ogni frame, calcolato offline il baricentro pesato (Σvalore·coordinata/Σvalore) di
+>   ciascuna griglia — un punto per ruolo/fase (`HEATMAP_CENTROIDI_RUOLO`). Verificato numericamente
+>   che le griglie DC/CC/ATT sono simmetriche su y (un solo baricentro serve per entrambi gli slot
+>   DIF/per l'unico ATT) e che ALA DX/SX sono l'una lo specchio dell'altra sull'asse y — coerente con
+>   gli slotY di base (0.18/0.82) già esistenti in `FORMAZIONE_TATTICA_7`.
+> - **Integrazione**: nuove `bucketComportamento()` (mappa reparto+slotY di base → DC/CC/ALA_SX/
+>   ALA_DX/ATT/null-per-POR) e `posizioneComportamento()` (pull aggiuntivo verso il baricentro del
+>   bucket, `PULL_COMPORTAMENTO=0.3` scelto da me) in `posizioniConMarcatura()` — applicato COME PULL
+>   IN PIÙ dopo marcatura/pressing/avanzamento portatore già esistenti, non li sostituisce (richiesta
+>   esplicita "non sostituisce quanto detto precedentemente"). Per l'away (attacca verso x=0) la x del
+>   baricentro è speculare (1-x), la y no (stesso lato fisico per entrambe le squadre).
+> - **Verificato**: calcolate a mano le posizioni attese per ogni slot (es. home DIF base x=0.22 →
+>   pull marcatura+comportamento DC-possesso → x=0.276 atteso, 0.276 osservato; home ALA_DX-slot
+>   base (0.48,0.82) → 0.491,0.759 atteso e osservato; home ATT base 0.74 → 0.695 atteso e osservato)
+>   per la fase 'home' e per la fase 'away' — tutti i valori calcolati a mano coincidono esattamente
+>   con l'output di `posizioniConMarcatura()`. Verificata la tendenza generale: DC resta centrale/
+>   compatto, ATT resta avanzato anche fuori possesso ("pressione"), ALA si sposta lateralmente in
+>   base al proprio slot. Screenshot del campo senza anomalie, zero errori console.
+> - **Fix precedenti in questo aggiornamento** (stessa sessione): guardia di rientranza
+>   `orologioPartitaAttivo` contro il doppio-click sul bottone "Continua" (il tempo "impazziva" ad
+>   ogni click ripetuto durante il tween live) e velocità dei pallini corretta a `VELOCITA_PALLINO_MPS
+>   = 10` (era 65m/4s≈16.25, giudicata eccessiva) — entrambi verificati in precedenza in questa stessa
+>   sessione, vedi sopra.
+> - Node non disponibile in questo ambiente (server Python locale usato per tutti i test) — da
+>   rilanciare `node tools/test-bot.js` alla prima occasione utile.
+
+> **Aggiornamento 2026-08-09 (Match Viewer — fix orologio "impazzito" dopo Continua, velocità corretta a 10 m/s).**
+> Bug segnalato dall'utente: "una volta cliccato continua per entrare in campo, il gioco si bugga e il
+> tempo va avanti ad ogni click".
+> - **Causa individuata**: il bottone "Continua ▸" (sia quello di `nextMoment()` per l'ultimo tratto a
+>   fine partita, sia quello di `showMatchEvent()` dopo un evento ◆) resta nel DOM e cliccabile per
+>   TUTTA la durata dell'animazione live del minutaggio (`animaOrologioPartita`, fino a diversi secondi
+>   reali) perché `matchAction` viene ripulito solo nella callback finale — un secondo click sullo
+>   stesso bottone durante quella finestra richiamava un secondo `nextMoment()` in parallelo, sommando
+>   un secondo incremento di minuto e avviando un secondo tween concorrente sullo stesso elemento DOM.
+> - **Fix**: guardia di rientranza `orologioPartitaAttivo` in `index REV2.html` — `nextMoment()` ora
+>   ignora ogni chiamata mentre un tween è già in corso, si azzera nella callback finale (sia per il
+>   percorso normale sia per l'ultimo tratto fino a `finishMatch`) e viene resettata per sicurezza a
+>   ogni inizio partita (`beginMatch`/`beginMatchAsSub`).
+> - **Verificato**: simulato un doppio-click reale sullo stesso identico bottone "Continua" nello
+>   stesso tick JS (nessun gap reale) — il primo click avvia il tween (minuto 0→9, `orologioPartitaAttivo:true`),
+>   il secondo click immediato viene ignorato (minuto resta 9); dopo la fine naturale del tween il flag
+>   torna `false` e le 3 scelte del primo momento appaiono correttamente. Zero errori console.
+> - **Velocità pallini corretta a 10 m/s** (era stata calibrata a 65m/4s≈16.25 m/s nell'aggiornamento
+>   precedente, l'utente l'ha giudicata eccessiva): `VELOCITA_PALLINO_MPS = 10` in `index REV2.html`.
+>   Verificato campionando la distanza percorsa ogni 100ms per 2s: velocità media misurata ≈9.5 m/s,
+>   coerente col nuovo riferimento.
+> - **Nota per il prossimo intervento**: l'utente ha fornito una matrice di comportamento per ruolo
+>   (DC/ALA/CC/ATT × possesso/non possesso, es. "ALA: ampiezza/sovrapposizione in possesso, rientro/
+>   marcatura fuori possesso") come raffinamento — non sostituisce la marcatura/pressing già
+>   implementata (`posizioniConMarcatura`), la integra. Non ancora implementata: la matrice descrive
+>   comportamenti qualitativi, non le coordinate/soglie geometriche esatte che finora l'utente ha
+>   sempre fornito prima di ogni implementazione — chiarimento richiesto in chat prima di scriverla in
+>   `posizioniConMarcatura`, per non inventare arbitrariamente le geometrie di ampiezza/sovrapposizione/
+>   inserimento/pivot al posto suo.
+> - Node non disponibile in questo ambiente (server Python locale usato per tutti i test) — da
+>   rilanciare `node tools/test-bot.js` alla prima occasione utile.
+
+> **Aggiornamento 2026-08-09 (Match Viewer — fix orologio oltre 50', movimento random-walk a velocità reale).**
+> Bug segnalati dall'utente dopo la modifica precedente: (1) "il tempo va avanti ad oltranza e non si
+> ferma a 50'"; (2) "i giocatori oscillano in loop e si muovono troppo lentamente".
+> - **Bug orologio**: `nextMoment()` incrementava `m.minute += rand(9,13)` senza mai limitarlo — con
+>   4 momenti a scelta per partita il minutaggio VISUALIZZATO poteva arrivare fino a ~52'-53' prima
+>   che `finishMatch()` lo riportasse a 50. Fix: `m.minute = Math.min(50, m.minute + rand(9,13))` in
+>   `index REV2.html`, il minutaggio ora non supera mai 50' qualunque sia il numero di momenti ancora
+>   da giocare. Verificato pilotando un'intera partita da portiere (pool peggiore, 4 momenti gk) via
+>   click automatizzati sulle choice-card: sequenza minuti osservata `12',12',12',24',36',45',46'...48'`,
+>   mai oltre 50, partita conclusa correttamente su `screen-result` con `state.matchTemp.minute===50`.
+> - **Movimento troppo lento/"in loop"**: il precedente layer idle (singola oscillazione seno/coseno
+>   per giocatore, ampiezza ~0.8m/0.7m, periodo fisso) dava un'impressione di andirivieni ripetitivo e
+>   percettibilmente lento. Sostituito con un vero random-walk continuo: `posizioneConWander(key,
+>   centro, deltaMs)` fa inseguire a ogni pallino un micro-obiettivo casuale entro `RAGGIO_WANDER_M`
+>   (6m, scelto da me) dalla propria posizione tattica/di marcatura, spostandosi a velocità reale
+>   costante `VELOCITA_PALLINO_MPS = CAMPO_LUNGHEZZA_M/4` (~16.25 m/s, calibrazione esplicita
+>   dell'utente: "un giocatore ci mette 4 secondi per correre tutta la lunghezza del campo") e appena
+>   raggiunto il target ne sceglie subito un altro, senza mai fermarsi. Stato persistente in
+>   `statoWanderPallini` (per-key offset/target in metri), resettato a ogni `avviaCanvasPartita()`.
+>   Applicato ai 13 pallini di formazione (`drawFormazioneCompleta`) e a palla/attore quando non è in
+>   corso una clip d'animazione (`idle` in `renderMatchCanvas`, invariato il comportamento durante le
+>   clip). Nessuna modifica a motore/eventi/probabilità/`posizioniConMarcatura`/`posizioniTattiche`.
+>   Verificato: campionando la distanza percorsa da un pallino ogni 100ms per 2s, velocità media
+>   misurata ≈14.4 m/s (vicina al riferimento 16.25 m/s, scarto dovuto al campionamento discreto),
+>   movimento mai fermo, traiettoria non periodica (nuovo target casuale ogni volta). Zero errori
+>   console in entrambi i test (server Python locale, Node non disponibile in questo ambiente — da
+>   rilanciare `node tools/test-bot.js` alla prima occasione utile).
+
+> **Aggiornamento 2026-08-09 (Match Viewer — rimosse curve di passaggio, aggiunto movimento idle continuo).**
+> Richiesta utente: durante la partita il campo appariva statico (nessun movimento fra un evento e
+> l'altro) con le curve di indifferenza di passaggio sempre sovrapposte, non più volute.
+> - **Rimosso** interamente il layer grafico `drawPassProbabilityField` (e con esso `MOSTRA_CAMPO_PROBABILITA_PASSAGGIO`,
+>   `calculateIndifferenceRadius`, `LIVELLI_PROBABILITA_PASSAGGIO`) da `index REV2.html`: era solo
+>   rendering, non toccava probabilità/motore (`calcChanceAssist`/`calcChancePassaggioPortiere`
+>   restano invariati, usano `ProbabilitaAttributi.passaggioAttacco` direttamente). Ripulite anche le
+>   due righe di commento residue che citavano la funzione rimossa.
+> - **Aggiunto** movimento idle continuo, puramente grafico: `tempoAnimazioneCampoMs` (accumulato dal
+>   ticker rAF già esistente in `avviaCanvasPartita`), `seedDaStringa(nome)` (fase propria per
+>   giocatore) e `conMovimentoIdle(p, seed)` (piccola oscillazione seno/coseno, ampiezza ~0.012/0.018
+>   normalizzato ≈0.8m/0.7m sul campo reale). Applicato in `drawFormazioneCompleta` (13 pallini di
+>   formazione) e in `renderMatchCanvas` su palla/attore SOLO quando non è in corso una clip
+>   d'animazione (`idle = !mgr || !mgr.current`), per non alterare la precisione delle traiettorie
+>   animate da `AnimationManager`. Nessuna modifica a `posizioniConMarcatura`, `calcolaPosizioniTattiche`,
+>   motore o risoluzione eventi.
+> - **Verificato** (server Python locale su porta 8813, Node non disponibile in questo ambiente):
+>   carriera reale creata via `selezionaModalitaCreazione`/`startCareer`, partita avviata via
+>   `beginMatch()`; screenshot confermano nessuna curva gialla sovrapposta al campo; due snapshot
+>   `ctx.getImageData` presi a 1.5s di distanza a bot fermo (nessuna scelta/animazione in corso) sono
+>   risultati diversi (`identical:false`), a conferma del movimento continuo; zero errori console.
+>   Da rilanciare `node tools/test-bot.js` alla prima occasione utile (Node non disponibile qui).
+
+> **Aggiornamento 2026-08-09 (continua — distribuzione portiere, chiarimento formula 4)**: due
+> correzioni su indicazione esplicita dell'utente rispetto all'aggiornamento precedente.
+> 1. Confermato: "attaccante" nella formula 4 (`calcChancePassaggioPortiere`) è l'avversario che
+>    pressa il portiere in possesso palla — nessuna modifica al codice, era già implementato così.
+> 2. `P(distribuzione)` non è più un valore normalizzato grezzo (placeholder segnalato in
+>    precedenza): "è uguale alla funzione passaggio per i giocatori di movimento ma usa
+>    l'attributo distribuzione" — nuove `ProbabilitaAttributi.distribuzioneSigma`/
+>    `distribuzioneAttacco` in probabilita-attributi.js, deleghe pure verso `passaggioSigma`/
+>    `passaggioAttacco` (stesso identico modello a due passi, nessuna formula duplicata).
+>    `calcChancePassaggioPortiere()` ora richiede un parametro `distanzaM` (la lunghezza del
+>    rinvio/lancio del portiere), esattamente come `calcChanceAssist` richiede una zona per la
+>    distanza del passaggio — nessun MOMENTS/GK_MOMENTS_POOL la richiama ancora, resta una
+>    funzione pronta.
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente):
+> `distribuzioneSigma`/`distribuzioneAttacco` producono risultati identici a `passaggioSigma`/
+> `passaggioAttacco` sugli stessi input; partita reale con un portiere reale — passaggio corto
+> (10m) → 96%, passaggio lungo (40m) → 26% (coerente, la distanza penalizza come nel modello
+> passaggio); nessuna regressione sulle altre 3 funzioni evento né su calcChanceAssist. Zero
+> errori console (i risultati `null`/NaN ottenuti testando calcChanceCalcioAngolo/calcChanceAssist
+> con un personaggio Portiere sono attesi: quegli eventi usano attributi da movimento — fisico/
+> passaggio — che un Portiere non possiede, stessa separazione già esistente fra ATTR_KEYS e
+> GK_ATTR_KEYS nel resto del gioco, non una regressione).
+
+> **Aggiornamento 2026-08-09 (4 eventi combinati: angolo/punizione/uno contro uno/passaggio
+> portiere)**: su richiesta esplicita dell'utente, aggiunte a `index REV2.html` (non alla libreria
+> pura — queste funzioni leggono `state`/`posizioniTattiche`, coerenti con calcChanceTiro/Assist/
+> Possesso) quattro nuove funzioni di calcolo. **Nessuna delle 4 è collegata a un MOMENTS/
+> GK_MOMENTS_POOL**: non esiste ancora una scelta di gioco per questi eventi — solo il calcolo,
+> pronto da richiamare quando si costruirà il contenuto narrativo/UI (stesso principio degli
+> attributi portiere della richiesta precedente).
+> - `calcChanceCalcioAngolo()`: `P(fisico attaccante)×P(difesa difendente)×P(anticipo portiere)`.
+> - `calcChancePunizione(zonaNome)`: `P(posizione,gaussiana d/X)×2×P(tiro)×P(posizionamento
+>   portiere, gated su calcio-piazzato=true)×P(parata)` — il ×2 e il moltiplicatore di
+>   posizionamento (non una probabilità in [0,1]) presi letteralmente dalla formula, non riscalati.
+> - `calcChanceUnoControUno(zonaNome)` + `condizioneUnoControUno(zonaNome)`: si attiva solo se
+>   nessun avversario di movimento (oltre al portiere) è geometricamente fra l'attaccante e la
+>   porta (verifica su `posizioniTattiche`) E il portiere è entro 4.5m — altrimenti ritorna `null`
+>   (evento non applicabile, non una percentuale). `P(tecnica)×P(velocità)×P(uno contro uno
+>   portiere)`.
+> - `calcChancePassaggioPortiere()`: `P(distribuzione)×1.5×P(velocità attaccante)×P(fisico
+>   attaccante)`, con velocità/fisico attivi solo se l'attaccante avversario è entro 4.5m dal
+>   proprio portiere (self).
+> Nuova `overallAttaccanteAvversario()` (stesso principio di overallPortiereAvversario/
+> overallDifensoreAvversario: `getRosaReale`, ruolo `'ATT'`, il migliore per ovr).
+> **Due ambiguità segnalate, non risolte a caso**: (1) "attaccante" nelle formule 1-3 è assunto
+> essere il giocatore (self); nella formula 4 è invece assunto essere l'avversario che pressa il
+> PROPRIO portiere (self deve giocare da Portiere perché l'evento abbia senso) — l'utente non ha
+> esplicitato il cambio di soggetto fra le due, segnalato per una revisione futura. (2)
+> "distribuzione" non ha mai avuto una curva F(x) definita (a differenza di tutti gli altri
+> attributi): usato il valore normalizzato grezzo dell'attributo come placeholder, in attesa di
+> una formula.
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente): tutte e 4 le funzioni
+> eseguite senza errori con una carriera reale (angolo 31%, punizione 78%, uno-contro-uno attivato
+> correttamente a `six_yard`/31% e correttamente `null` a `midfield_center` — verifica geometrica
+> della condizione confermata sui due estremi); passaggio portiere testato con un personaggio
+> Portiere reale (68%, `state.attr.distribuzione`=45 letto correttamente). Zero errori console.
+
+> **Aggiornamento 2026-08-09 (ProbabilitaAttributi: attributi del portiere)**: su richiesta
+> esplicita dell'utente, aggiunte a [`probabilita-attributi.js`](probabilita-attributi.js) le
+> funzioni per gli attributi del portiere — **non ancora richiamate da nessun calcChanceXxx**,
+> pronte per quando si lavorerà nello specifico su quella parte (come annunciato dall'utente).
+> - `presaDifesa`/`anticipoDifesa`/`comunicazioneDifesa`: stessa sigmoide già usata da
+>   `parataDifesa`, estratta in un helper privato `_sigmoidePortiere` condiviso da tutte e quattro
+>   invece di duplicare la formula. `parataDifesa` resta quella usata oggi da calcChanceTiro/
+>   calcChanceAssist contro il portiere avversario (solo l'ovr reale è disponibile per un
+>   portiere avversario); le tre nuove sono per il PROPRIO portiere, che ha invece i suoi
+>   attributi reali in `state.attr`.
+> - `unoControUnoDifesa`: F(x)=cos((π/2)x), funzione propria (non un alias di `velocitaDifesa`,
+>   pur essendo la stessa forma, per non accoppiare i due attributi).
+> - `riflessiMoltiplicatoreTiro(x, distanzaM)`: moltiplicatore su un tiro (non una probabilità
+>   diretta), attivo solo per tiri entro 7.0m — sopra, fisso a 1.00. Sotto soglia, calcolato da
+>   un'efficienza sinusoidale E(x) (E(0)=0%, E(50%)=50%, E(100%)=100%) che dà 1.15 a E=0%, 1.00 a
+>   E=50%, 0.85 a E=100%.
+> - `posizionamentoMoltiplicatorePericolo(x, isSetPieceOrCross)`: stesso schema/stessa
+>   `_efficienzaSinusoidale` condivisa, ma attivato dal tipo di azione (calcio piazzato/cross)
+>   invece che dalla distanza.
+> **Incoerenza segnalata, non corretta arbitrariamente**: il testo fornito dall'utente per la voce
+> "Posizionamento" descrive l'attributo come "Comunicazione (C)" — probabile refuso, dato che
+> un'altra voce ("Comunicazione", sigmoide semplice) usa già quel nome. Implementata seguendo
+> l'intestazione ("Posizionamento"): la funzione ha un parametro generico `x`, quindi resta
+> corretta indipendentemente da quale attributo il chiamante deciderà di passarle in futuro.
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente): tutti i vincoli
+> rispettati esattamente (unoControUnoDifesa F(0)=1/F(1)=0; presa/anticipo/comunicazione
+> identiche a parata sullo stesso input; riflessi — fisso 1.00 oltre 7m qualsiasi R, 1.15/1.00/0.85
+> a R=0/50/100 sotto soglia, ancora attivo a 6.99m; posizionamento — fisso 1.00 fuori da calcio
+> piazzato/cross, stessi 1.15/1.00/0.85 quando attivo); `parataDifesa`/`probabilitaBattePortiere`
+> verificati a comportamento invariato; partita reale (calcChanceTiro) eseguita senza errori. Zero
+> errori console.
+
+> **Aggiornamento 2026-08-09 (Match Viewer 2D: pressing sul portatore + avanzamento verso porta)**:
+> su richiesta esplicita dell'utente, estesa `posizioniConMarcatura()` (marcatura a uomo "a
+> magnete", vedi aggiornamento precedente) con due comportamenti nuovi, entrambi puramente grafici:
+> 1. **Avanzamento del portatore**: il portatore ha come "obiettivo di sottotesto" l'avanzamento
+>    verso il centro della porta avversaria — la sua posizione disegnata è spinta verso quel punto
+>    (`PULL_AVANZAMENTO_PORTATORE=0.15`, scelto da me, non fornito — una tendenza di fondo modesta,
+>    non uno sprint ad ogni fotogramma). Per la squadra dell'utente si parte dalla posizione live
+>    già usata dal campo di probabilità di passaggio (`posizionePortatorePalla`); per l'avversario
+>    (nessun singolo giocatore reale tracciato con la palla) il centrocampista centrale è il proxy
+>    scelto per "chi costruisce l'azione".
+> 2. **Pressing**: fra i difensori (squadra senza palla), se qualcuno di movimento (mai il
+>    portiere) è entro `RAGGIO_PRESSING_M=8` (fornito esplicitamente dall'utente) dal portatore,
+>    aggredisce lui invece di marcare il proprio avversario assegnato — "perde interesse" nella
+>    marcatura in quel momento, come richiesto. Un solo aggressore alla volta (sempre il più
+>    vicino entro soglia): garantito per costruzione, si sceglie il minimo una sola volta prima di
+>    assegnare le posizioni, non serve bookkeeping aggiuntivo per il vincolo "se e solo se non c'è
+>    già un compagno ad aggredire". Spostamento più deciso della marcatura normale
+>    (`PULL_PRESSING=0.55` vs `MARCATURA_PULL=0.35`, scelto da me — l'aggressione è un'azione più
+>    determinata di un semplice posizionamento).
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente): avanzamento del
+> portatore riprodotto esatto (0.48→0.558 = 0.48+(1-0.48)×0.15); scenario di pressing controllato
+> (tutti i difensori spostati lontano, uno riportato esattamente sul portatore) → esattamente un
+> giocatore riceve lo spostamento di pressing (posizione finale 0.477/0.206, identica al calcolo a
+> mano), gli altri 5 restano su marcatura normale; `renderMatchCanvas()` eseguito senza eccezioni.
+> Zero errori console.
+
+> **Aggiornamento 2026-08-09 (libreria ProbabilitaAttributi, file dedicato)**: su richiesta
+> esplicita dell'utente ("creiamo un file con le funzioni che saranno poi solo da richiamare"),
+> nuovo file [`probabilita-attributi.js`](probabilita-attributi.js): un unico oggetto
+> `ProbabilitaAttributi` con tutte le formule "attributo → probabilità" concordate finora, pure
+> (nessuna dipendenza da `state`/DOM, solo numeri in→numeri out), caricato come `<script src>`
+> prima dello script principale (stesso schema di `data-squadre.js`).
+> Funzioni: `velocitaAttacco`/`velocitaDifesa` (sin/cos, nuove — non ancora richiamate da nessuna
+> scelta di gioco, pronte per quando serviranno), `fisicoAttacco` (0.5+x³), `difesaDifesa`
+> (sigmoide esponenziale calibrata), `tecnicaAttacco` (sin, **senza** il "+0.15" di una versione
+> precedente — corretto qui su indicazione esplicita dell'utente, che ha ridefinito tecnica insieme
+> a tutte le altre nella stessa lista consolidata), `tiroAttacco` (F(x)=50·4^(x³)), `parataDifesa`
+> (sigmoide logistica del portiere, c/k/M riscalati dal dominio originale 0-200 dell'utente a 0-1
+> per uniformità con tutta la libreria — stesso risultato numerico, verificato), `passaggioSigma`/
+> `passaggioAttacco`/`passaggioRaggioIndifferenza` (il modello di passaggio già costruito quando si
+> è parlato dell'assist).
+> Tutte le funzioni equivalenti già esistenti in `index REV2.html` (`probabilitaBattePortiere`,
+> `probabilitaTiroGiocatore`, `calculatePassSigma`/`calculatePassProbability`/
+> `calculateIndifferenceRadius`, `probabilitaControlloTecnica`/`FisicoProprio`/`DifesaAvversario`)
+> sono state svuotate e trasformate in wrapper sottili che richiamano `ProbabilitaAttributi.*` —
+> non duplicano più le formule, solo estraggono l'attributo da `state` e normalizzano 0-1. Rimossa
+> `probabilitaEsecuzioneAbilita` (non più necessaria, nessun altro chiamante). Nessuna modifica al
+> comportamento osservabile eccetto la correzione di tecnica (F(0) torna 0, non più 0.15).
+> **Bot aggiornato di conseguenza** (`test-bot.js`): nuova costante `LIB_FILE`, `newGameContext`/
+> `playOneCareer` ora caricano anche `probabilita-attributi.js` nel contesto vm (stesso principio
+> già usato per `data-squadre.js`) — senza questo il bot avrebbe fallito con "ProbabilitaAttributi
+> is not defined" alla prima chiamata di calcChanceTiro/Assist/Possesso.
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente, verifica strutturale del
+> bot fatta leggendo il codice, non eseguendola): libreria caricata correttamente
+> (`typeof ProbabilitaAttributi==='object'`), tutte le calibrazioni riprodotte identiche
+> (velocità/tecnica F(0)=0/F(1)=1, fisico F(0)=0.5/F(1)=1.5, difesa 0.85/0.50/0.33, portiere ovr 61
+> → 0.9208 identico al valore pre-refactor, tiro F(1)=2, passaggioSigma(50%)=21.8257 identico);
+> tutti i wrapper esistenti verificati a comportamento invariato (tranne tecnica, corretta come
+> sopra); partita reale con tutte e tre calcChanceTiro/Assist/Possesso eseguite senza errori. Zero
+> errori console.
+
+> **Aggiornamento 2026-08-09 (orologio live: 50 minuti = 50 secondi, scelte escluse)**: su richiesta
+> esplicita dell'utente, il minutaggio (`#matchMinute`) ora scorre dal vivo durante "Gioca partita"
+> invece di saltare istantaneamente da un momento all'altro. Nuova `animaOrologioPartita(daMinuto,
+> aMinuto, onDone)`: anima il testo con `requestAnimationFrame` al ritmo esatto richiesto — **1
+> minuto di gioco = 1 secondo reale** — e chiama `onDone` (che rivela narrazione+scelte, o esegue
+> `finishMatch`) solo a fine animazione. `nextMoment()` ristrutturata: il salto di minuto
+> (`m.minute += rand(9,13)`, invariato) viene calcolato subito come prima, ma la rivelazione della
+> situazione e delle scelte è spostata dentro il callback `onDone` — così l'orologio scorre SOLO fra
+> un momento chiave e l'altro, mai mentre si aspetta un click su una scelta/evento/bottone
+> "Continua" (esclusi dal conteggio, come richiesto: quei punti sono già gli unici in cui
+> `nextMoment()` viene richiamata). Aggiunto anche un ultimo tratto animato fino al 50' prima di
+> eseguire `finishMatch()` (che imposta comunque `m.minute=50` di suo, in modo idempotente), per
+> "vedere" l'intera partita fino al triplice fischio.
+> **Compatibilità bot preservata** (stessa guardia già usata per il canvas,
+> `typeof requestAnimationFrame!=='function'`): in Node l'animazione è saltata del tutto, il testo
+> si aggiorna e il callback scatta subito, sincrono — nessuna modifica al ritmo/comportamento del
+> bot. Nessuna modifica a logica di simulazione/eventi: solo la presentazione del minutaggio.
+> Verificato dal vivo in browser: simulato l'ambiente bot (rimosso temporaneamente
+> `requestAnimationFrame`) — scelte presenti immediatamente, zero ritardo, comportamento identico a
+> prima; con `requestAnimationFrame` reale, un salto di 2 minuti (10'→12') impiega esattamente
+> 2003.8ms (rapporto 1:1 confermato); zero errori console in entrambi i casi.
+
+> **Aggiornamento 2026-08-09 (Match Viewer 2D: tutti i 14 giocatori + marcatura a uomo)**: su
+> richiesta esplicita dell'utente, il Match Viewer 2D disegna ora tutti i 14 giocatori (7 per
+> squadra), non più solo il portatore/pallone. Prima volta che `state.matchTemp.posizioniTattiche`
+> (costruita in una sessione precedente, mai letta da un renderer) viene usata dal renderer.
+> - **Fase di possesso per momento**: nuovo campo `possesso` su ogni voce di `MOMENTS` (4) e
+>   `GK_MOMENTS_POOL` (8) — `'home'` se il giocatore/la sua squadra ha la palla, `'away'` altrimenti
+>   (già scritto in chiaro nel testo di uno dei momenti: "Fase di non possesso..."). Risolto una
+>   volta per momento in `nextMoment()` → `state.matchTemp.fasePossessoAttuale`, stesso pattern già
+>   usato per `zonaGolAttuale`.
+> - **Marcatura a uomo "a magnete"**: nuova `posizioniConMarcatura()` — la squadra che NON ha la
+>   palla marca, ogni giocatore di movimento (portieri esclusi, non marcano mai) viene tirato verso
+>   il proprio avversario più vicino nella formazione (`distanzaMetriTraPunti`, stessa proiezione
+>   65×40m già usata per il campo di probabilità di passaggio) di una frazione `MARCATURA_PULL=0.35`
+>   (scelta da me, non fornita dall'utente — abbastanza per essere visibile senza disintegrare la
+>   forma della squadra; da correggere se non torna). Layer puramente grafico: non tocca motore,
+>   eventi, o calcolo delle probabilità — sposta solo i pallini disegnati.
+> - **Rendering**: nuova `drawFormazioneCompleta()`, disegnata in `renderMatchCanvas()` subito dopo
+>   `FieldRenderer.draw` (sotto il campo di probabilità di passaggio e le entità animate) — 13
+>   giocatori "di formazione" per colore squadra (blu/arancio, nessuna etichetta, il portatore
+>   `self` è escluso perché già rappresentato dall'entità `actor`, più precisa durante
+>   un'animazione).
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente): in un momento con
+> possesso `'home'` la formazione della propria squadra resta identica a quella di base (nessuna
+> marcatura, come atteso); in un momento con possesso `'away'` i giocatori di movimento della
+> propria squadra si spostano verso l'avversario più vicino, il portiere resta fermo; sempre 14
+> posizioni; `renderMatchCanvas()` eseguito senza eccezioni; screenshot confermato (pallini blu/
+> arancio visibili sul campo, accoppiati nella fase difensiva). Zero errori console.
+
+> **Fix 2026-08-09 (fattore tecnica del controllo palla: sin invece di x³)**: su indicazione
+> esplicita dell'utente, `probabilitaControlloTecnica()` (fattore 1 di `calcChancePossesso()`, vedi
+> aggiornamento precedente) usa ora `F(x)=sin((π/2)·x)+0.15` invece di `F(x)=x³` — F(0)=0.15,
+> F(1)=1.15, crescente e concava (rendimenti decrescenti man mano che la tecnica sale, a differenza
+> della crescita accelerata di x³). Gli altri due fattori (fisico proprio, difesa avversaria)
+> invariati. Verificato dal vivo in browser: valori riprodotti esatti (tecnica 0→0.1500,
+> 50→0.8571, 60→0.9590, 100→1.1500); partita reale con chance possesso ricalcolata correttamente
+> (32%); zero errori console.
+
+> **Aggiornamento 2026-08-09 (probabilità di controllo palla: tecnica × fisico × difesa
+> avversaria)**: su richiesta esplicita dell'utente, con una correzione arrivata nello stesso
+> scambio (prima "fisico dell'avversario più vicino" nella griglia tattica statica, poi corretto in
+> "attributo difesa del nostro avversario" — versione finale, quella sotto), le scelte
+> `out:'possesso'` usano `calcChancePossesso()` invece di `calcChance()`. Tre formule fornite
+> esattamente dall'utente, indipendenti (nessuna riusa più F(x)=50·4^(x³) né la sigmoide del
+> portiere: formule dedicate diverse per ciascun fattore):
+> 1. **tecnica** — `probabilitaControlloTecnica()`: F(x)=x³, x=tecnica normalizzata 0-1.
+> 2. **fisico proprio** — `probabilitaControlloFisicoProprio()`: F(x)=0.5+x³, x=fisico normalizzato 0-1.
+> 3. **difesa avversaria** — `probabilitaControlloDifesaAvversario(ovr)`:
+>    F(x)=7.781230915·exp(2.53617955x²-5.69655672x), x=ovr/100. Nuova `overallDifensoreAvversario()`
+>    (stesso principio/stessa fonte dati di `overallPortiereAvversario()`: `getRosaReale`, ruolo
+>    `'DIF'`, il migliore per ovr, fallback sulla forza squadra) — nessun attributo "difesa" per
+>    singolo giocatore disponibile sul roster reale, `ovr` come proxy, come già per portiere/
+>    attaccante avversario.
+> `calcChancePossesso()` non dipende più dalla zona del momento (nessuna delle tre formule usa la
+> posizione): si applica quindi a **ogni** scelta `possesso`, inclusi i momenti da portiere (prima
+> lasciati su `calcChance()` per mancanza di zona taggata — ora coperti senza bisogno di taggarli).
+> **Versione precedente, superata nello stesso scambio**: un primo tentativo aveva interpretato
+> "fisico avversario+vicino" come due fattori — l'avversario reale geometricamente più vicino nella
+> griglia tattica statica (`state.matchTemp.posizioniTattiche`, prima volta letta da una funzione)
+> più un fattore di pressione a parte basato sulla distanza — con un limite segnalato (la griglia
+> statica rendeva alcune zone sempre al pavimento minimo indipendentemente dall'abilità). L'utente
+> ha corretto la dipendenza a "attributo difesa", eliminando sia la scelta per prossimità sia il
+> fattore di pressione separato: `avversarioPiuVicino`/`distanzaMetriTraPunti` rimosse (codice
+> morto, nessun altro chiamante) invece di lasciate inutilizzate.
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente): calibrazione esatta
+> (F(0.5)=0.850, F(0.7)=0.500, F(1)=0.330, tutti e tre confermati a 5 decimali); partita reale
+> (tecnica 60, fisico 50, difensore avversario ovr 60) → chance 9%, verificato anche a mano
+> (0.216×0.625×0.636≈0.0859→9%, coincide); scelta reale risolta correttamente; momento da portiere
+> (prima escluso) ora produce comunque una chance senza errori. Zero errori console.
+
+> **Fix 2026-08-09 (calibrazione sigma passaggio corretta: 21.83m, non 25.82m)**: su indicazione
+> esplicita dell'utente, corretta l'incoerenza matematica segnalata nell'aggiornamento precedente.
+> `calculatePassSigma()` non usa più la formula letterale `18+15.64·(Passaggio/100)` (sigma=25.82m
+> a Passaggio=50, che non soddisfaceva il vincolo P(32.5)=0.33): nuove costanti
+> `SIGMA_FLOOR_PASSAGGIO_M=18` (pavimento a Passaggio=0, invariato) e
+> `SIGMA_BASE_PASSAGGIO_M = 32.5/√(-2·ln(0.33))` (calcolata in codice, non arrotondata a mano,
+> ≈21.83m), con il coefficiente della relazione lineare ricavato di conseguenza perché a
+> Passaggio=50 la sigma torni esattamente `SIGMA_BASE_PASSAGGIO_M`. Nuova tabella:
+> Passaggio 0→18.00m, 20→19.53m, 50→21.83m, 80→24.12m, 100→25.65m (prima: 18.00/21.13/25.82/
+> 30.51/33.64m).
+> Verificato dal vivo in browser: `P(32.5, sigma=21.83)=0.330` esatto (test #2 dei 7 richiesti,
+> prima falliva a 0.453); il raggio dell'isoprobabilità 33% a Passaggio=50 risulta esattamente
+> 32.5m (coincide col vincolo geometrico); partita reale con Passaggio=65 → chance assist 58%
+> (era 62% con la sigma precedente, coerente con una sigma più stretta = passaggi lunghi più
+> penalizzati); zero errori console. Nessun'altra costante toccata (floor 18m, livelli di
+> probabilità disegnati, `calcChanceAssist`, layer grafico — tutti invariati).
+
+> **Aggiornamento 2026-08-09 (probabilità di assist: passaggio × tiro × portiere)**: su richiesta
+> esplicita dell'utente, le scelte `out:'assist'` nei 3 momenti già taggati con zona (`edge_area`,
+> `flank_left`/`flank_right`, `six_yard` — stessi di `calcChanceTiro`) ora usano una nuova
+> `calcChanceAssist(attrKey, zonaNome)` invece di `calcChance()`. Combina tre fattori "in serie":
+> 1. **P(passaggio)** — riusa `calculatePassProbability`/`calculatePassSigma` appena costruiti per
+>    il campo di probabilità di passaggio, valutati alla distanza reale (nuova
+>    `distanzaMetriTraZone`, stessa proiezione metri 65×40 già usata dal layer grafico) fra la
+>    zona del momento (dove si trova il portatore) e la zona `'box'` (bersaglio del passaggio,
+>    stessa destinazione già usata da `ZONE_DEFAULT_PER_OUT.assist`).
+> 2. **P(tiro)** — riusa identica `probabilitaTiroGiocatore(attrKey)` (F(x)=50·4^(x³)) già
+>    costruita per il tiro, con l'attributo dichiarato dalla singola scelta (`passaggio` o
+>    `tecnica` a seconda del momento), non reimplementata.
+> 3. **P(batte portiere)** — riusa identica `probabilitaBattePortiere(overallPortiereAvversario())`
+>    già costruita per il tiro, non reimplementata.
+> Sostituisce la componente "posizione" gaussiana X/d usata per il tiro (non più presente qui): per
+> un assist la posizione è già catturata dalla probabilità di riuscita del passaggio stesso, su
+> indicazione esplicita dell'utente. `nextMoment()` aggiornata per instradare `out==='assist'` (con
+> zona nota) verso la nuova funzione; il campo `m.zonaGolAttuale` (nome storico invariato, non
+> rinominato per non toccare `applyChoiceOutcome`) ora alimenta sia tiro sia assist. Scelte assist
+> senza zona nota (es. i momenti da portiere, non ancora taggati) restano su `calcChance()`,
+> comportamento invariato.
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente): chance monotona
+> decrescente con la distanza reale dal bersaglio (`six_yard` 67% → `edge_area` 63% →
+> `flank_left` 51% → `midfield_center` 42%, stessi attributi); partita reale con zona `edge_area`,
+> passaggio 65 → chance 62%, scelta assist risolta correttamente (evento `pass_short`/`goal`,
+> `myPlayerAssists` incrementato). Zero errori console.
+
+> **Aggiornamento 2026-08-09 (campo di probabilità di passaggio — curve di indifferenza concentriche)**:
+> su richiesta esplicita dell'utente (spec completa, formule incluse), aggiunto un layer grafico
+> puro nel Match Viewer 2D: cerchi di iso-probabilità di passaggio centrati sul portatore di palla,
+> stessa gaussiana isotropa `P(r)=exp(-r²/(2σ²))` in ogni direzione (nessuna distribuzione separata
+> X/Y). Nuove funzioni, inserite tra `PlayerRenderer` e `renderMatchCanvas()`: `calculatePassSigma`,
+> `calculatePassProbability`, `calculateIndifferenceRadius`, `drawPassProbabilityField`,
+> `posizionePortatorePalla`, costanti `CAMPO_LUNGHEZZA_M=65`/`CAMPO_LARGHEZZA_M=40`,
+> `LIVELLI_PROBABILITA_PASSAGGIO=[.10,.20,.33,.40,.60,.80]`, flag `MOSTRA_CAMPO_PROBABILITA_PASSAGGIO`.
+> Attributo riusato: `passaggio` (già in `ATTR_KEYS`), nessun nuovo attributo creato. Portatore di
+> palla: nessun campo di stato lo tracciava già — riusa `matchAnimMgr.entities.actor` (posizione
+> live durante una clip) con fallback allo slot `self` di `state.matchTemp.posizioniTattiche`
+> (Fase precedente), nessun nuovo stato introdotto. Raggi mai hardcodati:
+> `r(p)=σ·√(-2·ln(p))`, ricalcolati automaticamente da sigma. Un cerchio isotropo in metri diventa
+> un'ellisse in pixel solo perché campo/canvas non sono quadrati (proiezione indipendente sulle due
+> scale 65m/40m) — stessa semplificazione già presente altrove nel renderer (cerchio di centrocampo
+> di `FieldRenderer`). Clipping ai bordi campo via `ctx.clip()` sullo stesso rettangolo già
+> usato da `FieldRenderer`/`CameraManager` (margine 10px). Disegnato subito dopo `FieldRenderer.draw`
+> e prima del loop giocatori/palla in `renderMatchCanvas()`, quindi mai sopra di essi. Eredita il
+> guard `requestAnimationFrame` già esistente (nessun nuovo guard necessario, il bot Node non lo
+> esegue mai). Nessuna modifica a motore/eventi/risoluzione dei passaggi.
+> **Incoerenza matematica segnalata all'utente prima e durante l'implementazione**: la sigma
+> operativa richiesta esplicitamente (`sigma=18+15.64·(Passaggio/100)`, quindi 25.82m a
+> Passaggio=50) NON soddisfa il vincolo fondamentale dichiarato (`P(32.5)=0.33` a centrocampo) —
+> verificato: con sigma=25.82, `P(32.5)` risulta 45.3%, non 33%. La sigma che soddisferebbe
+> davvero il vincolo è 21.83m (invertendo la stessa formula di calibrazione dell'utente), non
+> 25.82m. Implementato comunque il valore letterale richiesto ("per il momento"), incoerenza
+> lasciata visibile per una decisione dell'utente, nessuna correzione arbitraria applicata.
+> Verificato dal vivo (Node non disponibile in questo ambiente, verifica in browser): tutti e 7 i
+> test richiesti eseguiti — r=0→P=1 ✓; P(32.5,σ=25.82)=0.453 (non 0.33, vedi sopra) ✗; isotropia
+> (stessa distanza, direzioni diverse → stessa probabilità) ✓; sigma cresce con Passaggio
+> (18→21.13→25.82→30.51→33.64 per Passaggio 0/20/50/80/100) ✓; raggi crescono con sigma ✓;
+> centro coincide con la posizione del portatore (verificato lettura pixel diretta via
+> `getImageData`: crossing del bordo all'80% a ±121.6px orizzontali e ±84.7px verticali, identici
+> al calcolo teorico rM/65 e rM/40) ✓; clipping ai bordi campo verificato tramite lo stesso
+> `ctx.clip()` di `FieldRenderer` ✓. Zero errori console.
+
+> **Aggiornamento 2026-08-09 (probabilità di tiro: posizione + tiro + portiere)**: su richiesta
+> esplicita dell'utente, rivalutato il sistema di rischio delle scelte di partita **solo** per le 3
+> scelte `out:'goal'` (tiro diretto in porta, tutte già `risk:'high'`) — assist/recupero/possesso
+> restano su `calcChance()`, invariati. Prima un tiro usava sempre la zona fissa `'box'`
+> (`ZONE_DEFAULT_PER_OUT.goal`), senza alcun legame con la situazione narrata né col portiere
+> avversario. Ora:
+> 1. **Zona reale per momento** (`MOMENTS[i].zonaGol`, risolta una sola volta a inizio momento in
+>    `nextMoment()` → `state.matchTemp.zonaGolAttuale`): "al limite dell'area" → nuova zona
+>    `edge_area`, "in fascia" → `flank_left`/`flank_right` (a caso), "area piccola" → nuova zona
+>    `six_yard`. Le stesse due zone nuove sono state aggiunte a `ZONES` (coordinate normalizzate,
+>    stesso sistema già usato dal Match Viewer).
+> 2. **Curve di indifferenza posizione→probabilità** (`probabilitaPosizioneTiro`): da distanza e
+>    angolo rispetto alla porta (x=1,y=0.5) si ottiene una probabilità geometrica pura, con
+>    distanza e angolo che si scambiano (poco lontano+stretto ≈ molto lontano+centrale, perché i
+>    due fattori si moltiplicano — `e^(-λ·distanza) · cos(angolo)`). Calibrazione fornita
+>    dall'utente: sulla linea di porta probabilità 1 (100%), da centrocampo centrale 0.33 (33%) — λ
+>    ricavato esattamente da questi due punti (`LAMBDA_DISTANZA_TIRO = -2·ln(0.33)`), nessuna altra
+>    costante inventata per questa parte.
+> 3. **"In serie" con tiro e portiere** (`calcChanceTiro`, sostituisce `calcChance` solo qui):
+>    `P(gol) = P(posizione) × P(tiro giocatore, con forma/relazioni come già in calcChance ma senza
+>    penalità forza-avversario) × (1 − P(parata portiere))`. Portiere preso dal roster reale della
+>    squadra avversaria (`getRosaReale(opp.nome)`, `ruolo==='POR'`, nuova `overallPortiereAvversario()`),
+>    fallback sulla forza squadra se assente. Scelta esplicita dell'utente (opzione "realistico stile
+>    xG" fra le due proposte): percentuali finali basse per i tiri defilati/lontani, alte per un tiro
+>    ravvicinato e centrale — nessun riscalamento nel range 8-92% usato da `calcChance()`, cambia
+>    davvero quanto conviene tirare da una posizione piuttosto che un'altra.
+> 4. **Coerenza col Match Viewer**: `applyChoiceOutcome()` non usa più l'origine fissa `'box'` per i
+>    tiri — copia (mai muta) `ZONE_DEFAULT_PER_OUT.goal` sovrascrivendo `origin` con
+>    `m.zonaGolAttuale`, così la posizione su cui si è calcolata la probabilità è la stessa che
+>    l'animazione disegna.
+> Verificato dal vivo in browser (server HTTP locale, node non disponibile in questo ambiente):
+> `probabilitaPosizioneTiro('midfield_center')` = esattamente 0.33 (verifica diretta della
+> calibrazione), le tre zone taggate producono chance coerenti con l'attesa (`edge_area` 23%,
+> `flank_left` 8%, `six_yard` 32-46% a seconda di skill/portiere), evento emesso con `origin`
+> corrispondente alla zona in tutti e tre i casi, `ZONE_DEFAULT_PER_OUT.goal` verificato invariato
+> dopo i tiri (nessuna mutazione dell'oggetto condiviso), zero errori console durante l'intero test.
+> Bot non rieseguito in questo ambiente (Node.js non installato/non in PATH): da rilanciare
+> (`node tools/test-bot.js`) alla prima occasione utile per la copertura standard 20+ carriere.
+>
+> **Aggiornamento 2026-08-09 (continua — coordinate tattiche dei 14 giocatori in campo)**: su
+> richiesta esplicita dell'utente, aggiunta a `state.matchTemp` una posizione x/y normalizzata
+> (stessa convenzione di `ZONES`) per i 7 giocatori per squadra del calcio a 7 (14 in campo), dato
+> pensato per il futuro Match Viewer 2D — nessuna funzione esistente lo legge ancora, motore ed
+> eventi invariati. Nuovi: `RUOLO_BUCKET_FORMAZIONE`, `FORMAZIONE_TATTICA_7` (modulo 1-2-3-1,
+> standard nel calcio a 7), `PROFONDITA_REPARTO_TATTICO`, `coordinateSlotTattico()`,
+> `calcolaPosizioniTattiche(compagniSquadra)` — tutte pure funzioni deterministiche (nessun
+> `Math.random`), inserite subito dopo `zonaCoordinate()`. Riusa lo stesso raggruppamento a 4
+> reparti già usato da `sceglieCompagni()` (ALA confluita in CEN) invece di crearne uno parallelo,
+> e riceve come parametro l'oggetto `compagni` già calcolato lì (non richiama `sceglieCompagni` una
+> seconda volta). `beginMatch()` e `beginMatchAsSub()` aggiornate solo per calcolare `compagni` in
+> una variabile locale e passare `state.matchTemp.posizioniTattiche: calcolaPosizioniTattiche(...)`
+> accanto al campo `compagni` già esistente — nessun'altra riga toccata in quelle due funzioni.
+> Verificato dal vivo in browser (Node non disponibile in questo ambiente, stesso limite delle
+> verifiche precedenti in questa sessione): 14 posizioni sempre presenti, tutte con x/y in [0,1],
+> 7 per squadra, reparti coerenti (POR più arretrato, poi DIF, CEN, ATT più avanzato per la
+> squadra che attacca verso x=1; squadra avversaria speculare verso x=0); caso limite Portiere
+> verificato esplicitamente (il giocatore stesso occupa l'unico slot POR, nessun secondo portiere
+> generato); flusso di gioco successivo (click su una scelta reale, `beginMatchAsSub`) invariato,
+> zero errori console.
+>
+> **Aggiornamento 2026-08-09 (continua — P(tiro): F(x)=50·4^(x³) fornita dall'utente)**: il fattore
+> `pTiro` di `calcChanceTiro()` (punto 3 del primo aggiornamento) non usa più la formula additiva
+> con forma/rapporto coi compagni/rapporto col mister — nuova `probabilitaTiroGiocatore(attrKey)`:
+> `x` = attributo di tiro (0-100, con bonus equipaggiamento) espresso come frazione 0-1,
+> `F(x) = 50·4^(x³)`, `pTiro = F(x)/100`. Sostituzione **integrale** (non additiva): su indicazione
+> esplicita dell'utente, forma/relazioni non influenzano più questo fattore — segnalato all'utente
+> prima di procedere, nessuna obiezione.
+> Punto di attenzione verificato e confermato dall'utente prima dell'implementazione: `F(x)` supera
+> 100 (quindi `pTiro` supera 1.0) per attributo di tiro oltre ~79/100, fino a `pTiro=2.0` esatto ad
+> attributo 100 — lasciato così com'è, **nessun clamp/riscalatura intermedia** aggiunta: l'unico
+> punto che tiene sotto controllo il risultato complessivo resta il clamp finale di
+> `calcChanceTiro` (3-96%). `F(0)=50` (pavimento del 50% anche per un giocatore senza alcuna
+> capacità di tiro) confermato intenzionale.
+> Verificato dal vivo in browser: tabella attributo→pTiro riprodotta identica al calcolo teorico
+> (attr 0→0.500, 20→0.506, 50→0.595, 70→0.804, 79→0.990, 90→1.374, 100→2.000); partita reale con
+> attributo tiro 65 → chance 46% (edge_area) e 56% (six_yard), nessun crash nonostante `pTiro`>1 in
+> alcuni casi, zero errori console. Bot non rieseguito (stesso limite ambientale).
+>
+> **Aggiornamento 2026-08-09 (continua — modello posizione: gaussiana invece dell'esponenziale)**:
+> `probabilitaPosizioneTiro()` (punto 2 sopra) sostituita con un modello a due variabili fornito
+> dall'utente, più fedele alle "curve di indifferenza": `d∈[0,1]` distanza normalizzata dalla porta
+> (0=linea di porta, 1=centrocampo), `X∈[-1,+1]` scarto laterale dal centro porta, densità gaussiana
+> `f(X,d) = 1/(σ(d)√2π) · e^(-X²/(2σ(d)²))` con `σ(d) = 1/(√2π·[1-0.67d])` — σ scelta apposta perché
+> la densità al centro (X=0) torni esattamente 1-0.67d, cioè gli stessi due punti di calibrazione di
+> prima (porta=100%, centrocampo=33%), ora derivati da una gaussiana vera: vicino alla porta la
+> distribuzione su X è stretta (un tiro anche poco defilato perde molto), lontano è piatta (l'angolo
+> pesa relativamente meno). Nuova `sigmaPosizioneTiro(d)`. Nota conservata in codice: f(X,d) è una
+> densità normalizzata, non una probabilità discreta, ma resta sempre in [0,1] per costruzione
+> (max f(0,d)≤1, esponenziale gaussiano ≤1) — utilizzabile comunque nel prodotto di `calcChanceTiro`.
+> Verificato dal vivo in browser: tabella σ/f(0,d) per d=0/0.25/0.5/0.75/1 riprodotta identica a
+> quella fornita dall'utente (0.399/100%, 0.479/83.3%, 0.600/66.5%, 0.802/49.7%, 1.209/33%);
+> `midfield_center` → esattamente 33%; le tre zone di tiro (`edge_area` 66.5%, `six_yard` 95.3%,
+> `flank_left` 30.2%) coerenti con l'attesa; partita reale con portiere ovr 61 → chance 32%
+> (edge_area) e 40% (six_yard), origine evento ed `originXY` dell'animazione coerenti con la zona
+> usata nel calcolo. Zero errori console. Bot non rieseguito (stesso limite ambientale).
+>
+> **Aggiornamento 2026-08-09 (continua — sigmoide per il portiere)**: sostituito il termine
+> "1 − parata portiere" del punto 3 sopra con una **sigmoide logistica normalizzata** fornita
+> dall'utente (immagine con la formula, poi con `c=105, k=0.055` espliciti):
+> `F(x) = [g(x)-g(M)] / [g(0)-g(M)]`, `g(x)=1/(1+e^(k(x-c)))`, `M=200` — costruita apposta per avere
+> `F(0)=1` e `F(M)=0` esatti qualunque siano c/k. Nuove `probabilitaBattePortiere(ovrPortiere)` e
+> costante `SIGMOIDE_PORTIERE={c:105,k:0.055,M:200}`, usate in `calcChanceTiro()` al posto della
+> vecchia formula lineare `1-pParata`.
+> Punto di decisione esplicito, non lasciato all'utente per caso: con 2 incognite (c,k) e una
+> richiesta qualitativa ("meno hardcore, sigmoide con coda lunga") non bastava implementare alla
+> cieca — ho calcolato i valori risultanti e mostrato che la stessa formula, con `x = ovr×2` (usare
+> tutto il dominio 0-200) risulta **più dura** del vecchio modello lineare (portiere ovr 90-100 →
+> 1%-0% di probabilità di segnare, contro il 25% di pavimento del modello lineare), mentre con
+> `x = ovr diretto` (0-100, resta sempre nella metà "morbida" della curva 0-200) risulta
+> effettivamente più permissiva ad ogni livello (es. ovr 100 → 57% invece di 25%) — coerente con
+> l'obiettivo dichiarato dall'utente all'inizio di questo intervento. **Confermato dall'utente:
+> `x = ovr diretto`.**
+> Verificato dal vivo in browser (stesso server HTTP locale usato sopra): `probabilitaBattePortiere`
+> per ovr 20/30/50/70/90/100 → 99.4%/98.7%/95.6%/87.5%/69.6%/56.8%, identico al calcolo teorico;
+> partita reale con portiere avversario ovr 62 → chance 39% (six_yard, tiro centrale ravvicinato),
+> 28% (edge_area), 9% (flank, angolo stretto), coerenti con posizione+portiere combinati; tiro
+> ravvicinato risolto correttamente in gol. Zero errori console. Bot non rieseguito (stesso limite
+> ambientale del punto sopra).
+>
+> **Fix 2026-08-07 (bug segnalato dall'utente — "nuovo volto" già noto)**: `pescaGiocatoreCasuale()`
+> pescava un giocatore a caso dalla rosa senza escludere chi era già una persona nota
+> (`COMPAGNO_squadra_nome`/`CONOSCENZA_squadra_nome` già in `state.persone`), quindi eventi come
+> `social_nuovo_compagno` ("Un nuovo volto in squadra si presenta: ...") potevano ripresentare un
+> giocatore già compagno di squadra (es. già incontrato durante un'azione di gioco o già
+> conosciuto in un evento sociale precedente). Corretto filtrando il pool sugli "sconosciuti"
+> (nessun `COMPAGNO_`/`CONOSCENZA_` registrato per quel nome+squadra), con fallback alla rosa
+> intera solo se non resta nessuno sconosciuto (rosa esaurita). Verificato: sintassi OK, bot
+> (25 carriere/40 settimane) 0 errori/0 violazioni.
+
+> **Aggiornamento 2026-08-07 (approfondimento trattative/mercato)**: su richiesta esplicita
+> dell'utente ("mix" di tre direzioni), il sistema di offerte/trattative — prima 0-2 offerte casuali
+> a settimana, trattativa a un colpo solo (+20% stipendio o il club si irrigidisce/ritira) — è stato
+> approfondito su tre assi che si intrecciano:
+> 1. **Interesse dei club nel tempo** — nuovo `state.interesseClub` (array `{squadra, tier,
+>    livello}` 0-100), aggiornato ogni settimana da `aggiornaInteresseClub()` (chiamata da
+>    `postGiornataFlow` durante il campionato, `aggiornaFuoriStagione` in estate,
+>    `aggiornaMercatoInvernale` a gennaio): cresce col buon rendimento (stesso segnale già usato per
+>    le offerte, ora esposto in `formaRecente()`), decade altrimenti, tetto di 4 club tracciati.
+>    `generaListaOfferte()` ora attinge PRIMA ai club con interesse maturo (≥60, che consumandosi
+>    scende a 30 invece di sparire — restano un contatto noto), con una piccola probabilità residua
+>    di un'offerta "dal nulla" per non perdere del tutto l'elemento sorpresa. Visibile in entrambe le
+>    schermate mercato (`renderInteresseClub()`, card "Club che ti osservano" per gli interessi non
+>    ancora maturi).
+> 2. **Trattativa multi-round** — da un tentativo secco a fino a `MAX_ROUND_NEGOZIAZIONE` (3) round:
+>    `chanceNegoziazione(o)`/`esitoNegoziazione(o)` sostituiscono la vecchia formula inline in
+>    `negoziaOfferta`/`negoziaOffertaInvernale`. Ogni round è più difficile (il club si irrigidisce,
+>    -12 di chance a round), ma un club con interesse maturo è più flessibile (bonus fino a ±15) e il
+>    rischio di ritiro dell'offerta cresce con i round già tentati (15%+15%/round) invece di essere
+>    fisso al 30%.
+> 3. **Ruolo dell'agente reso concreto** — `state.agent.trust`/`state.agent.influence` esistevano già
+>    (sistema AGENT_EVENTS, narrativo) ma non influenzavano mai le formule di mercato. Ora
+>    `agent.influence` alimenta quantità/qualità dell'interesse generato (club di categoria superiore
+>    più raggiungibili con un agente introdotto), `agent.trust` alimenta la chance di negoziazione
+>    insieme alla relazione col procuratore — due assi già esistenti diventano concreti invece di
+>    restare solo narrativi, nessun terzo sistema parallelo introdotto.
+> Verificato: sintassi, bot (0 errori), e dal vivo in browser — interesse cresciuto nel tempo con
+> agente molto introdotto, maturazione in offerta concreta con consumo dell'interesse a 30, tetto dei
+> 3 round rispettato (4° tentativo bloccato), chance/stipendio che si muovono round dopo round come
+> atteso, ritiro dell'offerta osservato con statistiche basse (46/80 su prove ripetute).
+>
+> **Aggiornamento 2026-08-07 (continua — trasferimento immediato)**: su richiesta esplicita
+> dell'utente, il mercato invernale non usa più il precontratto differito descritto qui sotto
+> (rimosso — `state.precontrattoInvernale` non esiste più): un'offerta accettata ora sposta
+> **subito** il giocatore al nuovo club, non a giugno. Nuova `trasferisciSubitoInvernale(o)`: stesso
+> trattamento già usato per un'offerta estiva accettata (Coppa Leonessa in corso chiusa, gruppo
+> sociale principale retrocesso a secondario), più la parte nuova specifica del trasferimento a
+> stagione in corso — invece di ricostruire l'intera stagione da zero (avrebbe cancellato la
+> cronologia già giocata), si rigenera **solo** la porzione di calendario/classifica ancora da
+> giocare (`buildTierSeason` per il nuovo club, tante partite residue quante ne mancavano prima —
+> stessa lunghezza di stagione, ciclando il round-robin se il nuovo girone ha meno avversari), e si
+> lasciano intatte le partite già giocate con la vecchia squadra. Semplificazione dichiarata: la
+> classifica del nuovo girone riparte da 0 punti per tutte le squadre (non riflette i risultati reali
+> già maturati dagli avversari) — stesso identico comportamento di `buildTierSeason()` già usato a
+> inizio stagione, qui applicato a metà stagione. Il vecchio limite tecnico ("il calendario è
+> costruito una volta a stagione, spostarlo richiederebbe ricostruirlo") risulta quindi superato, non
+> più vero: si è scelto di ricostruire solo la coda del calendario invece di tutta la stagione,
+> mantenendo `state.giornata`/lunghezza calendario coerenti e a rischio pressoché nullo per il resto
+> del motore (season-end, Coppa, ecc. continuano a leggere `state.calendario.length` come sempre).
+> Verificato dal vivo: trasferimento a metà stagione (giornata 11/26) — squadra/lega/contratto
+> cambiati subito, calendario invariato in lunghezza, partite già giocate (giornate 1-10) intatte,
+> nuova classifica con 14 squadre e il giocatore incluso, prossimo avversario ricalcolato sul nuovo
+> girone, partita giocabile normalmente col nuovo club. Bot invariato (continua a non accettare mai
+> offerte, stessa semplificazione già scelta per il mercato estivo).
+>
+> **Aggiornamento 2026-08-07 (mercato invernale settimanale)**: il mercato invernale non è più un
+> popup unico ma un vero ciclo settimana per settimana (un sabato alla volta dal 21 dicembre al 24
+> gennaio, `finestraPausaInvernale`), stesso pattern già usato per il mercato estivo
+> (`offSeasonData`/`avanzaSettimanaFuoriStagione`, qui `offSeasonInvernaleData`/
+> `avanzaSettimanaInvernale`). Ogni settimana: **offerte reali** generate con la stessa identica
+> formula del mercato estivo (`generaListaOfferte()`, estratta da `generateOffers()` — legata alla
+> media voto/gol+assist stagionali: chi sta giocando bene riceve proposte, chi no quasi mai, come
+> richiesto); rischio di restare **"ai margini"** mostrato come evento narrativo (`showEvent`, stesso
+> motore del resto del gioco), che riusa `rischioPanchinaPerSkill()` — più probabile se già a rischio
+> panchina in campionato, garantito se svincolato; possibilità di **rimanere svincolato**
+> (`chiediSvincoloInvernale`): stipendio azzerato subito, reputazione/rapporto col mister colpiti,
+> "ai margini" garantito ogni settimana finché la situazione non si risolve.
+> **Vincolo tecnico preesistente rispettato** (documentato nei TODO: "il calendario è costruito una
+> volta a stagione, spostarlo a metà stagione richiederebbe ricostruirlo"): un'offerta accettata a
+> gennaio non sposta subito il giocatore, diventa un **precontratto** (`state.precontrattoInvernale`)
+> valido dalla stagione successiva — come nel calcio reale, si firma a gennaio per un trasferimento
+> ufficiale in estate. Si applica in `avviaNuovaStagione()`, l'unico punto in cui il calendario viene
+> comunque ricostruito da zero: zero rischio per classifica/risultati della stagione in corso. Se la
+> finestra si chiude senza un precontratto e il giocatore aveva chiesto la rescissione, il club lo
+> reintegra in rosa a condizioni riviste (-10% sullo stipendio pre-svincolo) invece di lasciare lo
+> stato rotto. Un'offerta estiva accettata in seguito sostituisce comunque un precontratto invernale.
+> Bot aggiornato (`__botPlayMercatoInvernale` in `tools/bot-helpers.js`): prima il bot lasciava la
+> nuova schermata multi-settimana del tutto inesplorata (considerata "schermo ok, nessuna azione"),
+> ora la scorre fino alla chiusura — stessa semplificazione già scelta per il mercato estivo
+> (prosegue sempre, non accetta offerte/non chiede rescissioni: superficie più ampia lasciata a
+> un'estensione futura dedicata del bot). Verificato: sintassi (motore + bot-helpers), bot (25
+> carriere/40 settimane, 0 errori, 30 stagioni completate — il mercato invernale attraversato più
+> volte), e dal vivo in browser: offerta generata e accettata con stagione in corso invariata,
+> progressione settimanale corretta fino a chiusura automatica della finestra, precontratto ancora
+> presente dopo la chiusura, richiesta di svincolo con effetto immediato, evento "ai margini"
+> garantito e risolto, reintegro automatico a condizioni riviste in `avviaNuovaStagione()`.
+>
+> **Aggiornamento 2026-08-07 (sistema rigori)**: chiuso il TODO aperto "Sistema rigori: non esiste,
+> nemmeno come struttura minima". Prima un pareggio nella gara secca di Coppa Leonessa (tabellone a
+> eliminazione diretta) andava sempre ai "supplementari", risolti solo sulla forza reale delle due
+> squadre — ignorava del tutto le skill del giocatore anche quando la gara secca era proprio la sua.
+> Nuove `chanceRigoreMio()` (attributo tiro + forma del giocatore, niente rischio/avversario diretto
+> come nelle scelte di gioco: un rigore è sempre lo stesso tipo di conclusione) e
+> `chanceRigoreAvversario(forza)` (forza reale, come ovunque nel motore) alimentano `simulaRigori()`:
+> sequenza di 5 tiri a testa con interruzione anticipata a risultato acquisito (regola reale dei
+> rigori) e oltranza in caso di parità. Sostituisce `decidiVincitoreCoppa()` **solo** nella gara del
+> giocatore (`applyResultToCoppaBracket`) — le sfide fra le altre squadre del tabellone, mai giocate
+> dal giocatore, restano ai supplementari simulati come prima (nessun rigori dettagliato per gare che
+> nessuno vede). Propagato a log/diario/storico tabellone/testo Coppa (`renderStoricoBracket`,
+> `renderCoppa`), rinominando il campo `supplementari`→`rigori` (ora un oggetto con punteggio, non un
+> booleano). Nessun nuovo stato persistente, nessuna nuova UI: la sequenza si genera e si racconta
+> tutta insieme in un'unica chiamata sincrona, riusabile identica sia quando la gara è simulata
+> (skipGiornata/simulaPartita) sia quando è giocata dal vivo (finishMatch). Verificato: sintassi, bot
+> (0 errori), 200 rigori simulati senza mai un pareggio irrisolto né sequenze anomale, casi limite
+> (attributi a 0/100, forza avversaria a 0/100) sempre entro i range attesi, ed entrambi i rami
+> (qualificazione ed eliminazione ai rigori) verificati dal vivo in una carriera reale con pareggio
+> forzato, inclusi i messaggi di diario risultanti.
+>
+> **Aggiornamento 2026-08-06 (MATCH_EVENTS, categorie TACTICAL/PHYSICAL/PROVINCIAL_LIFE)**: chiuso
+> il TODO aperto in RIEPILOGO.md sulle tre categorie del brief narrativo originario mai popolate.
+> Aggiunti 10 nuovi `MATCH_EVENTS` (3 PHYSICAL: campo pesante/pioggia/freddo; 4 PROVINCIAL_LIFE:
+> pubblico avversario/borracce dimenticate/presidente a bordocampo/terzo tempo; 3 TACTICAL: cambio
+> modulo/marcatura a uomo/pressing alto), stesso motore `pickMatchEvent`/`showMatchEvent` di tutti
+> gli eventi esistenti, applica/esito diretto su stato già presente (forma/energia/morale/
+> reputazione/relazioni/personalita) — nessuna nuova meccanica. Unico punto nuovo nel motore: il
+> trigger `'match_end'` (per `terzo_tempo`), agganciato in `finishMatch()` subito prima della
+> transizione a `screen-result`, esattamente come `'match_start'` lo è già in `beginMatch()` —
+> stesso pattern, la schermata partita resta attiva finché l'eventuale evento non viene chiuso.
+> Verificato: sintassi, bot (25 carriere/40 settimane, 0 errori — il bot clicca da solo le scelte in
+> `matchAction`, quindi ha già esercitato anche i nuovi eventi), i 10 id trovati in `MATCH_EVENTS`,
+> `terzo_tempo` forzato deterministico e seguito dal vivo in una carriera reale fino a `screen-result`.
+>
+> **Aggiornamento 2026-08-06 (continua, punti 3-4)**: completati anche i punti 3 e 4 della roadmap
+> di consolidamento del Match Viewer. Punto 3 — `CameraManager` ora ha uno stato interno
+> (`zoom`/`target`) e i metodi `setTarget()`/`setZoom()`, non ancora chiamati da nessun ticker:
+> con zoom=1 (default) `toPixel()` produce pixel identici a prima; con zoom≠1 applica davvero una
+> magnificazione centrata sul target, verificato (x=0.9 → 388px con zoom 1, 304px con zoom 2).
+> Nessun chiamante di `toPixel()` modificato: la firma è invariata, pronta per una futura
+> telecamera dinamica (segui palla/zoom in area) senza altri interventi. Punto 4 — rimosso l'
+> `if(clip==='shot')` hardcoded in `interpretMatchEvent()`: ogni clip dichiara ora il proprio
+> `variantField` (oggi solo `shot: variantField:'outcome'`), letto genericamente
+> dall'EventInterpreter — una clip futura con varianti (es. `tackle` con `foul`/`clean`) non
+> richiederà più un nuovo `if` qui. Verificato che un tiro a segno risolve ancora correttamente
+> `variant:'goal'` e `followup:'goal_celebration'`. Sintassi, bot (0 errori) e test dal vivo ok.
+>
+> **Aggiornamento 2026-08-06 (continua)**: revisione tecnica del Match Viewer (analisi separazione
+> motore/eventi/interpretazione/animazione/rendering, nessun problema di confine, ma limite di
+> scalabilità su "più giocatori") seguita dai primi due interventi della roadmap concordata.
+> Punto 1 — `AnimationManager.ballPos`/`playerPos` (due campi fissi) sostituiti da `entities`, una
+> mappa id→posizione (`ball`, `actor`, estendibile a qualunque altra chiave che una clip futura
+> restituisca via `frame.entities`) senza dover più toccare manager o renderer per ogni nuova
+> entità. Punto 2 — `renderMatchCanvas()` ora itera tutte le chiavi di `entities` (tranne `ball`,
+> disegnata per ultima/sopra) invece di disegnare un solo giocatore cablato su `evt.actor`.
+> Retrocompatibile al 100% con le clip esistenti (nessuna clip riscritta). Verificato con una clip
+> di prova che aggiunge un'entità arbitraria (`gk`) via `frame.entities`: compare disegnata senza
+> alcuna modifica a renderer/manager, confermando l'estendibilità. Sintassi, bot (25 carriere/40
+> settimane, 0 errori) e test dal vivo in pagina tutti ok.
+>
+> **Aggiornamento 2026-08-06**: due fix visivi nel Match Viewer 2D, segnalati dall'utente giocando
+> ("non c'è il pallone" / "il giocatore entra in porta"), risolti solo nel layer grafico senza
+> toccare il motore. Causa comune: per semplificazione MVP il marker giocatore coincideva sempre
+> con la posizione della palla. Fix 1 — ordine di disegno invertito in `renderMatchCanvas()`
+> (giocatore sotto, palla sopra), altrimenti il cerchio blu del giocatore copriva quello bianco
+> della palla quando sovrapposti. Fix 2 — la clip `shot` ora calcola un `playerPos` separato da
+> `ballPos`, con il giocatore che si ferma all'85% del tragitto mentre la palla prosegue fino in
+> porta (chi calcia non entra più in rete). `AnimationManager` traccia `playerPos` come campo
+> parallelo a `ballPos` (fallback su `ballPos` per le clip che non lo forniscono). Verificato:
+> sintassi, bot 25 carriere/40 settimane (0 errori), e test dal vivo in pagina.
+>
+> **Aggiornamento 2026-08-04 (continua)**: quattro richieste dell'utente nella stessa giornata,
+> dopo l'integrazione del database Brescia qui sotto — **cartellino rosso/fischio arbitrale non più
+> casuali** (scattano solo dopo un contrasto fisico fallito, con un trigger `after_foul_risk`
+> dedicato invece del vecchio `team_losing` scollegato dalle scelte del giocatore), **minuto
+> d'ingresso dalla panchina variabile** (20'-40' invece di sempre 28'), **il gruppo sociale dello
+> spogliatoio può cambiare nel tempo** (un contatore di affinità per gruppo alimentato dalle scelte
+> ripetute, cambio automatico oltre una soglia di vantaggio netto) e un'**espansione della modalità
+> Telefono** in 3 direzioni concordate con l'utente — rispondere dal telefono agli eventi di
+> agente/famiglia invece di un popup, filtri per categoria nella lista contatti, una chat di gruppo
+> per il proprio gruppo sociale. Tutto riusando i motori già esistenti, vedi sezioni dedicate.
+>
+> **Aggiornamento 2026-08-04**: integrato il database territoriale contemporaneo bresciano
+> (`database_brescia_contemporanea_gameplay.xlsx`, 95 elementi: persone, sponsor/brand, vino,
+> musica, sport, media, gastronomia, dialetto, luoghi, eventi) come dataset unico ed estendibile
+> (`DB_BRESCIA`) pescato da 7 eventi-template generici basati su ruoli/rarità/modalità, non su
+> singoli nomi — vedi sezione dedicata per il dettaglio. Riusa reputazione/finanze/morale/energia/
+> relazioni già esistenti e il sistema investimenti (Epico → opportunità), nessuna nuova stat.
+>
+> Ultimo aggiornamento: 2026-08-02 (sessione lunga, più aggiornamenti), dopo (in aggiunta a tutto quanto
+> sotto): la formula dei punti attributo in creazione personaggio (ora +1 assoluto per punto), il
+> riordino della card "Lavoro" in hub, una revisione della cronaca di partita (eventi ◆ inline, cronaca
+> con gerarchia visiva, niente più percentuale di riuscita sulle choice-card), la correzione del costo
+> energia del lavoro Full-time, una regola di convocazione basata su reputazione/energia/forma/morale/
+> rapporto col mister (panchina/non convocato, con subentro reale), il recupero energia uniformato a +40
+> per riposo/salta partita/infortunio, una curva bonus/malus per le relazioni (mister/compagni) sia in
+> partita che in simulazione, un riflesso settimanale della reputazione sulle relazioni, la Coppa
+> Leonessa che ora parte dalla seconda settimana di aprile con avanzamento data settimanale partita per
+> partita e una scheda che mostra sempre Preliminare + Fase Principale, il **completamento di tutte le
+> 10 fasi** di un piano concordato per un nuovo **sistema territoriale/shop/formazione/investimenti** —
+> territorio bresciano con 30 POI reali, esperienze territoriali, shop equipaggiamento (parastinchi/
+> scarpe/ecc.), formazione (libri/corsi/mentor), eventi relazionali che generano opportunità, 5 livelli di
+> investimento con rischio calcolato e maturazione nel tempo —, una **riorganizzazione lean/mobile-first
+> dell'interfaccia** (componente tab riutilizzabile, Shop e Formazione da liste lunghe a tab per
+> categoria, Scheda giocatore rinominata "Giocatore" e divisa in 4 tab, "Vita da calciatore" spostata
+> dentro Giocatore come 5° tab invece di card separata in hub, `data-block` sui contenitori dell'hub in
+> vista di una futura UI PC separata), e l'**estensione del sistema di personalità esistente**
+> (`state.personalita`) a 4 assi — azioni nei momenti chiave di partita, allenamento settimanale, economia
+> extra-campo (shop/formazione/investimenti), dialoghi fuori dal campo — con calcolo del tratto dominante
+> e una card dedicata in Giocatore, e il **completamento del piano a 7 fasi "sistema personaggi"
+> (A-G)**: memoria relazionale per persona con identità stabile e storico narrativo (Fase A), un
+> Telefono come hub eventi con filtro anti-spam (Fase B), rivalità dinamiche interne/esterne con 10
+> eventi che evolvono in rispetto/odio/amicizia/collaborazione (Fase C), eventi di vita privata e
+> imprevisti "caos controllato" (Fase D), un mercato narrativo con voci vere/false/manipolate e
+> Deadline Day (Fase E), una timeline legacy "La tua storia" che sopravvive a fine carriera (Fase F),
+> e un **ritiro → allenatore** con 20 connessioni pratiche derivate dalle persone incontrate durante
+> la carriera e un motore da allenatore che riusa la simulazione di girone già esistente (Fase G) —
+> tutto riusando gli stessi motori già esistenti (EVENTS/pickEvent, diario, simSquadra/
+> buildTierSeason), mai un secondo sistema parallelo. Richiesto esplicitamente (vedi nota in fondo e
+> sezioni dedicate più sotto).
+>
+> **Aggiornamento 2026-08-03**: bug fix (giocatore esistente non più a rischio di ritrovarsi come
+> proprio compagno/rivale), logo del gioco (immagine reale al posto del segnaposto "C7"), **40 nuovi
+> MATCH_EVENTS in 5 pool per ruolo** (Attaccante/Att-Cen/Centrocampista/Cen-Dif/Difensore), sponsor
+> personale reso più raro, +5 energia extra su riposo/salta partita/infortunio, soglia panchina al
+> 50%, curva di livellaggio più ripida, relazioni coi compagni anche in "Simula partita", **sistema
+> procuratore/agente** (`state.agent` + 8 `AGENT_EVENTS` + `calcChance` esteso ad array di 2 skill),
+> **sistema famiglia** (`state.family` + 8 `FAMILY_EVENTS`), **rete sociale** (10 `SOCIAL_EVENTS`,
+> conoscenze in `state.persone` con `ruolo:'conoscenza'`), **gruppi sociali dello spogliatoio**
+> (`state.gruppoSociale` + 10 `GRUPPO_EVENTS`, appartenenza emergente da età/personalità/ruolo), e
+> un bug fix sulla durata delle partite (subentro dalla panchina corretto da 65' — dopo il fischio
+> finale a 50' — a 28', reso visivamente evidente con un badge, e ora anche legato alle skill del
+> giocatore rispetto al resto della rosa reale).
+
+## Cos'è
+
+"Carriera CSI" è un gioco di carriera calcistica testuale, single-page, in italiano. Un unico file
+[`index.html`](index.html) contiene tutto: markup, CSS e logica JS (nessuna build, nessuna dipendenza esterna
+a parte i font Google). Il giocatore crea un calciatore, sceglie girone/squadra di Serie C reale, e scala la
+piramide CSI Brescia (C → B → A) tra partite simulate a scelte, eventi narrativi, mercato ed economia.
+
+## Match Viewer 2D — easing del tiro (2026-08-06)
+
+Terzo intervento: `shot` usava `easeOutQuad` (parte veloce, rallenta), poco credibile per un tiro.
+Aggiunto `EASINGS.easeInCubic` (parte lenta, accelera bruscamente) collegato a `clips.shot.run()`
+— due righe, contenute in `AnimationLibrary`. Verificato in isolamento: incrementi crescenti ad
+ogni quarto (accelerazione confermata), `pass_short` invariato sullo stesso schema di test. `node
+--check`, bot (25 carriere, zero errori, invariato). Dettagli in
+[MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md).
+
+## Match Viewer 2D — arco sui cross (2026-08-06)
+
+Secondo intervento della lista di rifinitura: `pass_long` era identico a `pass_short` (solo più
+lento), nessuna curva. Aggiunto un arco laterale perpendicolare alla direzione del passaggio,
+contenuto interamente in `AnimationLibrary.clips.pass_long.run()` — zero righe altrove. Verificato
+in isolamento: `y` si scosta fino a 0.06 a metà volo e torna esattamente a destinazione; `pass_short`
+resta perfettamente in linea retta, nessuna regressione. `node --check`, bot (25 carriere, zero
+errori, invariato). Dettagli in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md).
+
+## Match Viewer 2D — fix traiettoria tiri falliti (2026-08-06)
+
+Completa il fix precedente: i tiri falliti avevano la stessa omissione di `destination` verso
+`emitMatchEvent()`. Aggiunta zona dedicata `goal_line_wide` (distinta da `goal_line`, altrimenti
+un tiro fuori sarebbe indistinguibile da un gol), collegata nei due punti di
+`applyChoiceOutcome()` che generano tiri falliti — zero righe di logica di calcolo dell'esito
+toccate. Verificato dal vivo su tre casi (fallimento alto rischio, fallimento rischio medio, gol
+di controllo) — tutti corretti, gol invariato. `node --check`, bot (25 carriere, zero errori,
+invariato). Dettagli in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md).
+
+## Match Viewer 2D — fix traiettoria tiro (2026-08-06)
+
+Prima fase di rifinitura visiva (architettura ora dichiarata stabile, solo miglioramenti
+sull'esistente). Trovato un difetto reale, non solo cosmetico: un tiro a segno non spostava mai la
+palla, restava ferma in area per tutta l'animazione — `ZONE_DEFAULT_PER_OUT.goal` aveva
+`destination:null` e il ramo tiro riuscito di `applyChoiceOutcome()` non passava comunque il campo
+`destination` a `emitMatchEvent()` (omissione nel bridge dati, zero logica di gioco toccata).
+Aggiunta zona `goal_line`, impostata come destinazione di default, aggiunto il campo mancante nella
+chiamata. Verificato dal vivo: palla che ora si muove concretamente da `box` a `goal_line` con
+l'easing esistente. `node --check`, bot (25 carriere, zero errori, invariato). I tiri falliti
+(`off_target`) hanno la stessa omissione, lasciata volutamente per un intervento separato. Dettagli
+in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md).
+
+## Match Viewer 2D — followup attivato (2026-08-06)
+
+Il campo `followup` (es. `goal_celebration` dopo un gol) esisteva dalla sez.9 del design ma era
+solo informativo, mai eseguito. Ora `AnimationManager.tick()` lo accoda automaticamente **dopo**
+aver già notificato il gating — l'esultanza gira in background senza ritardare la riapertura delle
+scelte. Zero righe in EventInterpreter/AnimationLibrary/motore. Verificato dal vivo: gating
+invariato dopo un gol, `goal_celebration` accodata e eseguita da sola dal loop reale. Limite noto
+dichiarato: se una nuova scelta arriva mentre l'esultanza precedente sta ancora girando, si accoda
+dietro (ritardo raro, solo dopo gol ravvicinati). Dettagli in
+[MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md). Verificato: `node --check`, bot (25 carriere,
+zero errori, invariato).
+
+## Match Viewer 2D — Timeline (sequenze di clip) (2026-08-06)
+
+Infrastruttura per eseguire più clip in sequenza (es. PASS→CONTROL→SHOT), gestita interamente
+dall'`AnimationManager` (`creaTimeline()`, interna, mai vista da motore/EventInterpreter). Formato
+evento invariato: `evt.animation.clip` diventa automaticamente una Timeline di un solo step; un
+futuro `evt.animation.timeline` (array) sarebbe già supportato. Nessuna nuova animazione aggiunta
+in questa fase, solo l'infrastruttura. Verificato dal vivo: il vecchio comportamento (clip singola)
+è identico bit-per-bit a prima; una sequenza vera a due step (iniettata a mano, `pass_short`→
+`tackle`) esegue entrambi gli step in ordine e notifica `onDone` una sola volta, solo a fine
+sequenza. Dettagli in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md). Verificato: `node --check`,
+bot (25 carriere, zero errori, invariato).
+
+## Match Viewer 2D — prova di estendibilità (2026-08-06)
+
+Test del refactoring appena fatto: aggiunta la prima clip per `tackle` (contrasto fisico, prima
+senza coreografia) toccando solo `AnimationLibrary` — una voce in `eventClipMap` + un blocco clip
+(palla ferma per 400ms). Zero righe in AnimationManager/EventInterpreter/renderer/motore, come
+previsto dal refactoring. Verificato dal vivo: un contrasto riuscito ora mette in coda una clip
+reale e il gating aspetta davvero, dove prima risolveva istantaneamente. `node --check`, bot
+(25 carriere, zero errori). Dettagli in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md).
+
+## Match Viewer 2D — consolidamento architetturale (2026-08-06)
+
+Refactoring puro su richiesta esplicita ("rendere il Match Viewer facilmente estendibile e
+indipendente dal motore, prima di aggiungere nuove funzionalità"): nessun comportamento nuovo,
+nessuna modifica al motore. Estratta `AnimationLibrary` (ogni clip è un modulo indipendente con
+la propria funzione `run()` — l'`AnimationManager` non conosce più easing/track, si limita a
+coda/tempo/notifica come richiesto); separati i renderer in `CameraManager`/`FieldRenderer`/
+`BallRenderer`/`PlayerRenderer` invece di funzioni sciolte che facevano più cose. Punti di
+integrazione col motore (nomi e firme delle funzioni chiamate da `beginMatch`/`finishMatch`/
+`applyChoiceOutcome`/`resolveChoice`) invariati. Verificato: `node --check`, bot (25 carriere,
+zero errori, invariato), stesso test di gating di prima del refactoring con risultato identico.
+Dettagli in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md).
+
+## Match Viewer 2D — gating scelte/animazione (2026-08-06)
+
+Quinto passo: le scelte di partita ora aspettano davvero la fine dell'animazione prima di
+ricomparire. Aggiunto `whenDrained(fn)` all'AnimationManager (sincrono se non c'è nulla da
+animare, altrimenti in attesa che la coda si svuoti); in `resolveChoice()` il pannello scelte
+viene svuotato subito al click (evita il doppio click sullo stesso momento) e l'esito appare solo
+dentro `whenDrained(...)`. Verificato dal vivo: una scelta animata (`pass_long`, 1100ms) lascia il
+pannello vuoto fino a fine animazione, poi la palla è esattamente a destinazione e le nuove scelte
+ricompaiono; una scelta senza clip resta istantanea come prima, nessun ritardo indebito. Dettagli
+in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md). Verificato: `node --check`, bot (25 carriere,
+zero errori, invariato).
+
+## Match Viewer 2D — primo canvas reale (2026-08-06)
+
+Quarto passo: aggiunto `<canvas id="matchCanvas">` in `screen-match` (sopra il commentary-log
+testuale esistente, mai al suo posto). `campoToPixel()` (CameraManager), `disegnaCampo()`,
+`disegnaPallino()`/`renderMatchCanvas()` (PlayerRenderer/BallRenderer MVP: un pallino palla +
+uno protagonista, ancora nella stessa posizione), loop `requestAnimationFrame` avviato/fermato in
+`beginMatch()`/`beginMatchAsSub()`/`finishMatch()`. Ogni accesso al canvas è dietro
+`typeof requestAnimationFrame==='function'`, sempre falso nel bot Node — il motore resta
+comprovatamente indipendente dal viewer. Verificato dal vivo con screenshot: dopo un assist andato
+a segno il pallino si sposta visibilmente da centrocampo all'area avversaria mentre il punteggio si
+aggiorna — prima conferma end-to-end motore→canvas, non solo dati. Le scelte NON aspettano ancora
+la fine dell'animazione (gating rimandato). Dettagli in
+[MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md). Verificato: `node --check`, bot (25 carriere,
+zero errori, invariato rispetto a prima della modifica).
+
+## Match Viewer 2D — AnimationManager (2026-08-06)
+
+Terzo passo: `creaAnimationManager()`, primo modulo con una nozione di tempo (coda di eventi,
+`tick(deltaMs)`, `pause()`/`resume()`, interpolazione posizione palla con easing da
+`ANIMATION_LIBRARY`, callback `onDone`). Ancora NON agganciato al flusso reale della partita
+(`nextMoment()`) — resta un modulo autonomo verificabile da solo, come i due step precedenti.
+Verificato dal vivo con un evento `pass_long` reale: interpolazione plausibile, arrivo esatto a
+destinazione, `onDone` con l'id giusto, pausa che blocca davvero l'avanzamento. Dettagli in
+[MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md). Verificato: `node --check`, bot (25 carriere,
+zero errori).
+
+## Match Viewer 2D — EventInterpreter (2026-08-06)
+
+Secondo passo dopo `emitMatchEvent()` (vedi voce sotto): aggiunti `ZONES`/`zonaCoordinate()`
+(zona nominale → coordinate normalizzate 0-1), `ANIMATION_LIBRARY` (clip MVP come dati:
+pass_short/pass_long/shot/save/goal_celebration) e `interpretMatchEvent()`, l'EventInterpreter
+vero e proprio, chiamato da `emitMatchEvent()` e salvato in `evt.animation`. Ancora zero canvas:
+solo trasformazione dati→dati, verificata dal vivo (tiro a segno → `clip:'shot', variant:'goal',
+originXY:{x:0.92,y:0.5}, followup:'goal_celebration'`). Dettagli in
+[MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md). Verificato: `node --check`, bot (25 carriere,
+zero errori).
+
+## Match Viewer 2D — emitMatchEvent() (2026-08-06)
+
+Primo passo verso un futuro layer grafico 2D sopra il motore partite (analisi completa e design
+in [MATCH_VIEWER_DESIGN.md](MATCH_VIEWER_DESIGN.md), incluso perché due progetti open source
+valutati come possibile base — touchlines, AGPL-3.0, e openengine — non offrono componenti
+direttamente riusabili nella nostra architettura). Aggiunta `emitMatchEvent()`: struttura in JSON
+standard gli esiti che il motore già calcola (`applyChoiceOutcome`, `resolveChoice`, `beginMatch`,
+`finishMatch`), accumulandoli in `state.matchTemp.events`, **in aggiunta** al testo di `addLog()`
+esistente, mai al suo posto — il gioco funziona identico se il viewer non esiste ancora. Nessuna
+implementazione Canvas: solo il contratto dati. Verificato: `node --check`, bot (25 carriere,
+zero errori), partita dal vivo con ispezione di `state.matchTemp.events`.
+
+## Bug: sequenza contraddittoria gol/fallo su contrasto fisico fallito (2026-08-05)
+
+Segnalato dall'utente: dopo un contrasto fisico fallito (`out:'recupero'`, `risk:'high'`) poteva
+capitare in sequenza "Palla persa in una zona pericolosa: [squadra] segna" seguito subito da
+"L'arbitro fischia contro di te per quel contatto" — narrativamente contraddittorio, perché se
+l'arbitro ferma il gioco per un fallo su quel contatto, l'azione non può essere anche proseguita
+fino a un gol in ripartenza sullo stesso pallone perso. Causa: in `resolveChoice()`,
+`applyChoiceOutcome()` (che decide con 40% di probabilità se il pallone perso diventa gol
+avversario) e il trigger `'after_foul_risk'` (che fa scattare l'evento "arbitro") erano
+indipendenti — lo stesso contrasto falso poteva generare entrambi gli esiti nello stesso momento.
+Fix: `resolveChoice()` ora confronta `m.oppGoals` prima/dopo `applyChoiceOutcome()`
+(`golSubitoOra`) e non aggiunge più `'after_foul_risk'` ai trigger se il pallone perso è già
+finito in gol in quella stessa azione — i due esiti restano entrambi possibili ma mutuamente
+esclusivi sullo stesso contrasto. Verificato: `node --check`, bot (20 carriere × 40 settimane,
+zero errori/violazioni).
+
+## Audit e compattazione hub mobile-first (2026-08-05)
+
+L'utente ha avviato una riorganizzazione mobile-first dell'interfaccia. Audit dell'architettura
+esistente: già sostanzialmente mobile-first (`#app` è `max-width:480px`, colonna singola, breakpoint
+dedicati a 420px/360px) e tre schermate (shop, formazione, carriera) usano già tab-bar per evitare
+lo stacking verticale eccessivo. Punto di partenza scelto: l'hub (`screen-hub`), la schermata vista
+più spesso, che impilava 6+ card prima delle azioni principali.
+
+Modifiche (solo CSS + riordino DOM, nessuna funzione toccata, tutti gli `id` invariati):
+- **Card "Relazioni"**: da 3 righe impilate (Mister/Procuratore/Compagni, una sotto l'altra) a una
+  riga sola a 3 colonne (`.rel-grid`, flex), stesse informazioni ma verticalmente molto più compatta.
+- **Riordino hub**: il blocco `hubActions` (Scendi in campo/Simula partita/Salta partita/Telefono/
+  Classifica/Giocatore) e il pulsante Coppa Leonessa sono stati spostati subito dopo la card
+  "Prossimo impegno", PRIMA di "Preparazione settimanale" (4 choice-card allenamento) e "Lavoro"
+  (che restano più in basso). Prima le azioni principali erano sotto 4+ card, ora sono visibili
+  senza scroll aggiuntivo su un viewport mobile standard (375×812).
+Verificato: `node --check`, bot (15 carriere × 40 settimane, zero errori/violazioni), screenshot
+nel Browser pane a 375×812 — relazioni su una riga, azioni visibili subito sotto "Prossimo impegno",
+preparazione settimanale (4 card allenamento) ancora renderizzata correttamente più in basso, nessun
+errore in console.
+
+## Requisito trasversale: accessibilità (WCAG 2.1 AA)
+
+Vincolo permanente richiesto esplicitamente dall'utente, non legato a una singola modifica: **tutta
+l'interfaccia deve sempre essere conforme alle Web Content Accessibility Guidelines 2.1, livello AA**.
+Vale per ogni schermata esistente e per ogni nuova UI aggiunta d'ora in poi — non solo per le parti
+toccate in una singola richiesta. Da tenere presente in particolare per: contrasto colore testo/sfondo
+(≥4.5:1 per il testo normale, ≥3:1 per il testo grande, criterio 1.4.3), stati interattivi (focus visibile
+su bottoni/scelte/link, criterio 2.4.7), semantica e leggibilità per screen reader (etichette non affidate
+al solo colore, criterio 1.4.1), dimensione target di tocco e navigabilità da tastiera.
+
+**Primo audit sistematico completato (2026-08-04)**, palette invariata (solo luminosità dei bottoni
+pieni ritoccata), esiti:
+- **Contrasto testo/sfondo (1.4.3)**: i bottoni pieni (`.btn` blu, `.btn.warning`, `.btn.danger`,
+  `.btn.green`) avevano testo bianco su gradiente troppo chiaro (2.7–4.1:1, sotto soglia AA). Stop
+  del gradiente scuriti mantenendo la stessa tinta (stessa hue, solo più profonda) finché anche il
+  punto più chiaro del gradiente supera 4.5:1. `.btn.gold` (testo scuro) era già conforme, non toccato.
+  Tutti i colori di testo/badge/label sulle superfici scure esistenti (`--text`, `--text-dim`,
+  `--gold`, `--ice`, ecc.) erano già conformi, nessuna modifica necessaria lì.
+- **Navigabilità da tastiera (2.1.1/2.4.7)**: le "card" cliccabili (`div` con `onclick`, non
+  `<button>`) — scelte di eventi/partita, allenamenti, territorio, formazione, telefono, banner
+  Coppa Leonessa, selezione squadra/giocatore in creazione — non erano raggiungibili né attivabili
+  da tastiera. Aggiunto `role="button"`/`role="radio"` + `tabindex="0"` (`tabindex="-1"` +
+  `aria-disabled` quando la card è disattivata) in ogni punto di generazione, più UN SOLO listener
+  `keydown` globale (Invio/Spazio → `.click()`) invece di ripetere la gestione tastiera in ogni sito.
+  Estesa la regola CSS `:focus-visible` già esistente per coprire anche `[role="button"]`/`[role="radio"]`.
+- **Etichette form (4.1.2/3.3.2)**: i campi di creazione carriera (nome, ruolo, data di nascita,
+  girone, squadra) avevano solo un'etichetta visiva (`div.label`) non associata programmaticamente.
+  Aggiunti `id` alle etichette e `aria-labelledby`/`aria-label` sui controlli corrispondenti, senza
+  toccare il markup visivo (nessuna modifica di layout).
+- **Uso del colore (1.4.1)**: già a posto da lavoro precedente (badge con icona ✓/✗, rischio scelte
+  con prefisso testuale [S]/[M]/[A] oltre al colore).
+- Verificato: `node --check` sullo script estratto, bot autonomo (20 carriere × 60 settimane, zero
+  errori/violazioni) per escludere regressioni nel motore, più verifica dal vivo in browser (selezione
+  squadra via mouse e via focus/Invio simulato, contrasto bottoni a schermo).
+- **Limite noto**: la verifica dell'attivazione da tastiera è stata fatta anche via browser di test
+  automatizzato, i cui eventi tasto sintetici non valorizzano `key`/`code`/`keyCode` (limite dello
+  strumento, non del codice) — il listener controlla comunque tutti e tre per compatibilità con
+  tastiere reali, stesso criterio che i `<button>` nativi usano di default.
+
+## Struttura del file
+
+- **HTML**: una serie di `<div class="screen" id="screen-XXX">` (create, hub, match, event, classifica,
+  carriera, seasonend, market) mostrate/nascoste da `showScreen(id)`.
+- **CSS**: variabili custom in `:root` (tema navy/blu/oro).
+- **JS**: un unico `<script>` in fondo al file con tutta la logica di gioco.
+- **`data-squadre.js`** (2026-08-04, nuovo file): `DB_SQUADRE` (280 squadre reali, ~5511 giocatori,
+  vedi Strato 1) è stato spostato qui, fuori da `index REV2.html`, perché da solo pesava oltre 400KB su
+  una riga sola — il file di gioco era diventato scomodo da navigare. È **dati puri, zero logica**,
+  caricato con un secondo `<script src="data-squadre.js"></script>` messo PRIMA dello script principale
+  in `index REV2.html` (stesso approccio "un file apre tutto", nessun bundler/build step: funziona
+  ancora aprendo il file direttamente via `file://`). Il contenuto del file, tolto il prefisso
+  `const DB_SQUADRE = ` e il `;` finale, è JSON valido — scelta deliberata in vista di una futura
+  migrazione su Godot (menzionata dall'utente): quel giorno basterà quella singola modifica per avere
+  una risorsa `.json` leggibile nativamente, senza riscritture. Il bot di test (`tools/test-bot.js`)
+  è stato aggiornato per caricare anche questo file nel proprio contesto `vm` (altrimenti `DB_SQUADRE`
+  sarebbe `undefined` durante i test).
+
+## Strato 1 — Dati reali (NON toccare senza motivo)
+
+- `DB_SQUADRE`: oggetto con **280 squadre reali CSI Brescia** (Serie A e B da `ranking_squadre_3.xlsx`,
+  poi rimappate su Serie A/B/C a 6+ gironi ciascuna con `gironi_2026_27_ricomposti.xlsx` per la stagione
+  2026/27), ognuna con `nome`, `serie`, `girone`, `forza`, `mod`, `vecchio_nome`, `rosa` (giocatori reali con
+  `nome`, `ruolo`, `ovr` da `giocatori_overall_stimato.xlsx`, ~5511 giocatori collegati).
+- `LEAGUES` (C/B/A): pool di squadre selezionabili per lega. Il pool `C` ora copre **tutte le 80 squadre
+  reali di Serie C sui 6 gironi A–F** (non solo Girone E come in origine).
+- Selezione girone/squadra in creazione personaggio: `squadreSerieC()` filtra `DB_SQUADRE` per
+  `serie==='C'`; `renderGironiPicker()` / `renderTeamPickerByGirone()` popolano le select in base al girone
+  reale scelto (mostrano sempre "Serie X — Girone Y" per evitare ambiguità tra lettere di girone duplicate
+  su serie diverse). Il picker mostra tutte le squadre del girone (14, non più limitate a 12).
+- `buildTierSeason(tierKey, myTeam)`: costruisce calendario e classifica usando **solo le squadre dello
+  stesso girone reale** del club scelto (fallback al pool intero se il club non ha compagni di girone
+  individuabili). **Andata e ritorno**: ogni avversario si affronta due volte, quindi un girone da 14 squadre
+  genera **26 giornate** (non più 13 di sola andata). Il numero di giornate resta comunque dinamico
+  (`state.calendario.length`), non fisso.
+
+## Strato 2 — Economia (implementato di recente)
+
+- **Compenso sportivo mensile**: `compensoSportivo(lega, overall)` — scala base→top per lega
+  (C: 30–120€, B: 120–400€, A: 350–900€) in base all'overall pesato del giocatore.
+- **Budget club**: `buildBudgetClub(lega)` — budget annuale fisso per lega (C: 8.000€, B: 25.000€,
+  A: 70.000€), suddiviso Sponsor 40% / Premi 15% / Coppa 10% / Marketing 35%; `limiteIngaggi` = 60% del
+  totale, flag `crisi` quando la spesa in ingaggi supera il 75% del limite. Si rigenera a ogni nuova
+  stagione (`finalizzaMercato`).
+- **Marketing club mensile**: `calcolaMarketing(lega, posizioneClassifica, famaTotale, isDerby)` — base per
+  categoria, pesata 60% posizione in classifica / 40% fama (reputazione), con bonus derby opzionale (+30%,
+  parametro predisposto ma non ancora agganciato a una rilevazione automatica dei derby).
+- **Lavoro giocatore**: `impostaLavoro(tipo)` — tre stati (Nessuno/PartTime/FullTime), scelti da 3 bottoni
+  nell'hub. Stipendio mensile a scaglioni di anzianità (0-2/3-5/6-10/11-15/16+ anni) via `salarioLavoro()`.
+  Costo energia settimanale (`energiaCostoLavoro`: -15 PT, -30 FT) applicato ogni giornata via
+  `applyLavoroSettimanale()`. Anzianità con carry-over 50% se il lavoro viene interrotto/cambiato.
+  **La scelta è modificabile solo a inizio stagione** (`lavoroModificabile()` → `state.giornata===1`); nelle
+  altre giornate i 3 bottoni sono disabilitati con avviso in UI.
+- **Ciclo mensile**: ogni 4 giornate (`postGiornataFlow` → `applyPagamentoMensile`) si accreditano compenso
+  sportivo + salario lavoro sul saldo, si aggiorna il marketing e si verifica la crisi di budget.
+- **UI**: card "Lavoro" nell'hub (stato + 3 bottoni); scheda giocatore (`carFinRel`) mostra saldo, compenso
+  sportivo, budget club (con badge ⚠️ se in crisi) e marketing del mese.
+- Compatibilità salvataggi vecchi gestita in `boot()` (patch dei campi mancanti in `state.finanze`).
+
+## Coppa Leonessa
+
+Le squadre reali di Serie A/B/C giocano gironi da 4 su due fasi; **le partite del giocatore si giocano
+davvero** con lo stesso motore del campionato (non più una simulazione istantanea a fine stagione — era un
+bug, corretto: vedi cronologia). Le partite di tutte le altre squadre restano invece auto-simulate.
+
+- **Fase preliminare**: tutte le squadre reali di Serie B + C (196 squadre) → 49 gironi da 4
+  (`buildCoppaPreliminary`). Passano i **49 primi classificati + le 47 migliori seconde** (punti, poi
+  differenza reti) → **96 qualificate** alla Fase Principale (`qualificaConMiglioriSeconde`). Si simula
+  sempre, anche per un giocatore di Serie A, perché serve a produrre le 96 squadre qualificate.
+- **Fase principale**: le 84 squadre di Serie A (teste di serie, max 2 per girone, distribuzione il più
+  possibile equa) + le 96 qualificate dal preliminare = 180 squadre → **45 gironi da 4**
+  (`buildCoppaPrincipale`). Passano i **45 primi + le 19 migliori seconde** → **64 squadre ai "32esimi"**.
+  Una squadra di Serie A entra qui direttamente, senza preliminare.
+- **Partite giocabili (fix architetturale)**: a fine stagione (`iniziaCoppaLeonessa`, chiamata da
+  `renderSeasonEnd`) si costruisce il girone del giocatore, si simulano SUBITO solo le partite fra le altre
+  3 squadre del girone (`simulaGironeConGiocatore`), e le **3 partite del giocatore restano in coda**
+  (`state.coppa = {tipo, girone, prossimi, giocate}`). Si giocano dall'hub — dopo il mercato, prima che
+  riparta il campionato — con `beginMatch()`/`skipGiornata()`/`simulaPartita()` resi "context-aware"
+  (`state.matchTemp.contesto: 'coppa'|'campionato'`): stesso motore a scelte, compagni che intervengono,
+  infortuni/cartellini, ma il risultato va in `applyResultToCoppaGirone` invece che in `applyResultToClassifica`,
+  e `closeResult()`/`postCoppaMatch()` non toccano giornata/economia del campionato (fixture "fuori
+  calendario"). Finito il girone (`finalizzaGironeCoppa`), si calcolano primi/migliori seconde e — se
+  qualificato — si passa in automatico alle 3 partite della Fase Principale (`procediAFasePrincipale`),
+  stesso meccanismo.
+- **Stato**: `state.coppaPrelim` / `state.coppaPrincipale` (tutti i gironi + qualificati),
+  `state.coppa` (girone del giocatore **in corso**, `null` quando non c'è nulla da giocare),
+  `state.coppaTorneo` con `fase` (`eliminato_preliminare` / `eliminato_principale` / `trentaduesimi`) —
+  valorizzato solo a girone concluso.
+- **Indicazione "giornata" durante la coppa**: hub, schermo partita e schermata Coppa mostrano tutti
+  "Partita X/3" (`state.coppa.giocate.length+1` su `giocate.length+prossimi.length`), per non perdere il
+  riferimento di quante partite di girone mancano.
+- **UI**: banner dorato animato in fine-stagione (`coppa-banner`, CSS `coppaPop`/`coppaGlow`) che segnala se
+  c'è un girone da giocare o l'esito finale; schermata `screen-coppa` (`renderCoppa`, bottone in hub visibile
+  quando c'è un girone in corso o un esito registrato) mostra tabellina del girone con la squadra del
+  giocatore evidenziata (`renderTabellaGirone`).
+- ~~Non ancora implementato: il tabellone a eliminazione diretta~~ — **implementato il 2026-08-05**.
+  Dai 32esimi in poi (trentaduesimi→sedicesimi→ottavi→quarti→semifinale→finale) è un vero tabellone a
+  eliminazione diretta: si riusa **esattamente** lo stesso motore/UI delle altre partite di Coppa
+  (`state.coppa.prossimi[0]`, `beginMatch`/`skipGiornata`/`simulaPartita`, contesto `'coppa'`) — cambia
+  solo cosa succede a fine partita. `iniziaTurnoBracket(round, squadre)` accoppia le squadre del turno,
+  trova il mio avversario, e **simula subito** tutte le altre gare del turno (`decidiVincitoreCoppa`,
+  gare secche quindi zero code multi-partita come nei gironi). Vinco → passo il turno e si genera subito
+  il turno successivo (`finalizzaTurnoBracket`); perdo → eliminato, fase `eliminato_<turno>` in
+  `state.coppaTorneo`; vinta la finale → fase `'campione'`, +15 reputazione, nuovo achievement
+  `coppa_campione` ("Re di Coppa"). **Pareggio in gara secca**: niente rigori (scelta esplicita di non
+  costruire quel sistema, resta nei TODO sotto) — si va ai supplementari simulati sulla forza reale
+  delle due squadre (`decidiVincitoreCoppa`, stesso principio già usato per le altre sfide simulate).
+  `screen-coppa` mostra lo storico completo del tabellone (`state.coppaBracket.storico`, poi
+  `coppaTorneo.percorsoBracket` a torneo concluso) turno per turno con risultato. Migrazione in `boot()`
+  per i salvataggi fermi al vecchio stato statico "ai 32esimi" (ora avviano il primo turno vero invece
+  di restare bloccati). Bot aggiornato automaticamente: riusa lo stesso `state.coppa.prossimi.length`
+  già gestito da `__botPlayOffSeason()`, nessuna modifica al bot necessaria. Verificato: `node --check`,
+  bot (60 carriere totali sommando i run di verifica, zero errori/violazioni), e percorso completo dal
+  vivo in browser — vittoria di tutti e 6 i turni fino a "campione" (achievement sbloccato, storico
+  corretto) ed eliminazione forzata in un turno intermedio (testo/grammatica "ai trentaduesimi" /
+  "agli ottavi" / "in semifinale" verificati singolarmente).
+
+## Partita: attributi, compagni, modalità simulata
+
+- **Attributi**: ogni attributo pesa su scelte specifiche in `calcChance(attrKey, risk, out)` —
+  tiro→tentativi di gol, passaggio→assist/cross, tecnica→dribbling/gestione palla sicura,
+  velocità→scatti/pressing, fisico→contrasti (riduce anche la chance di infortunio), difesa→recuperi.
+  Formula: `50 + (attributo-50)×0.65 + bonus rischio + bonus forma + bonus feeling squadra [+ bonus compagno]`.
+  L'"overall pesato" del giocatore (quello di mercato/compenso) NON entra in questa formula — solo gli
+  attributi grezzi.
+- **Dipendenza dalla forza avversaria**: sì, in due punti — `finishMatch()` aggiunge "gol extra" impliciti
+  calcolati sulla `forza` reale (da `DB_SQUADRE`) della squadra avversaria; `simSquadra()` (usata da
+  `skipGiornata`/`simulaPartita`/altre partite del girone) usa direttamente le due forze.
+- **Compagni di squadra attivi** (`sceglieCompagni(nomeSquadra)`): pesca dalla rosa reale
+  (`DB_SQUADRE.rosa`) il miglior attaccante/centrocampista e il miglior difensore della squadra del
+  giocatore (fallback generato via `NOMI_POOL`/`COGNOMI_POOL` se la rosa non è in DB). Il loro overall
+  **aumenta la % di riuscita** delle scelte con esito `assist`/`recupero` (bonus in `calcChance`) e vengono
+  **citati per nome** nei log di partita ("Assist perfetto di X per Rossi...").
+- **Modalità "Simula partita"** (`simulaPartita()`): bottone in hub accanto a "Scendi in campo", risolve la
+  giornata (o la partita di coppa pendente) senza il minigioco a scelte, stesso motore di `skipGiornata`.
+- **Preparazione settimanale bloccata a una scelta**: `state.allenamentoFatto`/`ultimoAllenamento` impedisce
+  di applicare più allenamenti nella stessa settimana (bug corretto: prima "Riposo e recupero" si poteva
+  cliccare più volte); si resetta a ogni giornata/nuova stagione.
+
+## Altri sistemi principali
+
+- **Creazione personaggio**: nome, ruolo, data di nascita, girone/squadra Serie C, allocazione punti
+  attributo (10 pt su 6 attributi generici, o sulle 7 skill dedicate se il ruolo è Portiere — vedi sezione
+  dedicata).
+- **Overall/attributi**: `overallPesato`, `attributiDaOverall`, `ROLE_BASE`/`GK_ROLE_BASE`,
+  `ROLE_WEIGHTS`/`GK_ROLE_WEIGHTS`, selezionati con `attrKeysFor`/`roleBaseFor`/`roleWeightsFor`.
+- **Età**: `calcolaEta`, `etaMultiplier`, `etaCarrieraMultiplier` basati su `dataNascita`.
+- **Mercato/valore**: `valoreMercato`, `disciplinaMultiplier`, offerte di mercato a fine stagione
+  (`generateOffers`, `negoziaOfferta`, `accettaOfferta`, `rifiutaOfferta`, `finalizzaMercato`).
+- **Scheda giocatore ripulita**: `carStats`/`carFinRel` mostrano solo saldo, compenso sportivo, valore di
+  mercato, reputazione e rapporti — rimossi "Moltip. disciplina", "Budget club" e "Marketing (mese)" (non
+  attinenti alla sola parte giocatore).
+- **Partita**: `MOMENTS` (4 momenti chiave per partita, scelte con rischio safe/mid/high; per un Portiere
+  vengono usati 4 momenti pescati a caso da `GK_MOMENTS_POOL`, vedi sezione dedicata), `calcChance`,
+  `resolveChoice`, `finishMatch` (voto, XP, infortuni, cartellini) — ora "context-aware" campionato/coppa
+  (vedi sopra) e con eventi dinamici intermezzati (`MATCH_EVENTS`, vedi sezione dedicata).
+- **Simulazione senza giocare**: `skipGiornata`, `simSquadra`, `applyResultToClassifica` (simula anche le
+  altre partite del girone).
+- **Eventi narrativi**: `EVENTS`, `pickEvent`, `showEvent` (scelte con conseguenze su relazioni/morale/ecc.).
+- **Achievement**: `ACHIEVEMENTS`, `checkAchievements`.
+- **Regen/newgen**: `generaRegen`, `generaRegenStagionali` (giocatori generati narrativamente per le
+  squadre rivali a fine stagione).
+- **Promozione/retrocessione**: `renderSeasonEnd` (primi 2 promossi, ultimi 2 retrocessi, salvo tetto/fondo
+  piramide C/A).
+- **Salvataggio**: `localStorage`, chiave `carriera_csi_save`, oggetto `state` unico.
+- **Ricomincia carriera**: bottone "Ricomincia carriera (cancella salvataggio)" nell'hub, `restartCareer()`
+  cancella il salvataggio, azzera le variabili di creazione e torna a `screen-create` (con conferma via
+  `confirm()`).
+
+## Ambiente di sviluppo
+
+- Nessun `package.json`: progetto statico a file singolo.
+- `.claude/launch.json` configura un server statico (`python -m http.server 8080`) per l'anteprima nel
+  Browser pane.
+
+## Cronologia sintetica delle modifiche in questa serie di conversazioni
+
+1. Creazione iniziale di `index.html` (poi sovrascritto due volte con versioni v0.3 → v0.4 fornite
+   dall'utente).
+2. Import dati reali completi (280 squadre, 5511 giocatori) in `DB_SQUADRE` da
+   `ranking_squadre_3.xlsx` + `giocatori_overall_stimato.xlsx`, sostituendo un `DB_SQUADRE` troncato.
+3. Aggiunta UI di creazione personaggio con data di nascita e girone/squadra reale
+   (`inpDataNascita`, `inpGirone`, `renderGironiPicker`, `renderTeamPickerByGirone`).
+4. Correzione nome girone `"Girone G?_DA_CONFERMARE"` → `"Girone G"` (13 occorrenze).
+5. Filtro selezione girone di partenza limitato alle sole squadre di "Serie C" (con serie sempre mostrata
+   accanto al girone per evitare ambiguità).
+6. Rimosso il limite artificiale di 12 squadre nel picker di girone (ora mostra tutte le 14).
+7. Aggiornamento `DB_SQUADRE` con serie/gironi della stagione 2026/27 da
+   `gironi_2026_27_ricomposti.xlsx` (276/280 squadre aggiornate; 4 non più presenti nel nuovo file).
+8. Espansione `LEAGUES.C` a tutte le 80 squadre reali di Serie C (6 gironi A–F).
+9. Correzione calendario: partite ora solo contro squadre dello stesso girone reale, numero di giornate
+   dinamico invece di fisso a 7.
+10. Implementazione completa del Sistema Economico Strato 2 (compenso sportivo, budget club, marketing,
+    lavoro, ciclo di pagamento mensile) con test funzionali (Node + browser).
+11. Configurazione ambiente di anteprima (`.claude/launch.json` + server statico Python).
+12. Creato questo file `RIEPILOGO.md`, con aggiornamento automatico ogni 5 messaggi utente.
+13. Vincolata la scelta del lavoro a inizio stagione (`lavoroModificabile`), bottoni disabilitati nelle
+    altre giornate.
+14. Aggiunto bottone "Ricomincia carriera" (`restartCareer`) nell'hub.
+15. Implementata la Coppa Leonessa: fase preliminare (B+C, 49 gironi da 4, primi + 47 migliori seconde) e
+    fase principale (Serie A come teste di serie max 2/girone + qualificate, 45 gironi da 4, primi + 19
+    migliori seconde → 64 squadre ai 32esimi), con schermata dedicata e tabellina di girone.
+16. Aggiunta modalità "Simula partita" in hub (`simulaPartita`).
+17. Scheda giocatore ripulita: rimossi moltiplicatore disciplina, budget club e marketing dalla card
+    finanze/statistiche.
+18. Compagni di squadra resi attivi in partita: pescati dalla rosa reale (`sceglieCompagni`), bonus a
+    assist/recupero, citati per nome nei log.
+19. Campionato ora andata e ritorno: ogni girone raddoppia le giornate (es. 26 invece di 13 per 14 squadre).
+20. Banner dorato animato in fine-stagione per segnalare l'esito/stato della Coppa Leonessa.
+21. **Bug fix architetturale Coppa Leonessa**: prima si simulava tutto istantaneamente a fine stagione senza
+    che il giocatore giocasse nulla; ora le 3 partite di girone del giocatore (preliminare, poi principale se
+    qualificato) si giocano davvero dall'hub con lo stesso motore del campionato, tramite
+    `state.coppa`/`iniziaCoppaLeonessa`/`avviaFaseCoppa`/`postCoppaMatch`/`finalizzaGironeCoppa`.
+22. Aggiunta indicazione "Partita X/3" durante la Coppa (hub, schermo partita, schermata Coppa), per non
+    perdere il riferimento di quante partite di girone mancano.
+
+## TODO aperti
+
+- ~~Tabellone a eliminazione diretta dei 32esimi di Coppa Leonessa~~ — **implementato il 2026-08-05**,
+  vedi sezione "Coppa Leonessa" più sopra per i dettagli.
+- ~~Bonus derby~~ — **agganciato il 2026-08-05**. `DB_SQUADRE` non ha un campo comune/località, quindi
+  niente derby geografico "vero": due segnali che riusano solo dati già in gioco, chiesti esplicitamente
+  come mix da usare entrambi (non uno o l'altro). 1) `trovaRivaleEsterno()` già esistente — se la
+  squadra affrontata è un rivale esterno consolidato, è derby. 2) euristica sul nome: tolte le sigle/
+  parole generiche da club (`DERBY_STOPWORDS`: GSO/CSI/FC/REAL/UNITED/ecc.), se resta una parola in
+  comune fra i due nomi squadra (es. "CASTEL GOFFREDO CLUB" vs "CASTEL 2.6", "GS NOVAGLI" vs "NOVAGLI
+  NEXT") è derby — segnale più debole, verificato che non scatta su nomi scorrelati. `derbyDelMese()`
+  scandisce `state.registroPartite` (contesto campionato, stagione corrente, ultime 4 giornate — lo
+  stesso ciclo di `applyPagamentoMensile`) e passa il risultato a `calcolaMarketing`. Il numero risultante
+  (`state.finanze.marketing`) non è comunque mostrato in UI (rimosso dalla scheda giocatore in una
+  sessione precedente perché non attinente alla sola parte giocatore) — resta un dato di sfondo per il
+  club, come da scope originale della richiesta.
+- ~~Meccanismo promozione/retrocessione di Serie B esatto~~ — **implementato il 2026-08-05**.
+  `calcolaEsitoStagione()` ora simula davvero gli altri gironi B (`simulaAltriGironiB`, stesso motore
+  della Coppa Leonessa: `creaSquadraCoppa`/`simulaGironeRoundRobin`) solo quando la posizione del
+  giocatore è 2° o penultima (altrove l'esito è già inequivocabile, nessuno spreco). Confronta la
+  propria "seconda"/"penultima" con la classifica NAZIONALE reale di tutte le altre — deterministico,
+  non più a probabilità basata sul rendimento.
+  Il database ha solo 8 gironi B reali da 14 squadre (più 4 squadre reali — OSZ RONCO 2017, ATLETICO
+  SAIANO, USO MONTICELLI, TORRICELLA B — finite in due mini-gironi residuali "Girone N"/"O" da 3+1 per
+  un limite dell'importazione dati, esclusi dal calcolo con una soglia sulla dimensione, non i nomi,
+  confermato con l'utente che i gironi B reali sono 8).
+  **Regola corretta dall'utente** (il tentativo iniziale usava "14 migliori/peggiori" per errore, presa
+  da un altro contesto): salgono TUTTE le prime di ogni girone B + le **4** migliori seconde a livello
+  nazionale; scendono TUTTE le ultime + le **4** peggiori penultime (C→B resta "prime 2 del girone",
+  A→B resta "ultime 2 del girone", entrambe già corrette da prima). Con 8 gironi reali (~8 candidate
+  "seconde"/"penultime" nazionali) una soglia di 4 è selettiva per davvero, non sempre vera come lo
+  sarebbe stata con 14: verificato dal vivo, un 2° posto debolissimo (10 pt/26 giornate) resta
+  confermato, uno fortissimo (88 pt) viene promosso. Verificato anche: `node --check`, bot (55 carriere
+  totali fra i run di verifica, zero errori/violazioni).
+- ~~`MATCH_EVENTS`, categorie TACTICAL/PHYSICAL/PROVINCIAL_LIFE~~ — **implementato il 2026-08-06**,
+  vedi aggiornamento in cima al documento. Oltre agli 8 eventi rappresentativi originali (5 normali
+  + 3 GK) e ai 12 trade-off generici, ci sono 40 eventi specifici per ruolo (5 pool da 8, vedi
+  sezione dedicata) e ora anche i 10 eventi di colore delle tre categorie del brief narrativo
+  originario (campo pesante, pioggia, freddo, pubblico avversario, borracce dimenticate, presidente a bordo
+  campo, terzo tempo, ecc.). L'architettura (schema dati + resolver + cooldown/pesi) è già pronta
+  per aggiungerne altri senza toccare il motore.
+- ~~"Più rapporti coi compagni di squadra"~~ — **verificato il 2026-08-04: già implementata**, la
+  nota qui sopra era rimasta indietro rispetto al codice. `sceglieCompagni()` espone 4 nominativi
+  stabili per reparto (portiere/difesa/centrocampo/attacco, non più i 2 best-ATT/best-DIF di
+  origine), ognuno con id persistente (`idPersonaCompagno`) e affinità propria 0-100 che può anche
+  scendere (es. evento "delusione" impatto:-3 in `applyChoiceOutcome`), raggiungibili singolarmente
+  dal Telefono (ruolo `'compagno'`).
+- Rischio panchina per skill (`rischioPanchinaPerSkill`) confronta solo l'overall pesato con gli
+  altri giocatori reali del proprio ruolo nella squadra attuale — non tiene conto di anzianità,
+  rapporto col mister o andamento recente, che potrebbero in futuro affinare ulteriormente la % di
+  rischio.
+- Database territoriale Brescia (`DB_BRESCIA`): i 6 elementi taggati solo "Coach Career" restano
+  inerti finché non esisterà una vera modalità Coach Career con eventi propri (oggi c'è solo la
+  simulazione di fine carriera). Nessun lavoro sui dati da rifare quando arriverà: basta far variare
+  `MODALITA_BRESCIA_CORRENTE` in base alla modalità attiva.
+- ~~Sistema rigori~~ — **implementato il 2026-08-07**, vedi aggiornamento in cima al documento.
+- ~~Mercato invernale (pausa 21 dic-24 gen): niente trasferimenti, solo allenamento + rinnovo col
+  club attuale~~ — **esteso il 2026-08-07**, vedi aggiornamento in cima al documento: ora è un vero
+  ciclo settimanale con offerte/precontratti (validi dalla stagione successiva) e svincolo. Il limite
+  tecnico di fondo resta (il calendario è costruito una volta a stagione, non si cambia squadra a
+  metà campionato) ma è aggirato correttamente facendo scattare il trasferimento in
+  `avviaNuovaStagione()`, l'unico punto in cui il calendario viene comunque ricostruito da zero.
+
+## Batch di correzioni richieste dall'utente (2026-07-29)
+
+Sessione dedicata a 12 bug/richieste segnalate insieme, verificate con test riprodotti in browser
+(non solo lette dal codice) prima di essere corrette:
+
+1. **Coppa Leonessa, punti già presenti prima di giocare**: `simulaGironeConGiocatore` simulava
+   SUBITO tutte le partite fra le altre 3 squadre del girone appena creato, quindi all'ingresso in Coppa
+   si vedevano già punti non giocati. Ora quelle partite restano in coda (`state.coppa.altreSfide`) e se ne
+   gioca una alla volta, in parallelo a ogni partita del giocatore (`simulaProssimaSfidaAltrui`, richiamata
+   da `applyResultToCoppaGirone`).
+2. **Coppa Leonessa, classifica di girone non ordinata**: la tabella in corso (`renderCoppa`) mostrava
+   `state.coppa.girone` nell'ordine di creazione, non per punti. Aggiunta `ordinaGirone()` (ordinamento non
+   distruttivo per punti poi differenza reti) usata nel rendering della tabella "in corso".
+3. **Nessuna vera fase di mercato/preparazione estiva fra una stagione e l'altra**: la schermata mercato
+   era un'unica finestra istantanea. Ora è una "preparazione estiva" di **4 sessioni**
+   (`state.mercatoSessione`, `avanzaSessioneMercato`): a ogni sessione nuove offerte di mercato +
+   un allenamento estivo scelto fra le stesse 4 opzioni della settimana in campionato
+   (`state.allenamentoFattoMercato`); dopo la 4ª sessione (o prima, se si firma/si resta) si passa alla
+   nuova stagione.
+4. **Girone di Serie B con 21 squadre invece di 14** (bug riprodotto: appena promossi, `calLen` risultava
+   40 invece di 28): `buildTierSeason` cercava compagni di girone confrontando `serie`/`girone` REALI del
+   club scelto in creazione (fissi, sempre di Serie C), che dopo una promozione non combaciano più con la
+   nuova serie; il fallback usava l'intero pool `LEAGUES.B` (20 squadre "flavor", non i gironi reali). Ora,
+   se la squadra gioca in una serie diversa da quella reale d'origine, si sceglie un girone realmente
+   esistente in quella serie da `DB_SQUADRE` (stessa dimensione dei gironi veri) invece dell'intero pool.
+5. **Meccanismo promozioni/retrocessioni identico per tutte le leghe**: prima "primi 2 su / ultimi 2 giù"
+   ovunque. Nuova `calcolaEsitoStagione()`: Serie C promuove solo le prime due, Serie A retrocede solo le
+   ultime due; Serie B promuove il primo + (con probabilità legata al rendimento in punti/partita) la
+   seconda come "una delle 14 migliori seconde nazionali", e specularmente retrocede l'ultimo + (con
+   probabilità) il penultimo (vedi TODO aperti per il limite di questa approssimazione).
+6. **"Riposo e recupero" non implicito**: se il giocatore non sceglieva alcun allenamento settimanale,
+   prima non succedeva nulla. Ora `postGiornataFlow` applica automaticamente "Riposo e recupero" se
+   `state.allenamentoFatto` è ancora `false` a fine giornata.
+7. **Gioco bloccato a fine prima stagione, nessuna scelta possibile (bug riprodotto)**: causa reale
+   trovata simulando in browser — se il giocatore firma un nuovo contratto con un'altra squadra
+   (`accettaOfferta`) mentre una Coppa Leonessa è ancora in corso (`state.coppa` non nullo) per la vecchia
+   squadra, la partita di coppa successiva andava in eccezione (`applyResultToCoppaGirone` non trovava più
+   la vecchia squadra nel girone, causando un crash che interrompeva `finishMatch()` a metà, senza mai
+   arrivare a `save()`/cambio schermata: il gioco restava "congelato" sulla schermata di partita). Corretto:
+   cambiare squadra mentre la Coppa è in corso ora chiude anticipatamente quel percorso di coppa
+   (`state.coppa`/`state.coppaTorneo` azzerati) invece di andare in errore.
+8. **"Persa la funzione di salvataggio"**: il salvataggio automatico su `localStorage` (`save()`/`load()`)
+   di per sé funzionava (verificato: stagione/giornata/saldo sopravvivono a un reload); il "salvataggio
+   perso" segnalato coincide quasi certamente col blocco del punto 7 (l'ultimo stato salvato restava
+   comunque quello precedente al crash, dando l'impressione di aver perso progressi).
+9. **Accordi commerciali troppo frequenti / arricchimento troppo rapido**: `pickEvent` pescava un evento
+   nel 65% delle giornate senza alcun limite di frequenza per gli eventi economici. Ridotta la probabilità
+   generale (40%) e aggiunto un cooldown di 6 giornate per gli eventi a base finanziaria
+   (`EVENTI_FINANZIARI`/`COOLDOWN_EVENTO_FINANZIARIO`); ridotti anche gli importi di "sponsor_call" e
+   "evento_sponsor".
+10. **Voti sempre sufficienti / il gioco sembra impossibile da perdere**: `calcChance` non teneva conto
+    della forza reale dell'avversario nelle singole scelte di partita (solo nei gol impliciti di fine
+    gara), rendendo ogni partita ugualmente facile. Aggiunta una penalità legata a `opp.forza`. Il voto di
+    fine partita partiva da una base già sufficiente (5.5) con margini di sconfitta minimi; abbassata la
+    base (4.4) e resi più pesanti gli scarti per vittoria/pareggio/sconfitta.
+11. **Partite più lunghe di 50'**: la durata mostrata a schermo (`matchMinute`) cresceva troppo tra un
+    momento chiave e l'altro (fino a 68-84' all'ultimo momento). Corretto due volte: prima un tentativo con
+    minuto forzato a 90' (sbagliato: l'utente vuole che le partite durino **50'**, non 90'), poi corretto
+    definitivamente — `finishMatch()` forza il minuto a **50'** e gli incrementi fra un momento e l'altro
+    sono stati ridotti (`rand(9,13)` fisso, senza più l'escalation `+idx*6`) così il conteggio cresce in
+    modo coerente verso i 50' invece di saltare a valori più alti.
+12. **L'energia non rende il giocatore "non schierabile"**: il bottone "Scendi in campo" si disabilitava
+    sotto 15 di energia, ma "Simula partita" restava sempre attivo e non consumava energia, permettendo di
+    proseguire senza conseguenze. Ora anche "Simula partita" si disabilita sotto 15 di energia (bottone e
+    funzione), consuma energia quando eseguita, e con energia troppo bassa l'hub mostra un avviso più un
+    bottone dedicato "Riposa (salta giornata)".
+
+## Correzioni successive al batch (stessa giornata, messaggi separati)
+
+- **Bug: hub non aggiornata tornando da Classifica/Scheda giocatore/Coppa**: `showScreen(id)` aggiornava
+  Classifica/Carriera/Coppa quando mostrate, ma non la hub — "Torna all'hub"/"Torna alla carriera" potevano
+  lasciare visibile il vecchio badge "Giornata X/Y" invece di "Coppa · Preliminare · Partita 1/3" (e il
+  bottone "Scendi in campo" puntava all'ultimo avversario di campionato). Corretto: `showScreen('hub')`
+  richiama sempre `renderHub()`.
+- **Bug: si poteva iniziare la carriera senza scegliere girone/squadra**: `selectedStartTeam` partiva già
+  valorizzato su una squadra mai scelta (`LEAGUES.C.startChoices[0]`). Ora parte `null` e `startCareer()`
+  blocca con un avviso finché non si sceglie davvero girone e squadra.
+- **Box "Lavoro"** spostato nell'hub subito sopra il bottone "Ricomincia carriera".
+- **Registro partite**: nuova tabella nella Scheda giocatore (`state.registroPartite`, popolata da
+  `registraPartita()`, unico punto di raccolta usato da tutte le vie di conclusione di una partita —
+  giocata, simulata, campionato o Coppa) con stagione/giornata, avversario, risultato, gol/assist personali
+  e voto.
+- **Difficoltà — causa reale trovata e corretta**: nella simulazione automatica (`skipGiornata`/"Simula
+  partita") la forza della propria squadra era fissa a `58` per tutti (invece della forza reale del club) e
+  usava una formula più permissiva di quella con cui si simulano le altre squadre del girone
+  (`simSquadra`: baseline `rand(0,2)`/`diff/10` invece di `rand(0,3)`/`diff/8`). Questo garantiva punti
+  facili indipendentemente dalla squadra scelta (test: ASTON 5 PERLE, forza reale ~9.7, arrivava
+  regolarmente a metà classifica o meglio). Corretto: stessa formula per tutti, forza reale del club
+  (`getForzaSquadra(teamName())`) al posto del valore fisso. Verificato su 10 stagioni simulate: posizioni
+  finali quasi sempre nella parte bassa/medio-bassa della classifica, coerenti con una squadra reale debole.
+- **Profilo iniziale per ruolo non visibile in creazione**: `ROLE_BASE` differenziava già i valori di
+  partenza per ruolo, ma l'allocatore mostrava solo "0" per tutti. Ora ogni attributo mostra la base del
+  ruolo scelto fra parentesi e il totale aggiornato in tempo reale; cambiare ruolo aggiorna subito i valori.
+- **Preparazione settimanale non modificabile**: una volta scelto un allenamento non si poteva più
+  cambiare idea nella stessa settimana. Aggiunta `scegliAllenamento(id)` con uno snapshot dei valori
+  (`state.allenamentoSnapshot`) preso prima del primo click della settimana: ogni nuova scelta riparte da
+  quella base invece di sommarsi alla precedente, finché non si procede (partita/simulazione/salta
+  giornata). Stessa logica applicata anche all'allenamento estivo di mercato.
+
+## Sistema eventi dinamici di partita (MATCH_EVENTS)
+
+Richiesto con un task strutturato (analisi → conferma → implementazione a fasi). Riusa il motore eventi
+già esistente (`EVENTS`/`pickEvent`/`showEvent`), non ne crea uno parallelo.
+
+- **Schema dati** (`MATCH_EVENTS`, array): `id, category, trigger, conditions, weight, cooldown,
+  roleRequirement, testo, scelte` — stessi nomi campo (`testo`/`scelte` con `applica`/`esito`) che
+  `showEvent()` già si aspetta, quindi zero modifiche alla UI eventi.
+- **Resolver** (`pickMatchEvent(triggersAttivi, ctx)`): filtro trigger → `roleRequirement` (es. `'Portiere'`,
+  nessun secondo Event Engine) → `conditions(state,ctx)` → cooldown per id in giornate
+  (`state.eventiMatchUltimaGiornata`, stesso pattern già in uso per gli eventi economici) → estrazione
+  pesata (`weight` come probabilità). `showMatchEvent(ev, cb)` è un sottile wrapper su `showEvent()`.
+- **Trigger implementati**: `match_start` (in `beginMatch`), `after_goal`, `after_missed_chance`,
+  `after_mistake`, `after_two_mistakes`, `after_yellow_card` (riusa il flag del cartellino rosso esistente:
+  non esiste un sistema giallo separato), `team_winning`/`team_drawing`/`team_losing` — tutti valutati in
+  `resolveChoice()` **dopo** l'aggiornamento di `myGoals/oppGoals/attempts/successes`, mai prima, e mai più
+  di un evento per momento chiave (un solo `resolveChoice` per momento, nessuna catena evento→evento).
+  `player_low_energy`/`player_low_morale`/`player_high_morale` sono condizioni, non trigger a parte.
+- **Personalità**: `state.personalita = {individualista, trascinatore, ragionatore}` — 3 contatori minimi,
+  non un sistema autonomo: crescono solo come effetto collaterale di alcune scelte (`applica`), nessuna
+  logica di gioco li legge ancora in modo deterministico.
+- **8 eventi implementati**: 5 normali (`primo_contrasto`, `compagno_non_passa`, `errore_arbitrale`,
+  `crisi_fiducia`, `richiamo_allenatore`) + 3 GOALKEEPER (`uscita_alta`, `uno_contro_uno`,
+  `pressione_psicologica_gk`, filtrati con `roleRequirement:'Portiere'`).
+- **Rigori**: non implementati (né una struttura minima), su indicazione esplicita dell'utente — da fare
+  solo quando si svilupperà davvero il sistema rigori.
+- Verificato in browser: evento normale, condizionale, con cooldown, ruolo-specifico, GK disponibile/
+  bloccato per ruolo, partita reale con eventi intermezzati senza alterare `attempts/successes` né
+  bloccare mai `nextMoment()`.
+
+## Ruolo Portiere: skill dedicate e momenti di partita dedicati
+
+Prima un Portiere aveva gli stessi 6 attributi generici (tecnica/fisico/velocità/tiro/passaggio/difesa) e
+gli stessi 4 "momenti chiave" pensati per un giocatore di movimento (tiro, dribbling, cross, contrasto in
+fascia) — scelte senza senso per chi gioca in porta. Rifatto su richiesta esplicita:
+
+- **7 skill dedicate** (`GK_ATTR_KEYS`, solo per `role==='Portiere'`): Presa, Anticipo, Riflessi, Uno
+  contro uno, Distribuzione, Comunicazione, Posizionamento — con base di partenza (`GK_ROLE_BASE`) e pesi
+  per l'overall (`GK_ROLE_WEIGHTS`) analoghi a `ROLE_BASE`/`ROLE_WEIGHTS` ma in un set separato. Selezionati
+  ovunque serva tramite gli helper `attrKeysFor(role)` / `attrLabelsFor(role)` / `roleBaseFor(role)` /
+  `roleWeightsFor(role)`, usati da overall, allocatore in creazione, salita di livello (`addXP`) e scheda
+  giocatore — nessuna duplicazione di logica, solo selezione del set giusto.
+- **Migrazione salvataggi vecchi**: un Portiere con gli attributi generici viene rigenerato sulle nuove
+  skill mantenendo l'overall già maturato (`overallPesatoLegacyGK` + `attributiDaOverall`), in `boot()`.
+- **8 nuovi momenti di partita da Portiere** (`GK_MOMENTS_POOL`): cross in area piccola, uno contro uno,
+  retropassaggio sotto pressione, tiro da fuori, palla alle spalle della difesa, cross o tiro, pallone
+  sporco, comunicazione difensiva. Ogni momento ha 2 scelte che combinano due skill (`attr`+`attr2`,
+  mediate in `calcChance`) più una terza scelta "Cautela" senza alcun test di abilità (`attr:null` →
+  base neutra fissa in `calcChance`, nessun bonus). A ogni partita se ne estraggono **4 a caso** dagli 8
+  (`state.matchTemp.gkMomenti`), così le partite da portiere non sono sempre identiche, mantenendo la
+  stessa durata (4 momenti) delle partite da movimento.
+- **Recap di fine stagione differenziato**: per un Portiere "Gol stagione"/"Assist stagione" sono sostituiti
+  da **Gol subiti** e **Clean sheet** (`state.stagioneStats.golSubiti`/`cleanSheet`, aggiornati in
+  `registraPartita()` per ogni partita); media voto resta invariata per tutti i ruoli.
+- Verificato in browser: allocator con le 7 skill per un Portiere, partita reale con 4 momenti diversi da
+  GK e percentuali coerenti (le scelte "serie" variano con le skill, "Cautela" resta fissa).
+
+## Eventi trade-off per giocatori di movimento (estensione di MATCH_EVENTS)
+
+Estende il motore `MATCH_EVENTS` già esistente (nessun secondo Event Engine, nessuna nuova skill):
+12 eventi in cui ogni scelta è una vera verifica di abilità con 2 skill (o 1 sola per l'opzione
+cautelativa), non solo `applica`/`esito` fisso come i primi 5 eventi "narrativi".
+
+- **`skillScelta(label, attr, attr2, risk, out, esitoOk, esitoKo, tratto)`**: fabbrica che genera la
+  scelta. Dentro `applica(s)`: calcola la chance con lo stesso `calcChance(attr, risk, out, attr2)` dei
+  momenti chiave, incrementa `attempts`/`successes` **una sola volta** (nessun doppio conteggio, non
+  passa da `resolveChoice`), applica il risultato con **`applyChoiceOutcome(choice, success)`** (estratta
+  da `resolveChoice` per essere condivisa, stessa logica di goal/assist/recupero/possesso/rosso), poi
+  incrementa opzionalmente un contatore di `state.personalita` e **restituisce il testo di esito**
+  dipendente dalla riuscita.
+- **`showEvent()` esteso minimamente**: ora usa `sc.applica(state)` come testo di esito se non-vuoto,
+  altrimenti ricade su `sc.esito` statico — retrocompatibile con tutti gli eventi esistenti (economici,
+  narrativi, GK) che non restituiscono nulla da `applica`.
+- **6 skill usate, quelle già esistenti**: tecnica, fisico, velocità, tiro, passaggio, difesa — nessuna
+  nuova statistica per ruolo.
+- **12 eventi implementati** (`category:'GAMEPLAY'`, tutti con `conditions: s=>s.role!=='Portiere'` per
+  escludere il Portiere, che resta sui suoi eventi `roleRequirement:'Portiere'` separati): 
+  `ricezione_spalle_porta`, `contropiede`, `uno_contro_uno_fascia`, `passaggio_filtrante`, `tiro_da_fuori`,
+  `difensore_spalle`, `pallone_alto`, `cross`, `duello_fisico`, `pressing`, `difesa_campo_aperto`,
+  `occasione_da_gol`. Ognuno con 3 scelte: due "serie" (skill diverse, rischio/ricompensa diversi) + una
+  cautelativa contestuale (es. tiro → passo al compagno; contropiede → rallento; duello → non intervengo),
+  mai una "scelta senza rischio" pura.
+- Riusano i trigger già esistenti (`match_start`, `after_goal`, `after_missed_chance`, `after_mistake`,
+  `after_two_mistakes`, `team_winning`/`team_drawing`/`team_losing`): nessun nuovo trigger, competono per
+  estrazione con gli eventi narrativi già presenti sullo stesso trigger.
+- Verificato in browser: partita reale creata a runtime, evento `ricezione_spalle_porta` estratto a
+  `match_start`, scelta con esito successo (gol, `attempts`/`successes` incrementati una volta,
+  personalità aggiornata) e fallimento, scelta cautelativa a skill singola, esclusione confermata per
+  Portiere, `pickMatchEvent` verificato su tutti i 7 trigger riusati, ritorno corretto a `nextMoment()`
+  dopo l'evento senza bloccare il flusso partita.
+
+## Creazione carriera: "continua con un giocatore esistente"
+
+In `#screen-create` è stata aggiunta una scelta di modalità (`selezionaModalitaCreazione('nuovo'|'esistente')`,
+default `'nuovo'`), prima della selezione girone/squadra già esistente:
+
+- **Nuovo giocatore** (comportamento invariato): nome libero, ruolo a scelta, allocatore punti su
+  `ROLE_BASE`.
+- **Giocatore esistente**: dopo aver scelto girone e squadra, `renderRealPlayerPicker()` mostra la rosa
+  reale della squadra (`getRosaReale`, da `DB_SQUADRE[...].rosa`) ordinata per OVR decrescente, cliccabile
+  come i team-picker già esistenti. Selezionato un giocatore, `startCareer()` usa **le funzioni già
+  esistenti**, nessun nuovo sistema di attributi:
+  - `ruoloDBtoInterno(g.ruolo)` per il ruolo di gioco (POR/DIF/CEN/ALA/ATT → Portiere/Difensore/Regista/
+    Ala/Attaccante, con Ala come fallback — la stessa mappatura già usata per i compagni di squadra nei
+    match);
+  - `attributiDaOverall(g.ovr, role)` per generare l'intero set di attributi (i 6 generici o i 7 GK a
+    seconda del ruolo) dal suo overall reale — la stessa funzione già usata per la migrazione dei
+    salvataggi legacy dei Portieri;
+  - `generaDataNascita(...)` per una data di nascita plausibile (il giocatore reale non ha una data di
+    nascita nei dati sorgente, solo `nome`/`ruolo`/`ovr`).
+  - L'allocatore punti e i campi nome/ruolo/data manuale (`#blockNuovoGiocatore`) sono nascosti in questa
+    modalità: gli attributi derivano interamente dall'OVR reale, senza punti da assegnare.
+  - Se la squadra scelta non ha rosa reale nel database (es. `GSO CAPRIOLOB`, vedi limite sotto),
+    `renderRealPlayerPicker()` mostra un avviso e blocca l'avvio finché non si cambia squadra o modalità.
+- Verificato in browser: toggle modalità, lista giocatori popolata per una squadra con rosa reale,
+  avvio carriera con ruolo/attributi/overall coerenti col giocatore scelto (Portiere, overall
+  ricalcolato = overall originale), messaggio di fallback per squadra senza rosa, percorso "nuovo
+  giocatore" invariato.
+- Limite accettato: il giocatore reale scelto resta comunque presente nella rosa usata per generare i
+  "compagni" narrativi in partita (`sceglieCompagni`) — non viene rimosso dai dati sorgente, quindi può
+  in teoria comparire anche come proprio "compagno" nei commenti testuali. Corner case narrativo minore,
+  non corretto per restare lean (richiederebbe filtrare la rosa ovunque venga letta).
+
+## Correzione dati: rose GSO CAPRIOLO / GSO CAPRIOLOB scorporate
+
+Bug nei dati sorgente: 15 giocatori appartenenti realmente a `GSO CAPRIOLOB` erano stati inclusi per
+errore nella rosa di `GSO CAPRIOLO` (che restava con la rosa dell'altra squadra reale + quella
+"riserva" mescolate insieme), mentre `GSO CAPRIOLOB` aveva `rosa: []`. Corretto su lista fornita
+esplicitamente dall'utente:
+
+- Rimossi da `GSO CAPRIOLO`: Amodeo Felotti Luca, Bessi Thomas, Bettoni Andrea, Bioh Nicholas, Bogachev
+  Konstantin, Bono Matteo, Leporati Matteo, Malzani Davide, Pedersoli Davide, Raddi Davide, Sabbadini
+  Gabriele, Schembri Giovanni, Suardi Luca, Tommesani Liam, Zanotti Nicola (ora 19 giocatori, invariati).
+- Assegnati a `GSO CAPRIOLOB` (ora 17 giocatori): gli stessi 15 sopra + 2 non ancora presenti in nessuna
+  rosa (`Fontana Davide`, POR, e `Garufi Simone`, CEN — overall stimato a 58, non fornito dall'utente,
+  in linea con la media del resto della rosa).
+- Ruoli corretti secondo la lista dell'utente durante lo spostamento: Suardi Luca e Malzani Davide erano
+  salvati come `DIF` in `GSO CAPRIOLO`, ma l'utente li indica come `CEN` — corretti nel passaggio a
+  `GSO CAPRIOLOB`.
+- Non toccate le date di nascita fornite dall'utente: lo schema `rosa` (`nome`/`ruolo`/`ovr`) non prevede
+  un campo data di nascita per i compagni di squadra (solo per il giocatore controllato, `state.dataNascita`)
+  — introdurlo per 17 giocatori di una sola squadra sarebbe incoerente col resto del database.
+- Verificato in browser: `getRosaReale('GSO CAPRIOLO').length === 19`,
+  `getRosaReale('GSO CAPRIOLOB').length === 17`, nessun giocatore duplicato tra le due rose.
+
+## Bug: gironi duplicati nel picker di creazione
+
+`renderGironiPicker()` popola il `<select id="inpGirone">` aggiungendo `<option>` senza mai svuotarlo
+prima. Veniva richiamata più volte nello stesso ciclo di vita della pagina (all'avvio, in
+`restartCareer()`, e in `boot()` dopo il caricamento di un salvataggio esistente), quindi ogni girone
+compariva duplicato (2 o 3 volte) nella tendina. Corretto azzerando il `<select>`
+(`select.innerHTML = '<option value="">— Scegli girone —</option>'`) a inizio funzione, prima di
+ricalcolare e riaggiungere i gironi. Verificato in browser: 3 chiamate consecutive a
+`renderGironiPicker()` producono sempre 7 opzioni totali, zero duplicati.
+
+## Ruolo "Mezzala" rinominato in "Ala" + taratura rosa IMPLAST
+
+- Rinominato solo il nome del ruolo (chiave `Ala` al posto di `Mezzala`) in `ROLE_BASE`, `ROLE_WEIGHTS`,
+  `ROLE_VALUE_MULT`, select `#inpRole`, `ruoliPossibili` e fallback di `ruoloDBtoInterno` — stessi
+  attributi/pesi di prima, cambia solo l'etichetta. Aggiunto anche un codice esplicito `ALA` alla mappa
+  di `ruoloDBtoInterno` (prima solo POR/DIF/CEN/ATT, con fallback implicito su Mezzala/Ala per codici
+  sconosciuti) per poter marcare esplicitamente un'ala nei dati reali.
+- **Migrazione salvataggi**: un vecchio salvataggio con `state.role==='Mezzala'` viene rinominato in
+  `'Ala'` in `boot()`.
+- **Overall tarati su richiesta esplicita** per la rosa reale di IMPLAST (Girone E, Serie C): Turla 67,
+  Paderno 68, Fra Nicholas 69 (ruolo passato da `CEN` ad `ALA`), Facchi 68, Vezzoli 67, Menassi 66,
+  Bonardi 65 (ruolo passato da `CEN` ad `ALA`), Vavassori 66, Laudani 62, Mingotti 60, Regazzoni 67. Gli
+  altri giocatori della rosa (Simoni, Notari, Santinelli, Brescianini) non sono stati toccati.
+- Verificato in browser: nessun riferimento residuo a "Mezzala" nel codice (a parte il commento/riga di
+  migrazione), opzione "Ala" presente nel select, picker "giocatore esistente" su IMPLAST mostra
+  correttamente "Fra Nicholas — Ala (OVR 69)" e "Bonardi Stefano — Ala (OVR 65)", avvio carriera con Fra
+  Nicholas produce `role:'Ala'` e overall ricalcolato coerente (~68-69, piccolo jitter atteso da
+  `attributiDaOverall`).
+
+## Date di nascita reali per i giocatori esistenti (da database_csi_pulito_v3.xlsx)
+
+Integrate le date di nascita reali fornite dall'utente in un file Excel esterno (fuori dal progetto,
+usato **solo** per questo scopo, nessun'altra informazione ne è stata estratta):
+
+- Il file copre solo Serie A (7 gironi) e Serie B (10 gironi) — **nessun foglio di Serie C**. Su 5.329
+  giocatori nel file, 2.838 hanno una data reale (il resto è `-`, non censito).
+- Squadre abbinate a `DB_SQUADRE` tramite `vecchio_nome` (con normalizzazione minima di
+  maiuscole/punteggiatura/spazi per gestire varianti come "E.C. Madernese" vs "E. C. Madernese"): 267
+  squadre su 271 abbinate; le 4 non abbinate sono voci non valide o assenti dal database
+  (`VEDI TESTO IN CHAT`, `N.D.`, `Lepore Group`, refuso `Paratico Whit`→corretto manualmente in
+  `PARATICO WHITE`). Giocatori abbinati per nome all'interno della rosa della squadra corrispondente:
+  2.790 voci `rosa` hanno ora un campo `dataNascita: "YYYY-MM-DD"` in più (nessuna nuova struttura dati,
+  solo un campo opzionale sull'oggetto giocatore già esistente). Numero totale di giocatori nel database
+  invariato (5.513).
+- **Cascata a 3 livelli** nel ramo `'esistente'` di `startCareer()` ([index.html](index.html)), su richiesta
+  esplicita dell'utente: 1) data reale del giocatore se presente; 2) altrimenti un intorno (`±3` anni,
+  `generaDataNascita`) dell'età media dei compagni di rosa che HANNO una data reale; 3) se nessun
+  compagno ha una data reale (tipicamente le squadre di Serie C, non coperte dal file), un intorno
+  (`±4` anni) dell'età media di lega (`ETA_MEDIA_LEGA`, nuova piccola costante accanto ad
+  `ANNO_INIZIO_CARRIERA`). Riusa `generaDataNascita` già esistente, nessun nuovo generatore.
+- Verificato in browser sui 3 casi: giocatore con data reale (Marini Daniele, ROBY PASI → data invariata),
+  giocatore senza data ma con compagni datati (Martinelli Stefano, ASTON 5 PERLE → età coerente con la
+  media squadra), giocatore senza data e senza compagni datati (Fra Nicholas, IMPLAST, Serie C → età
+  nell'intorno della media di lega).
+
+## Calendario reale: inizio stagione e pausa invernale
+
+Prima il gioco teneva traccia solo di `giornata`/`stagione` come numeri, senza alcuna data di calendario
+reale. Aggiunto su richiesta esplicita:
+
+- **`dataGiornata(stagione, giornataNum)`** (nuova funzione, [index.html](index.html)): ogni stagione parte il
+  **26 settembre** dell'anno corrispondente (`ANNO_INIZIO_CARRIERA + stagione-1`), giornate a cadenza
+  settimanale. La **pausa invernale dal 21 dicembre al 24 gennaio compreso** viene saltata: qualunque
+  giornata che cadrebbe in quell'intervallo slitta al 25 gennaio in avanti (poi riprende la cadenza
+  settimanale da lì).
+- Aritmetica in **UTC** (`Date.UTC`) apposta per evitare un bug di sfasamento di un giorno quando la somma
+  di 7 giorni attraversa il cambio dell'ora legale di fine ottobre (con `Date` in orario locale la
+  giornata 6 risultava erroneamente 30 ottobre invece di 31 — trovato e corretto in fase di verifica).
+- Mostrata nell'hub accanto al badge esistente: `Giornata X/Y · 26 settembre 2026` (in
+  `renderHub()`, solo per il campionato — la Coppa Leonessa continua a mostrare la sua etichetta
+  `Coppa · Fase · Partita N/M` invariata, nessuna data inventata lì).
+- Verificato in browser: giornata 1 = 26 settembre 2026, giornata 13 = 19 dicembre 2026, giornata 14 =
+  25 gennaio 2027 (salto corretto della pausa), stagione 2 riparte il 26 settembre 2027, badge hub
+  aggiornato correttamente in una carriera reale.
+- Non toccati: mercato estivo (`mercatoSessione`, ancora basato su sessioni post-stagione, non su una
+  data di calendario), Coppa Leonessa, contratti/scadenze — restano come prima, per restare nello scope
+  della richiesta.
+
+## Percorso fisiologico legato all'età (2026-08-05)
+
+L'utente ha chiesto se esistesse una curva di sviluppo legata all'età: no, la progressione era
+puramente da XP (`addXP`), indipendente dall'età — un trentaduenne cresceva esattamente come un
+ventenne. Aggiunto riusando `etaMultiplier(eta)`, che esisteva già ma solo per `valoreMercato()`
+(curva: <20 rallentato 0.85× · 20-23 normale 1× · 24-29 picco 1.15× · 30-32 primo calo 0.95× · 33-35
+0.75× · 36+ 0.55×) — stessa fonte di verità invece di due curve scollegate:
+- **`addXP(amount)`** ora scala l'XP guadagnato per `etaMultiplier(calcolaEta(state))` prima di
+  applicarlo a `state.xp`, quindi si sale di livello più lentamente da veterani.
+- **`probabilitaCaloAttributo(eta)`** (nuova, stesse soglie di `etaMultiplier`: 0 sotto i 30, poi
+  0.10/0.25/0.40 crescente): ad ogni level up, se l'età lo giustifica, un attributo casuale (fra
+  quelli sopra 20, per non azzerarli) perde -1, messaggio dedicato nella card "Level up" ("Il fisico
+  comincia a farsi sentire"). Non blocca la crescita — è un attrito probabilistico in più, non un tetto:
+  il netto resta positivo salvo età molto avanzate con probabilità di calo alta.
+Verificato: `node --check`, bot (25 carriere, zero errori), e test dal vivo forzando età diverse — 22
+anni: XP pieno, nessun calo; 38 anni: XP quasi dimezzato (55/100), probabilità di calo 40%; 40
+level-up forzati a 41 anni: crescita netta positiva su quasi tutti gli attributi ma un calo
+osservato (passaggio 56→55), a conferma che il meccanismo scatta davvero.
+
+## Bug: età calcolata solo sull'anno di nascita
+
+`calcolaEta(s)` sottraeva solo l'anno (`annoCorrente(s) - annoNascita`), senza verificare se il
+compleanno fosse già passato rispetto alla data corrente in-game: un giocatore nato dopo il 26
+settembre (inizio stagione) risultava già "invecchiato" di un anno in anticipo. Corretto confrontando
+mese/giorno di nascita con `dataGiornata(s.stagione, s.giornata)` (la data reale introdotta nella
+sezione precedente): l'età ora si aggiorna esattamente al giorno del compleanno in-game, non a inizio
+stagione per tutti. Verificato: un giocatore nato il 4 novembre passa da 23 a 24 anni esattamente alla
+giornata del 7 novembre, non dal 26 settembre.
+
+Durante la verifica, uno scan di tutte le 2.774 date reali nel database ha trovato 16 giocatori con età
+implausibili (51-90 anni) — dati della fonte Excel originale, non un bug di calcolo. Su richiesta
+dell'utente: rimossa la `dataNascita` di **Poli Federico** (POLI PEZZAZE, dava 90 anni — scartata come
+refuso), mantenuta quella di **Turelli Massimo** (I.G.D., 58 anni — confermata come corretta).
+
+**Completato il 2026-08-05** (soglia data dall'utente: under 55 = plausibile, gli altri da sistemare con
+lo stesso criterio già usato per Poli/Turelli): dei 14 rimasti, **4 sotto i 55 anni** (Mister E Mister
+Aura 52, Fiori Roberto 52, Zagaria Patrizio 51, Brunelli Paolo 51) → lasciati invariati, plausibili.
+**5 fra 55 e 60 anni** (Ferrari Piergiovanni 55, Bresciani Simone 55, Pattoni Fabio 56, Pelosi Mauro 56,
+Becchetti Gino 60) → lasciati invariati, stesso ordine di grandezza di Turelli (58, già confermato
+plausibile per il livello CSI amatoriale). **5 restanti, tutti nella rosa P. PRESEGLIE, età 63-104 con
+nomi chiaramente segnaposto** ("Mister X"/"Y"/"Z"/"P"/"Ll Mister Morte") → trattati come Poli Federico,
+`dataNascita` rimossa in `data-squadre.js`. Nessuna modifica al motore: `selezionaSquadraReale()`
+([index REV2.html:1445](index%20REV2.html:1445)) genera già una data plausibile dalla media età dei
+compagni quando manca, verificato scegliendo "Mister X" come giocatore esistente (età generata: 25 anni,
+nessun errore).
+
+## Bug: etichetta stipendio "€/gg" invece di "€/sett."
+
+`payStipendio()` viene chiamato una sola volta per giornata (`postGiornataFlow()`), e con il calendario
+reale introdotto sopra ogni giornata è una settimana: lo stipendio del contratto è quindi settimanale,
+non giornaliero. L'etichetta "/gg" era sbagliata in tutti i punti dove compare lo stipendio (hub,
+scheda mercato, offerte di mercato, diario) — corretta in "/sett." in tutti e 5 i punti
+([index.html:1311](index.html:1311) e altri). Il "0€/mese" di Compenso sportivo in Scheda giocatore
+segnalato insieme non era un bug: è accreditato solo ogni 4 giornate (mensilità), quindi resta 0 a
+inizio carriera per costruzione.
+
+## Mercato invernale (nuova sessione durante la pausa)
+
+Aggiunta su richiesta esplicita una sessione di mercato invernale, agganciata alla pausa 21 dic-24 gen
+già introdotta nel calendario. A differenza del mercato estivo (`goToMarket`/`finalizzaMercato`), **non
+tocca stagione, giornata, calendario o classifica**: il calendario campionato è costruito una volta a
+stagione intorno alla squadra del giocatore, e ricostruirlo a metà stagione per un eventuale
+trasferimento falserebbe risultati/classifica già maturati — per questo la finestra invernale **non
+offre trasferimenti**, solo:
+- un allenamento supplementare (stesse `TRAININGS` del mercato estivo);
+- un tentativo di rinnovo col club attuale tramite il procuratore (`chiediRinnovoInvernale()`, stessa
+  logica di chance già usata in `negoziaOfferta()`), una volta sola per pausa, che può alzare lo
+  stipendio settimanale del 10-25% o, se fallisce, incrinare leggermente il rapporto col mister.
+- **Trigger** ([index.html](index.html), in `postGiornataFlow()`): confronta la data della giornata appena
+  giocata con quella della prossima via `dataGiornata()` già esistente — se il salto supera gli 8 giorni
+  (cioè ha appena attraversato la pausa), si apre `apriMercatoInvernale()` una sola volta a stagione
+  (`state.mercatoInvernaleFatto`), poi il gioco riprende esattamente dalla giornata successiva.
+- Nuova schermata `#screen-marketwinter`, nuovi campi di stato (`mercatoInvernaleFatto`,
+  `allenamentoFattoInvernale`, `ultimoAllenamentoInvernale`, `rinnovoInvernaleFatto`), reset ad ogni
+  nuova stagione in `finalizzaMercato()`, migrazione in `boot()` per i salvataggi esistenti (marcata
+  come già fatta se la stagione in corso è già oltre la pausa, per non farla comparire retroattivamente).
+- Verificato in browser su una carriera reale simulando l'intera stagione: la finestra si apre esatta
+  al passaggio giornata 13 (19 dicembre) → 14 (25 gennaio), allenamento e rinnovo funzionano (stipendio
+  110→127/sett., pulsante disabilitato dopo il primo tentativo), il "Torna in campo" riprende da
+  giornata 14 senza toccare calendario/classifica/stagione, non si ripresenta più nel resto della
+  stagione, e i flag si resettano correttamente alla stagione successiva.
+
+## Rifatto il fuori stagione: avanzamento settimanale, mercato estivo 1/7-31/8
+
+Su richiesta esplicita, sostituita la logica "a sessioni" del mercato estivo (4 sessioni fisse subito
+dopo l'ultima giornata) con un vero **avanzamento settimana per settimana** dalla fine del campionato
+alla stagione successiva, coerente con l'aver reso `dataGiornata()` la fonte di verità per il tempo di
+gioco. Nessun'automazione a salto: ogni settimana, morta o no, richiede un click esplicito (scelta
+confermata dall'utente tra "salto automatico" e "click settimana per settimana").
+
+- **`state.offSeasonData`** (nuovo, stringa `YYYY-MM-DD`): traccia la settimana corrente fuori
+  stagione, partendo da una settimana dopo l'ultima giornata giocata
+  (`dataGiornata(stagione, calendario.length)`), fino al raggiungimento del 26 settembre (stessa data
+  di inizio stagione già usata da `dataGiornata`), quando scatta in automatico `avviaNuovaStagione()`
+  (ex `finalizzaMercato`, stessa logica di ricostruzione calendario/classifica/budget di prima).
+- **Mercato estivo aperto solo dall'1 luglio al 31 agosto** (`inFinestraMercatoEstivo`, mesi 7-8):
+  fuori da quella finestra (fine campionato-giugno, e settembre fino al 26) si passa dalla nuova
+  schermata **"Fuori stagione"** (`#screen-offseason`), con solo un allenamento libero settimanale — le
+  altre settimane "morte" non hanno più nulla di sessioni fisse, sono vere settimane di calendario.
+  Rimossi `MERCATO_SESSIONI_TOTALI`/`goToMarket`/`avanzaSessioneMercato` (sessioni a conteggio fisso).
+- **`iniziaFuoriStagione()`** (dal pulsante "Prosegui fuori stagione" a fine stagione) e
+  **`avanzaSettimanaFuoriStagione()`** (chiamata da entrambe le schermate) fanno da dispatcher comune
+  (`aggiornaFuoriStagione()`): decide se mostrare mercato, settimana morta, o avviare la nuova stagione,
+  in base solo alla data.
+- **Accettare un'offerta o restare** (`accettaOfferta`/`restaAllaSquadra`) non salta più subito alla
+  stagione successiva: chiude le trattative (`state.mercatoEstivoConcluso`, niente più offerte per il
+  resto dell'estate) ma continua ad avanzare settimana per settimana come tutte le altre, fino al 26
+  settembre — coerente con "avanziamo ogni settimana".
+- Verificato in browser su una carriera reale completa: fine stagione → settimane morte
+  (26 apr - 28 giu) → mercato aperto puntualmente dal 5 luglio alla settimana del 30 agosto → settimane
+  morte (6-20 settembre) → nuova stagione il 26 settembre con calendario/classifica ricostruiti;
+  allenamento sia nelle settimane morte sia a mercato aperto; accettazione di un'offerta con cambio
+  squadra effettivo (chiusura trattative, mercato non più riproposto, nuova stagione con la nuova
+  squadra); "resta alla squadra attuale" (decremento stagioni di contratto, mercato chiuso, non
+  riappare più).
+
+## Inizio stagione spostato a inizio settembre + banner di segnalazione
+
+Su richiesta esplicita, l'inizio di ogni stagione (sia la prima carriera sia le successive) è stato
+spostato dal 26 settembre al **1° settembre** ("prima settimana di settembre"), centralizzato in una
+nuova costante `GIORNO_INIZIO_STAGIONE = 1` usata sia da `dataGiornata()` sia dalla soglia di fine
+fuori-stagione in `aggiornaFuoriStagione()` (unica fonte di verità, nessun valore duplicato). La pausa
+invernale (21 dic-24 gen) resta invariata e continua a funzionare correttamente con la nuova data di
+partenza (verificato: giornata 16 = 15 dicembre, giornata 17 salta a 25 gennaio).
+
+Aggiunto anche un **piccolo banner in hub** che segnala l'inizio della nuova stagione: mostrato una
+volta (`state.nuovaStagioneBanner`, impostato in `avviaNuovaStagione()`), con stagione/lega/squadra,
+richiudibile con un "Ok" (stesso pattern del toast dei traguardi già esistente, `#achToast`/
+`dismissAch()`) tramite la nuova `dismissNuovaStagioneBanner()`. Verificato in browser: prima giornata
+= 1 settembre 2026, transizione di fine mercato = 1 settembre 2027, banner mostrato con testo corretto
+e richiudibile.
+
+## Il sabato come giorno di riferimento fisso di ogni settimana
+
+Su richiesta esplicita: il sabato è ora il giorno fisso di ogni evento/data di gioco, non solo
+un giorno del mese fisso. Prima l'inizio stagione era il "1° settembre" letterale, che non cade di
+sabato ogni anno (es. nel 2029 sì, nel 2030 no) — e la ripresa dopo la pausa invernale saltava sempre
+al "25 gennaio" fisso, che nemmeno quello è sempre sabato: la cadenza settimanale (+7 giorni esatti)
+avrebbe quindi silenziosamente smesso di cadere di sabato per il resto della stagione ogni volta che
+uno di questi due punti fissi non fosse stato un sabato.
+
+- **`primoSabatoDaData(d)`** (nuovo helper generico): avanza giorno per giorno finché non trova un
+  sabato (`d.getUTCDay()===6`).
+- **`primoSabatoDiSettembre(anno)`**: il primo sabato a partire dal 1° settembre di quell'anno — usato
+  da `dataGiornata()` come inizio stagione (al posto della vecchia costante fissa
+  `GIORNO_INIZIO_STAGIONE`, rimossa) e da `aggiornaFuoriStagione()` come soglia di fine fuori-stagione.
+- **Ripresa dopo la pausa invernale**: `dataGiornata()` non salta più al "25 gennaio" fisso, ma al primo
+  sabato a partire dal 25 gennaio (`primoSabatoDaData`), garantendo che anche dopo la pausa tutte le
+  giornate restanti continuino a cadere di sabato.
+- Testi in UI (banner nuova stagione, avviso "fuori stagione") ora mostrano la data reale calcolata
+  (`formattaDataIT(...)`) invece di un giorno fisso scritto a mano, quindi restano sempre coerenti.
+- Verificato in browser: nessuna eccezione su 5 stagioni consecutive (26 giornate ciascuna, anni
+  diversi) — tutte le giornate cadono di sabato; prima giornata varia correttamente per anno (5 set
+  2026, 4 set 2027, 2 set 2028, 1 set 2029, 7 set 2030); tutte le settimane fuori stagione (morte e di
+  mercato) restano di sabato fino alla stagione successiva.
+
+## Punti attributo in creazione: da bonus flat a +1 assoluto per punto
+
+Richiesta iniziale: far aumentare le qualità dell'1% per punto invece del vecchio flat `+2`, perché
+maxare un solo attributo con `+2` per punto era troppo conveniente (chi metteva tutti i 10 punti su un
+solo attributo otteneva un salto sproporzionato, specie su basi già basse). Passaggi:
+
+1. Prima implementazione: `+1%` del valore di **base** per punto (`base*(1+punti*0.01)`), sia
+   nell'anteprima live dell'allocatore sia nel calcolo effettivo a inizio carriera.
+2. L'utente ha verificato in browser che 10 punti su un attributo con base 55 producevano solo `61`
+   (+10,9%), non l'esito atteso, e ha chiarito cosa intendeva davvero: **+1 punto assoluto per punto
+   assegnato** (base 55 → 56 con 1 punto, 57 con 2, 58 con 3, ecc. — non una percentuale).
+3. Corretto definitivamente a `base + punti` (clampato 20-90), in entrambi i punti (anteprima
+   dell'allocatore e calcolo a `startCareer()`). Verificato in browser: 3 click su "+" portano la
+   Tecnica da 55 a 58, un punto alla volta.
+
+## Card "Lavoro" riposizionata nell'hub
+
+Su richiesta esplicita, la card "Lavoro" (stato lavoro + selezione Part-time/Full-time) è stata spostata
+subito **sopra** il blocco con "Scendi in campo"/"Simula partita" nell'hub, invece che sotto il bottone
+Coppa Leonessa. La card "Lavoro extrasportivo" nella scheda giocatore (riepilogo di sola lettura) era già
+al posto giusto e non è stata toccata.
+
+## Coerenza e leggibilità della cronaca di partita
+
+Serie di richieste sulla presentazione degli eventi ◆ durante la partita (`MATCH_EVENTS`), per renderli
+coerenti con i momenti chiave (`MOMENTS`) invece che un sistema a parte:
+
+1. **Evento "Primo pallone conteso" riportato al motore a verifica di abilità**: `primo_contrasto` usava
+   ancora `applica`/`esito` fissi (bonus garantiti a personalità/morale), diversamente dagli altri eventi
+   GAMEPLAY a inizio partita (`ricezione_spalle_porta`, `pressing`) che sono vere verifiche di abilità via
+   `skillScelta`. Riscritto con 3 `skillScelta` (contrasto fisico rischioso, anticipo tecnico, temporeggio
+   sicuro) ed esclusione del Portiere via `conditions`, come i suoi eventi "fratelli".
+2. **Cronaca con gerarchia visiva**: l'evento più recente nel log (`#commentaryLog`, aggiunto con
+   `log.prepend`) resta a piena opacità con un piccolo rilievo (ombra), i precedenti sfumano
+   progressivamente via CSS `nth-child` (1°=pieno, 2°=0.75, 3°=0.6, oltre=0.45) — così l'occhio va
+   sull'azione appena successa invece di perdersi nello storico. Solo CSS, nessuna logica toccata.
+3. **Eventi ◆ mostrati nella stessa finestra della partita**: prima `showMatchEvent` dirottava su una
+   schermata separata (`screen-event`, icona ◆ statica), interrompendo il flusso della cronaca. Riscritta
+   per aggiungere testo ed esito **nello stesso `commentary-log`** e le scelte come `choice-card` nello
+   stesso `matchAction` usato da `nextMoment()`/`resolveChoice()` — nessun cambio di schermata, stesso
+   bottone "Continua ▸" per proseguire. Le due chiamate che passavano `()=>{ showScreen('match');
+   nextMoment(); }` come callback sono state semplificate a `()=>nextMoment()` (il cambio schermata non
+   serve più). `showEvent()`/`screen-event` restano invariate per gli eventi **fuori** dalla partita (il
+   pool `EVENTS` settimanale in hub, l'evento "resti in panchina" prima che inizi la partita).
+4. **Rischio/percentuale mostrati anche sugli eventi**: le scelte a verifica di abilità (`skillScelta`)
+   ora espongono `attr/attr2/risk/out` sull'oggetto scelta (prima chiusi solo dentro `applica`), così sia
+   `showEvent()` sia la nuova resa inline di `showMatchEvent()` possono calcolare e mostrare rischio (e,
+   in un primo momento, la percentuale) esattamente come `nextMoment()` — stesso `calcChance()`, nessun
+   secondo motore.
+5. **Percentuale di riuscita rimossa ovunque**: su richiesta successiva, la "% riuscita" mostrata sulle
+   choice-card (sia eventi sia momenti chiave) è stata tolta — resta solo l'etichetta di rischio
+   (Sicuro/Rischioso/Estremo). Tolto anche il calcolo di `chance` ormai morto nei punti dove serviva solo
+   per la stringa rimossa (il calcolo resta dove serve ancora, es. per determinare l'esito in
+   `skillScelta`/`resolveChoice`).
+
+Verificato in browser ad ogni passaggio: evento "Pressing" mostrato inline con etichetta di rischio
+corretta e senza percentuale, cronaca con opacità decrescente confermata via `getComputedStyle`, bottone
+"Continua" che avanza correttamente al momento successivo.
+
+## Costo energia lavoro Full-time corretto
+
+`energiaCostoLavoro('FullTime')` restituiva `35`/settimana; corretto a `30` su richiesta esplicita (il
+Part-time resta invariato a `15`).
+
+## Convocazione legata a reputazione/energia/forma/morale (panchina/non convocato)
+
+Su richiesta esplicita, aggiunta una regola di convocazione basata sui 4 valori chiave del giocatore
+(`state.reputazione`, `state.energia`, `state.forma`, `state.morale`), oltre al preesistente controllo
+casuale legato al solo rapporto col mister (`state.relazioni.mister<25`, tenuto come possibilità
+aggiuntiva, non rimosso):
+
+- **1 valore sotto il 40%** → il mister ti lascia in panchina (stesso evento ◆ "resti in panchina" già
+  esistente, testo differenziato in base alla causa).
+- **2 o più valori sotto il 35%** → non vieni nemmeno convocato: niente partita, il campionato prosegue
+  simulato senza di te (`skipGiornata`) e recuperi con la settimana di riposo (nessuna energia consumata
+  per una partita non giocata).
+- Nuovo helper condiviso `contaValoriSottoSoglia(soglia)`, usato in `beginMatch()`, `simulaPartita()` (per
+  non poter aggirare la regola simulando invece di scendere in campo) e in `renderHub()` (banner "Fuori
+  dai convocati" + pulsanti "Scendi in campo"/"Simula partita" disabilitati quando scatta la non
+  convocazione, stesso pattern già in uso per "Energia troppo bassa"). Si applica solo fuori dalla Coppa
+  Leonessa, coerente con il comportamento preesistente del controllo sul mister.
+- **Correzione della richiesta**: la prima implementazione trattava la panchina come un mancato utilizzo
+  completo (stessa simulazione "senza il giocatore" del caso "non convocato"). L'utente ha chiarito che
+  partire dalla panchina **non** vuol dire non giocare affatto: riscritta con `beginMatchAsSub()`, che fa
+  scendere davvero in campo a partita in corso (minuto 65, 2 momenti chiave invece dei 4 normali — pool
+  ridotto passato a `nextMoment()` via `state.matchTemp.momentiOutfieldRidotti`/`gkMomenti`, stesso motore
+  di `beginMatch()` per il resto: `finishMatch`, voto, XP, infortuni, cartellini, tutto invariato), con un
+  costo energia ridotto (-8 invece di -15) coerente con un tempo di gioco più corto.
+- Verificato in browser: 2 valori sotto 35 → banner "Fuori dai convocati" e pulsanti disabilitati; 1
+  valore sotto 40 → evento panchina con testo corretto; scelta "subentro" confermata end-to-end (ingresso
+  al 65', 2 scelte reali, punteggio e voto finali coerenti, arrivo regolare a `screen-result`).
+
+## Correzioni successive alla panchina/subentro (stessa giornata)
+
+- **Recupero energia uniformato a +40**: "Riposo e recupero" (`TRAININGS`), "Salta partita"
+  (`saltaPartitaVolontariamente`) e il recupero per infortunio (`skipGiornata`, sia in Coppa che
+  campionato) erano a valori diversi (30/35) — allineati tutti a +40/settimana su richiesta esplicita.
+- **Curva bonus/malus per le relazioni**: `calcChance()` (partita a scelte) teneva conto solo del
+  rapporto coi compagni; aggiunto lo stesso trattamento (curva centrata su 50, sotto=malus sopra=bonus)
+  per il rapporto col mister. `simulaPartita()` non teneva conto di nessuna relazione: aggiunta la
+  stessa curva per mister e compagni nella `condizione` che pesa sulla qualità simulata.
+- **Riflesso della reputazione sulle relazioni**: nuova `applyRiflessoReputazioneSuRelazioni()`,
+  richiamata ogni giornata in `postGiornataFlow()`: una reputazione sopra 50 tira leggermente verso
+  l'alto mister/procuratore/compagni ogni settimana, sotto 50 verso il basso (effetto piccolo e
+  progressivo, non sostituisce le scelte esplicite negli eventi).
+- **Rapporto col mister incluso nella soglia di convocazione**: `contaValoriSottoSoglia()` ora considera
+  anche `state.relazioni.mister` insieme a reputazione/energia/forma/morale; rimosso il vecchio controllo
+  casuale separato (mister<25 con 30% di chance), ormai ridondante perché un mister basso rientra già
+  deterministicamente nella stessa casistica.
+- **Allenamento invernale reso non vincolante**: durante la pausa invernale (`renderMercatoInvernale`),
+  scegliere un allenamento supplementare lo rendeva definitivo (card bloccate). Ora usa lo stesso pattern
+  a snapshot già usato per l'allenamento settimanale in hub (`scegliAllenamentoInvernale`, nuovo
+  `state.allenamentoSnapshotInvernale`): si può cambiare idea più volte prima di tornare in campo.
+
+## Coppa Leonessa: avvio da aprile, avanzamento settimanale, scheda con entrambe le fasi
+
+Tre richieste collegate sulla Coppa Leonessa, tutte nello stesso motore già esistente (nessun secondo
+sistema di partite):
+
+- **Avvio dalla seconda settimana di aprile**: prima la Coppa partiva sempre subito a fine campionato
+  (`renderSeasonEnd`), che per un girone corto poteva voler dire gennaio/febbraio — troppo presto rispetto
+  ai tempi reali. Nuovo helper `secondaSettimanaAprile(anno)` (primo sabato dall'8 aprile in poi): se il
+  campionato finisce prima di quella data, la Coppa resta "in attesa" (nuovo banner in fine-stagione con
+  la data) finché il fuori-stagione (`aggiornaFuoriStagione()`, stesso ciclo settimanale già usato per
+  mercato estivo/settimane morte) non la raggiunge; se il campionato finisce dopo, parte subito come
+  prima. Nel farlo è stato anche **sistemato un vicolo cieco preesistente**: a torneo Coppa concluso,
+  `finalizzaGironeCoppa()` tornava sempre all'hub, che a campionato già finito non aveva più nulla da
+  proporre (bottone "Scendi in campo" puntava a un avversario inesistente) — ora riprende/inizializza il
+  conto fuori-stagione invece di tornare all'hub.
+- **Ogni partita di Coppa avanza il calendario di una settimana**: prima tutte le partite di uno stesso
+  girone di Coppa avvenivano sulla stessa data (nessun avanzamento). Ora `postCoppaMatch()` (unico punto
+  che tutte le vie di risoluzione di una partita di Coppa attraversano: giocata, simulata, saltata per
+  infortunio/squalifica) fa avanzare `state.offSeasonData` di una settimana a ogni partita — così, se si
+  esce dalla competizione, la data mostrata in "Fuori stagione" riflette davvero quando si è usciti.
+  L'hub mostra ora anche questa data accanto a "Coppa · Fase · Partita N/M".
+- **Scheda Coppa con Preliminare + Fase Principale insieme**: `renderCoppa()` mostrava solo il girone
+  della fase corrente/più recente, nascondendo il preliminare una volta passati alla fase principale. Ora
+  mostra sempre entrambe le tabelle quando disponibili (il preliminare recuperato da
+  `state.coppaPrelim.gironi`, mai svuotato durante la stagione); per una squadra di Serie A (nessun
+  preliminare) la sezione preliminare semplicemente non compare.
+
+## Sistema territoriale, shop, formazione (Fasi 2-7 di 10)
+
+Richiesto con un brief strutturato molto dettagliato (vita da calciatore amatoriale nel territorio
+bresciano, non da professionista: niente jet privati/ville/supercar). Prima di implementare è stata
+fatta un'analisi esplicita dell'architettura esistente (richiesta dall'utente, confermata prima di
+procedere): nessun sistema di POI/territorio/shop/investimenti esisteva già, quindi costruito da zero
+seguendo **lo stesso pattern dati-motore-UI** già in uso per `TRAININGS`/`EVENTS`/`MATCH_EVENTS` (array di
+oggetti con id stabile + funzione generica che li applica a `state` + render dedicato), mai una nuova
+architettura parallela. Procede a fasi con verifica in browser dopo ognuna, come da piano concordato.
+
+- **Fase 2-4, sistema territoriale** (`index.html`): `TERRITORIO_AREE` (6 macroaree: Brescia Città,
+  Franciacorta, Lago d'Iseo, Garda Bresciano, Valle Camonica, Altre Valli) e `DB_POI` — **30 POI iniziali
+  reali e verificabili** (monumenti, parchi, laghi, siti UNESCO come le incisioni rupestri della Val
+  Camonica), non i 50 richiesti: scelto deliberatamente di restare su luoghi pubblici inequivocabilmente
+  reali piuttosto che inventare dati o usare nomi di attività commerciali senza aver verificato i diritti
+  (`real_reference_name`/`display_name`/`generic_name` separati come richiesto, per poter sostituire i
+  nomi senza toccare il gameplay). Motore `vivEsperienza(poiId)`: scala denaro/energia dallo `state`
+  esistente, applica bonus su campi già esistenti (morale/forma/reputazione/xp — nessuna nuova
+  statistica), una esperienza a settimana (stesso schema di `allenamentoFatto`, reset in
+  `postGiornataFlow`). Nuova schermata "Territorio" (aree → POI → esperienza), pulsante in hub.
+- **Fase 5, shop equipaggiamento**: `DB_EQUIPAGGIAMENTO`, 25 oggetti su 7 categorie (Scarpe, Parastinchi
+  in 5 varianti come richiesto — tradizionali/moderni/ultraleggeri/rinforzati/"fortunati" —, Guanti,
+  Abbigliamento tecnico, Accessori, Borsoni, Recupero). I bonus **non toccano mai `state.attr`**: si
+  sommano solo a runtime dentro `calcChance()` (stesso punto già esteso per mister/compagni), così
+  equipaggiare/disequipaggiare resta sempre reversibile senza dover tracciare cosa togliere. Pochi item
+  con effetti su morale/forma/reputazione (parastinchi fortunati, tuta da riscaldamento, alcuni
+  accessori) usano invece un bonus una tantum all'atto di indossarli (`onEquip`, stesso pattern di
+  `TRAININGS.apply`). I RECUPERO sono consumabili (si usano e spariscono dall'inventario). Nessuna usura:
+  il progetto non aveva un sistema di durabilità, quindi il campo `durability` resta solo descrittivo,
+  come da istruzione esplicita di non crearne uno nuovo. Nuova schermata "Shop", pulsante in hub.
+- **Correzioni su richiesta esplicita (2026-08-04)**: categoria GUANTI visibile solo per `state.role==='Portiere'`
+  (tab nascosta e acquisto bloccato per gli altri ruoli, i bonus presa/riflessi non hanno senso per un
+  giocatore di movimento) — filtro sia in `renderShop()` che difensivamente in `acquistaEquip()`.
+  "Fascia da capitano" (`AC_FASCIA`) non è più acquistabile (aveva un prezzo come un accessorio
+  qualsiasi, contraddiceva l'idea di leadership guadagnata): ora ha `guadagnabile:true` (niente
+  `price`, card mostra "Si guadagna sul campo, non si compra." finché non la possiedi) e viene
+  assegnata automaticamente da un nuovo traguardo (`ACHIEVEMENTS`, id `capitano`: rapporto compagni e
+  mister entrambi ≥75) tramite `assegnaFasciaCapitano()`, chiamata da `checkAchievements()` — stesso
+  hook già usato per gli altri traguardi, nessun nuovo ciclo di controllo. Se lo slot accessori è già
+  occupato da un altro oggetto non lo forza (entra comunque in inventario, si indossa a mano).
+  Rimossa anche la tab "Borsoni" (2 soli oggetti non giustificavano una categoria a sé): `BO_BASE`/
+  `BO_TRASF` sono ora `category:'ACCESSORI'` (visibili/acquistabili in quella tab), slot equipaggiamento
+  (`borsone`) invariato — restano un pezzo indossabile separato, cambia solo dove si comprano.
+  **Correzione successiva**: indossare la fascia spodestava l'accessorio già equipaggiato (condividevano
+  lo slot `accessori`, un solo oggetto per slot). `AC_FASCIA` ha ora un slot dedicato (`capitano`,
+  aggiunto a `state.equipaggiamento`/`SLOT_LABELS`), resta però `category:'ACCESSORI'` quindi si vede
+  ancora nella tab Accessori — solo lei può stare equipaggiata insieme a un altro accessorio, come
+  richiesto. Migrazione in `boot()` per i salvataggi con la fascia già nello slot `accessori`.
+- **Fase 6, formazione**: `DB_FORMAZIONE`, 12 contenuti (5 libri con titoli fittizi come richiesto —
+  "Il gioco senza palla", "La mentalità del gruppo", ecc., autori fittizi —, 3 corsi, 2 mentor/ex
+  allenatori, 2 esperienze formative). "Conoscenza tattica"/"leadership"/"mentalità" richieste dalla spec
+  sono mappate sui contatori `state.personalita` già esistenti (`ragionatore`/`trascinatore`) invece di
+  inventare due nuovi campi paralleli. I corsi danno un bonus **permanente** a un attributo (stesso
+  meccanismo del level-up in `addXP`, diverso dall'equipaggiamento perché è un investimento acquisito,
+  non qualcosa che si toglie). I mentor hanno un esito **probabilistico** legato alle relazioni esistenti
+  (mai un bonus garantito, come richiesto), stesso principio degli eventi di partita a verifica di
+  abilità. Stesso gating "una formazione a settimana" del territorio, più un elenco libri già letti
+  (non rileggibili). Nuova schermata "Formazione", pulsante in hub.
+- **Fase 7, eventi relazionali/opportunità**: `TERRITORIO_EVENTI`, eventi generici per categoria/soglia
+  di visite a un POI (non per singolo POI, così valgono anche per i POI aggiunti in futuro), risolti da
+  `pickTerritorioEvento`/`showTerritorioEvento` che **riusano lo stesso `showEvent()`** già esistente
+  (nessun secondo Event Engine): cambia solo il criterio di attivazione (visite ripetute a un POI). Uno
+  degli eventi ("il gestore ha una proposta da farti") è l'aggancio esplicito alla Fase 8: registra solo
+  un record in `state.opportunitaInvestimento[]`, senza logiche di investimento che non esistono ancora
+  (evita di costruire in anticipo pezzi della fase successiva).
+- **Fase 8, investimenti**: `TIPI_INVESTIMENTO` — i 5 livelli richiesti (piccolo investimento,
+  finanziamento progetto, quota societaria, socio di minoranza, investimento speculativo) con
+  capitale/rischio/rendimento/durata/liquidità crescenti; **nessuna categoria calcistica** (vincolo
+  esplicito rispettato). **Nessun menu statico**: gli investimenti sono raggiungibili solo dalle
+  opportunità generate dagli eventi territoriali della Fase 7 (`state.opportunitaInvestimento`), come
+  richiesto. Il rischio (`calcolaRischioInvestimento`) non è una % piatta: parte da un livello base per
+  tipo e si affina in base a quante volte si è visitato il POI, alla reputazione e alla stagionalità
+  dell'area — pochi fattori concreti, non un motore finanziario reale. La maturazione degli investimenti
+  attivi (`avanzaInvestimenti()`, richiamata ogni giornata in `postGiornataFlow`, stesso ciclo settimanale
+  già esistente) risolve l'esito quando le settimane residue arrivano a zero: successo (rendimento
+  accreditato, +reputazione) o fallimento (recupero parziale in base al rischio, -reputazione). Nuova
+  schermata "Investimenti" (opportunità in attesa con scelta del tipo, investimenti in corso con
+  countdown, storico esiti).
+- **Fase 9, coerenza UI**: i 4 pulsanti territorio/shop/formazione/investimenti erano ripetuti identici
+  in tutti e 3 i rami dei pulsanti hub (fino a 9 pulsanti nel ramo normale) — consolidati in un'unica card
+  "Vita da calciatore" in hub, sempre visibile anche durante infortunio/squalifica, separata dai pulsanti
+  di partita. Aggiunto un badge col numero di opportunità di investimento in attesa sul pulsante
+  "Investimenti". Trovata e corretta un'incoerenza: lo Shop non mostrava alcun avviso per saldo
+  insufficiente (usciva silenziosamente), a differenza delle altre 3 schermate nuove — uniformato.
+- **Fase 10, test di regressione**: carriera creata dal flusso reale (non dati sintetici) e verificata
+  fino in hub; tutte e 4 le nuove schermate raggiunte con click reali, incluso un ciclo completo di
+  un'esperienza territoriale dall'interfaccia; nessun errore in console; migrazione salvataggi verificata
+  rimuovendo di proposito i nuovi campi da un salvataggio e ricaricando — `boot()` li ripristina con i
+  default corretti, nessun crash.
+- **Piano a 10 fasi completo.** Limiti accettati (non bug, scelte deliberate): dataset POI fermo a 30 non
+  50 (accuratezza sopra copertura, vedi sopra); nessun sistema di usura/durabilità (il progetto non ne
+  aveva già uno, istruzione esplicita di non crearne uno nuovo); categorie RISTORAZIONE/OSPITALITÀ/
+  BUSINESS del territorio non popolate (richiederebbero nomi di attività commerciali verificati, non solo
+  monumenti/luoghi pubblici) — estendibili in un secondo momento con verifica caso per caso.
+- Verificato in browser a ogni fase: acquisto/equip/vendita con bonus reale su `calcChance` (53%→55%→53%
+  su acquisto/equip/vendita di un item), corso con bonus permanente su un attributo, mentor con esito
+  legato alla relazione, gating settimanale su territorio/formazione, evento territoriale che scatta alla
+  soglia di visite corretta con ritorno alla stessa area invece che alla lista aree (bug trovato e
+  corretto durante il test), capitale/rischio di un investimento coerenti con relazione/reputazione,
+  maturazione con esito e impatto reale su saldo/reputazione, regressione completa senza errori.
+
+## Riorganizzazione lean/mobile-first dell'interfaccia
+
+Richiesta esplicita di ridurre lo scrolling verticale raggruppando le sezioni più lunghe in blocchi
+compatti, senza toccare la logica di gioco né introdurre nuove dipendenze — analisi delle schermate
+esistenti fatta prima di scrivere codice, per capire cosa fosse davvero troppo lungo (Shop: 25 oggetti
+in un'unica lista; Scheda giocatore: 7 card impilate) e cosa già andasse bene così (Territorio ha già un
+drill-down area→POI, Investimenti è già diviso in 3 sezioni brevi — nessuna modifica lì).
+
+- **Componente tab riutilizzabile** (`.tab-bar`/`.tab-btn`/`.tab-panel` in CSS + `switchTab(scope,tabId)`
+  in JS): pensato per restare valido sia da mobile (barra a scorrimento orizzontale) sia in un futuro
+  layout PC separato (stessa struttura dati/markup, disposizione diversa).
+- **Shop equipaggiamento**: da un'unica lista di 25 oggetti su 7 categorie a 7 tab (una per categoria),
+  con il riepilogo "Equipaggiato" sempre visibile sopra. `renderShop()` ora filtra per
+  `shopCategoriaSel` (stesso pattern di selezione+re-render già usato da `territorioAreaSel`) invece di
+  disegnare tutto insieme.
+- **Formazione**: stesso trattamento, 4 tab (Libri/Corsi/Mentor/Esperienze) via `formazioneTipoSel`.
+- **Scheda giocatore → "Giocatore"**: rinominata e riorganizzata da 7 card impilate a 4 tab
+  (Panoramica/Statistiche/Traguardi/Storico) — il taglio di scroll più netto. Nessuna funzione di
+  render esistente (`renderCarriera`) ha richiesto modifiche alla logica interna: gli stessi id
+  (`carAttrs`, `carStats`, ecc.) vivono ora dentro i pannelli tab.
+- **"Vita da calciatore" spostata dentro Giocatore**: la card separata in hub (territorio/shop/
+  formazione/investimenti) è stata rimossa e ricreata come 5° tab di Giocatore. Il badge delle
+  opportunità di investimento in attesa (`badgeOpportunita`) è rimasto lo stesso elemento, solo
+  spostato; il conteggio è stato estratto in `aggiornaBadgeOpportunita()`, richiamata sia da
+  `renderHub()` (che ora mostra il badge anche sul pulsante "Giocatore" in hub) sia da
+  `renderCarriera()`, così resta sincronizzato indipendentemente da quale schermata si visita prima.
+- **`data-block` sui contenitori dell'hub** (stato-giocatore, relazioni, prossimo-impegno,
+  preparazione, lavoro, azioni-partita, coppa, vita-calciatore, reset): zero impatto visivo, rende
+  esplicita nel markup la struttura logica dei blocchi in vista di una futura separazione UI PC/mobile,
+  senza anticipare quella separazione con astrazioni non richieste ora.
+- Verificato in browser su un salvataggio reale esistente: acquisto in Shop con tab che resta
+  selezionata dopo il re-render, tutti e 4 i tab di Giocatore navigabili con contenuto corretto,
+  "Vita da calciatore" raggiungibile da Giocatore e poi Shop, saldo/diario coerenti dopo l'acquisto,
+  nessun errore in console.
+
+## Sistema di personalità: estensione a 4 assi (azioni, allenamento, economia, dialoghi)
+
+Richiesta con uno spec dettagliato in stile "pub-sub/event hooks/TypeScript" per tre archetipi
+(Maverick/Virtuoso/Heartbeat). Prima di implementare sono stati segnalati due disallineamenti con lo
+stato attuale del progetto e fatti confermare dall'utente: (1) `state.personalita =
+{individualista, ragionatore, trascinatore}` esiste **già** dalla Fase 6 (Formazione) e i
+`MATCH_EVENTS` lo alimentavano **già** da tempo tramite il parametro `tratto` di `skillScelta()` — gli
+archetipi richiesti coincidono concettualmente con i 3 contatori esistenti; (2) il resto del file è JS
+vanilla senza build/TypeScript/event bus, tutto integrato con chiamate dirette. L'utente ha confermato
+di **estendere il sistema esistente** con **integrazione diretta, nessun event bus nuovo** — nessun
+secondo stato parallelo, nessuna astrazione mai usata prima nel progetto.
+
+- **Azioni nei momenti chiave di partita**: i `MATCH_EVENTS` erano già coperti (`tratto` per scelta).
+  Colmato l'unico varco rimasto — i 4 momenti chiave "core" (`MOMENTS`) e i momenti del Portiere
+  (`GK_MOMENTS_POOL`) — riusando il campo `out` già esistente nel motore (`PERSONALITA_OUT_MAP`:
+  goal→individualista, assist/recupero→trascinatore, possesso→ragionatore) dentro `resolveChoice()`,
+  invece di taggare manualmente 8+ scelte una per una. Semplificazione dichiarata in un commento: un
+  dribbling che smista un assist conta come "trascinatore" e non "individualista" — accettabile perché
+  conta la tendenza aggregata sulla stagione, non il singolo episodio, e l'asse resta comunque ben
+  coperto anche dai `MATCH_EVENTS` che invece taggano scelta per scelta.
+- **Allenamento settimanale**: le 3 sedute di `TRAININGS` (tecnica/fisico/tattico, non riposo) danno ora
+  anche un punto di personalità coerente col contenuto (tecnica/tattico→ragionatore, fisico→
+  trascinatore). Nessuna delle 4 opzioni esistenti è una vera seduta di tiro/finalizzazione: l'asse
+  "allenamento" non alimenta quindi l'individualista, gap documentato in un commento — resta comunque
+  coperto da azioni in campo, shop ed eventi.
+- **Economia extra-campo**: shop (`acquistaEquip`) — oggetti con `rarity:'rara'` (campo già esistente)
+  danno un punto individualista come proxy dell'acquisto vistoso, **senza inventare** auto di lusso o
+  marchi di moda che non hanno riscontro nei dati del gioco; formazione (`applicaEffettiFormazione`) —
+  i corsi/mentor senza già un effetto `personalita` esplicito (COR_001, COR_002, MEN_002) ora danno un
+  punto ragionatore di base; investimenti (`avviaInvestimento`) — mappatura sul tipo di investimento già
+  esistente invece di inventare categorie "beneficenza"/"cena di squadra": speculativo→individualista
+  (guadagno personale veloce), socio di minoranza/quota→trascinatore (impegno lungo su un'attività del
+  territorio), piccolo/finanziamento→ragionatore (scelta prudente e calcolata).
+- **Dialoghi fuori dal campo**: i 13 eventi narrativi di `EVENTS` (inclusi `scandalo_media` ed
+  `evento_sponsor`, i più "media" in senso stretto) ora taggano le scelte coerenti con un archetipo;
+  dove nessuno dei 3 calzava onestamente (es. "vai in famiglia", "resti in silenzio") si è lasciata la
+  scelta senza punto invece di forzare un'etichetta.
+- **Tratto dominante**: nuova `personalitaDistribuzione(s)` calcola percentuali e tratto dominante dai 3
+  contatori. Nuova card "Personalità" nella tab Panoramica di Giocatore (barre nello stesso stile già
+  usato per Relazioni), con messaggio d'attesa finché i contatori sono tutti a zero.
+- Verificato in browser: tutti i punti di innesco (allenamento, acquisto shop, corso formazione,
+  investimento nei 3 tipi mappati, risoluzione di un momento chiave con ciascuno dei 4 `out`, scelta di
+  un evento dialogo) aggiornano correttamente `state.personalita`; card con percentuali/tratto dominante
+  corretta; salvataggio/caricamento coerente; nessun errore in console; nessuna regressione sui flussi
+  esistenti.
+
+## Sistema "personaggi": piano completo a 7 fasi (A-G)
+
+Richiesto con uno spec molto ampio in stile "sezioni 5-25" (telefono, memoria narrativa, rivalità,
+mondo dinamico/mercato, vita privata, eventi/legacy, ritiro→allenatore). Prima di scrivere codice è
+stata segnalata l'enormità dello scope rispetto a un file HTML singolo di ~4000 righe senza controllo
+versione né test automatici, e proposto un piano a fasi con conferma esplicita prima di ogni fase
+(stesso processo già seguito per il sistema territoriale) — l'utente ha confermato di procedere
+fase per fase. Due conflitti reali con quanto già costruito sono stati risolti PRIMA di iniziare: gli
+"archetipi nascosti" richiesti si sono rivelati alias dei 3 tratti di personalità appena estesi
+(Ribelle=Individualista, Virtuoso=Professionista=Ragionatore, Leader=Trascinatore/Heartbeat) — nessuna
+sostituzione dello schema esistente; e la memoria relazionale è stata data priorità come fondamenta
+(Fase A prima di tutto), perché Telefono, Rivalità e la futura transizione a Allenatore dipendono
+tutte da un'identità stabile per persona.
+
+- **Fase A — Memoria relazionale** (`index.html`): nuovo `state.persone{}`, registro **additivo**
+  (i 3 numeri aggregati in `state.relazioni` restano invariati e continuano a guidare
+  `calcChance`/convocazione come sempre). Ogni persona ha un id stabile, un'affinità propria 0-100
+  (indipendente dall'aggregato) e uno storico eventi (`registraPersona`/`registraEventoPersona`,
+  stesso pattern engine-generico di `TRAININGS`/`EVENTS`). Identità stabili: `MISTER`/`PROCURATORE`/
+  `FAMIGLIA` (fisse, create a inizio carriera), compagni reali (id derivato da nome+squadra da
+  `sceglieCompagni()`, che già pescava sempre lo stesso miglior ATT/DIF della rosa reale — la stessa
+  persona finché si resta in quella squadra), e un "ex allenatore" creato al primo utilizzo del
+  mentor in Formazione, primo esempio concreto di persona che sopravvive a un cambio di squadra.
+  Agganciato a un sottoinsieme rappresentativo di eventi esistenti (non tutti i punti che toccano
+  `relazioni.mister/procuratore`): il resto si arricchisce via via, come documentato nel codice.
+- **Fase B — Telefono del calciatore**: nuova schermata, **puramente presentazione** sopra i dati
+  della Fase A (nessuna nuova logica di gioco). Lista conversazioni (una per persona, ordinata per
+  evento più recente) → thread per persona che riusa `.commentary`/`.commentary-log` già esistenti
+  (stessa opacità decrescente della cronaca di partita). Filtro anti-spam nel motore, non nella UI:
+  `registraEventoPersona()` alza `nonLetti` solo per eventi con `|impatto|>=3`
+  (`NOTIFICA_SOGLIA_IMPATTO`) — i micro-eventi restano nello storico senza generare notifica. Bottone
+  "Telefono" in hub con badge del totale non letti.
+- **Fase C — Rivalità dinamiche**: 10 eventi aggiunti all'array `EVENTS` esistente (stesso motore
+  `pickEvent`, zero nuovo trigger). Rivali interni = il migliore nel tuo ruolo nella TUA rosa reale
+  (concorrente per il posto); rivali esterni = il migliore nel tuo ruolo nella rosa reale della
+  squadra avversaria appena affrontata **in campionato** (dati veri da `DB_SQUADRE`, mai inventati;
+  legato solo al campionato perché Coppa passa da un flusso separato che non tocca `pickEvent`).
+  Nessuno stato "rivalità" nuovo: `statoRivalita()` deriva una delle 4 etichette richieste
+  (rispetto/odio/amicizia/collaborazione) dalla stessa affinità 0-100 già di Fase A. I rivali
+  compaiono già nel Telefono come qualunque altra persona.
+- **Fase D — Vita privata ed eventi imprevisti**: 6 nuovi `EVENTS` (invasione della privacy,
+  tensione col tempo dedicato alla famiglia — agganciato alla persona `FAMIGLIA` —, intervista TV in
+  casa, hater sui social, imprevisto dell'auto la mattina di una gara, richiesta di beneficenza
+  territoriale nel giorno di riposo), stesso motore, stesso pattern di tag `personalita` già usato
+  altrove.
+- **Fase E — Mercato narrativo con rumor e Deadline Day**: `RUMOR_MERCATO`, 8 voci di calciomercato
+  con un tipo interno vero/falso/manipolato **mai mostrato al giocatore** (il punto è l'informazione
+  imperfetta) che finiscono nel diario già esistente — zero nuova UI. Deliberatamente **solo
+  narrativo**: non si toccano mai forza/rosa reali di `DB_SQUADRE` per non rischiare di squilibrare
+  le simulazioni delle altre squadre per il resto della carriera — "il mondo che vive da solo" è
+  raccontato, non simulato meccanicamente, scelta esplicita per restare lean e a zero rischio di
+  regressione. Deadline Day (`isDeadlineDayMercato`, l'ultima settimana della finestra 1 luglio-31
+  agosto) genera sempre una voce ed è segnalato in etichetta sulla schermata di mercato; nelle
+  settimane normali una voce compare col 45% di probabilità.
+- **Fase F — Timeline legacy "La tua storia"**: estende il concetto di `diario` invece di
+  duplicarlo (stesso shape `{stagione, giornata, testo}`), ma senza il troncamento a 60 voci di
+  `diario` — pensata per sopravvivere intatta fino a fine carriera. Nuova `registraLegacy(tipo,
+  testo)`, agganciata a 4 punti esistenti: nuovo traguardo sbloccato (`checkAchievements`), eventi
+  relazionali di grande impatto (`registraEventoPersona`, soglia `|impatto|>=8`, più alta di quella
+  "notifica" del Telefono), debutto professionistico (`startCareer`) e fine di ogni stagione
+  (`renderSeasonEnd`). Nessun nuovo meccanismo di salvataggio: vive dentro `state`, quindi persiste
+  già con `save()` — è questo il senso di "salvata automaticamente". Nuovo 6° tab "La tua storia" in
+  Giocatore, stesso stile `.diario-entry` già esistente, zero CSS nuovo.
+- **Fase G — Ritiro → Allenatore**: la fase più grande, isolata a fine carriera come richiesto.
+  Trigger volontario (età≥33, `calcolaEta` già esistente) con bottone in Giocatore > Panoramica.
+  **Le 20 connessioni pratiche** (`generaConnessioniAllenatore`): si leggono le persone già raccolte
+  in `state.persone` durante tutta la carriera (mister, procuratore, ex allenatore, famiglia,
+  compagni reali, rivali) ordinate per quanto la relazione sia stata significativa (positiva o
+  negativa), e la loro affinità diventa un effetto concreto sulla nuova carriera (reputazione
+  iniziale da allenatore più alta/bassa, "alleato"/"ostacolo") — nessun dato nuovo, solo lettura di
+  ciò che si è già costruito. La carriera da giocatore resta congelata in `state`, mai riscritta.
+  Il motore delle partite da allenatore **riusa `simSquadra()`/`applyResultToClassifica()`** già
+  esistenti (gli stessi che simulano ogni fixture delle altre squadre di un girone ogni giornata:
+  da allenatore la propria squadra viene semplicemente simulata con lo stesso motore) e
+  `buildTierSeason()` per costruire calendario/classifica della squadra assegnata — la stessa
+  funzione già usata per la creazione del personaggio, riusata identica. Tattica settimanale
+  (`TATTICHE_ALLENATORE`, 3 opzioni con un piccolo modificatore di forza) è lo stesso pattern
+  dati-motore di `TRAININGS`. Quando si affronta la squadra di origine di una connessione nota
+  (ex compagno/rivale ora altrove), il diario lo segnala. Fine stagione registra anche in legacy.
+  **Fuori scope dichiarato per questo MVP** (non omissione silenziosa): nessuna gestione
+  staff/rosa/scouting, nessuna scelta tattica approfondita, nessuna progressione di carriera da
+  allenatore oltre il loop stagionale — un'eventuale estensione futura.
+- **Piano completo A-G**: tutte le 7 fasi del sistema "personaggi" sono state implementate.
+  Limite accettato riportato in Fase E: "il mondo che vive da solo" resta narrativo (rumor), non una
+  simulazione meccanica di trasferimenti/esoneri reali — scelta deliberata per non rischiare di
+  squilibrare le simulazioni delle altre 280 squadre.
+- Verificato in browser a ogni fase: persona reale creata da `sceglieCompagni`/rosa avversaria con
+  nomi veri, affinità che si muove nella direzione narrativa attesa, badge Telefono che si azzera
+  aprendo una conversazione e si aggiorna anche sul bottone hub, `statoRivalita()` corretto ai 4
+  confini di soglia, eventi di Fase D con condizioni verificate (es. `crisi_tempo_famiglia` legato
+  all'affinità di `FAMIGLIA`), rumor di mercato visibili nel diario esistente con prefisso Deadline
+  Day quando previsto, tab "La tua storia" popolato da traguardi/eventi/stagioni reali, ritiro con
+  età forzata a 34 che genera correttamente le connessioni e cambia schermata, carriera da
+  allenatore con squadra reale assegnata, classifica dell'intero girone aggiornata via
+  `applyResultToClassifica`, rollover di stagione, ricarica pagina che rientra correttamente in
+  modalità allenatore invece che in hub — nessun errore in console, nessuna regressione sui flussi
+  esistenti.
+
+## Bug: giocatore esistente poteva ritrovarsi come proprio compagno/rivale
+
+Limite documentato in "Creazione carriera: continua con un giocatore esistente" (vedi sopra) è
+diventato un bug reale da correggere: la riga della rosa reale che il giocatore ha sostituito
+restava nei dati sorgente, quindi `sceglieCompagni()`/`migliorGiocatoreRuolo()` potevano pescare
+te stesso come tuo "compagno" in partita o come tuo "rivale interno" nello stesso ruolo.
+
+- Nuovo `state.giocatoreRealeOrigine` (`{nome, squadra}`, valorizzato solo in modalità
+  `'esistente'`) + nuova `rosaSenzaGiocatoreReale(rosa, nomeSquadra)`: filtra quella singola riga
+  quando la squadra combacia con l'origine, riusata da `sceglieCompagni()` e
+  `migliorGiocatoreRuolo()` — nessun nuovo motore, solo un filtro in più sulla stessa fonte dati.
+- Migrazione in `boot()` per i salvataggi esistenti (`giocatoreRealeOrigine: null`, quindi restano
+  esposti al bug retroattivamente — vale per le carriere create da ora in poi).
+- Verificato in browser: la rosa reale del DB continua a includere il proprio nome (dato statico
+  invariato), ma `sceglieCompagni()`/`migliorGiocatoreRuolo()` non lo restituiscono più.
+
+## Logo del gioco
+
+Sostituito il segnalibro testuale "C7" (3 occorrenze: topbar, creazione carriera, scheda
+giocatore) con il logo fornito dall'utente ("New Star Brescia"), incorporato come immagine
+base64 nella regola CSS `.crest` (ridimensionata a 160×160px, ~53KB, per restare un solo file
+senza gonfiarlo troppo) — nessun file esterno aggiunto. Su richiesta successiva, rimossi
+`border-radius`/`box-shadow` dalla stessa regola (il "riquadro smussato" attorno al logo).
+
+## Sistema eventi per ruolo durante la partita (40 nuovi MATCH_EVENTS)
+
+Richiesto con un task strutturato lean (analisi confermata prima di scrivere codice). Estende
+ulteriormente `MATCH_EVENTS` con **40 nuovi eventi** in **5 pool per ruolo** (8 ciascuno), oltre ai
+12 trade-off "generici" (`role!=='Portiere'`) già esistenti — stesso motore, stessa `skillScelta()`
+(2 skill attive + 1 conservativa a rischio basso), nessuna nuova skill, nessuna modifica a
+`calcChance()`/`resolveChoice()`/`pickMatchEvent()`/`nextMoment()`.
+
+- **Pool per ruolo**: Attaccante (`roleRequirement:'Attaccante'`), Attaccante/Centrocampista
+  (`conditions` su `RUOLI_ATT_CEN=['Attaccante','Regista','Ala']`), Centrocampista
+  (`RUOLI_CEN=['Regista','Ala']`), Centrocampista/Difensore (`RUOLI_CEN_DIF=[...,'Difensore']`),
+  Difensore (`roleRequirement:'Difensore'`) — 3 nuove costanti array riusate dalle `conditions`,
+  nessun nuovo campo sullo schema evento.
+- Verificato: eleggibilità per ruolo corretta (Attaccante 16 eventi eligibili, Regista/Ala 24,
+  Difensore 16, Portiere 0), 720 esecuzioni di test su tutte le 120 scelte senza errori, ciclo UI
+  reale evento→scelta→esito→continua.
+
+## Riduzione probabilità sponsor personale
+
+`sponsor_call` (proposta di sponsor personale dal procuratore) usciva troppo spesso rispetto agli
+altri eventi finanziari. Aggiunta `COOLDOWN_EVENTO_OVERRIDE` (per ora solo `{sponsor_call: 24}`),
+riusata dallo stesso meccanismo di cooldown già esistente per `EVENTI_FINANZIARI` — nessun nuovo
+sistema di probabilità, solo una soglia dedicata più lunga per questo singolo id.
+
+## +5 energia extra su riposo/salta partita/infortunio
+
+Portato da +40 a **+45** in tutti e 3 gli scenari: `TRAININGS` id `'riposo'` (incluso quando si
+applica implicitamente se non si sceglie un allenamento), `saltaPartitaVolontariamente()`, e il
+recupero per infortunio in `skipGiornata('infortunio')` (sia campionato che Coppa Leonessa).
+
+## Soglia panchina al 50%, curva di livellaggio più ripida, relazioni anche simulando
+
+Tre richieste indipendenti nello stesso messaggio:
+
+- **Soglia "non giochi la partita per intero" alzata da 40% a 50%**: in `beginMatch()`, se anche
+  solo uno tra Reputazione/Energia/Forma/Morale/rapporto col Mister è sotto il 50% (`sottoSoglia50`,
+  rinominata da `sottoSoglia40`), il giocatore entra dalla panchina (`beginMatchAsSub()`) invece di
+  partire titolare. La soglia dei "2+ sotto 35%" che tiene fuori dai convocati del tutto resta
+  invariata.
+- **Curva XP più ripida**: il moltiplicatore di `addXP()` per il costo del livello successivo è
+  passato da `1.15` a `1.22` (100→122→149→182→222→271 sui primi 5 livelli, contro
+  100→115→132→152→174 di prima).
+- **`simulaPartita()` ora costruisce relazioni coi compagni**: prima non toccava mai
+  `state.persone` (solo giocando a scelte si costruivano rapporti con compagni nominati). Ogni
+  assist simulato pesca un compagno reale (stessa `sceglieCompagni()`/`pescaCompagno()` di
+  partita giocata) e ne fa crescere l'affinità (+2, stesso impatto di un assist "vero"). Verificato
+  su 25 partite simulate: 15 assist totali → 2 compagni registrati con affinità cresciuta.
+
+## Sistema procuratore/agente (state.agent, AGENT_EVENTS) + calcChance esteso
+
+Richiesto con un task strutturato lean.
+
+- **`calcChance(attrKey, risk, out, attrKey2)` esteso**: se `attrKey` è un Array di 2 skill (es.
+  `['tecnica','velocita']`), viene decomposto internamente in `attrKey=attrKey[0]`,
+  `attrKey2=attrKey[1]` — stessa media già esistente per la combinazione a 2 skill, piena
+  retrocompatibilità con tutte le chiamate esistenti (verificato: risultato identico chiamando via
+  Array o via il parametro `attrKey2` già esistente).
+- **`state.agent`** (`{name, type, trust, influence}`, default `"Gino 'Il Calibra' Baresi"` /
+  `'Cacciatore'` / `50` / `60`): identità con archetipo, aggiuntiva rispetto a
+  `relazioni.procuratore`/persona `PROCURATORE` già esistenti (che restano invariati e vengono
+  comunque aggiornati in parallelo dove ha senso). Migrazione in `boot()`.
+- **8 `AGENT_EVENTS`** integrati direttamente nell'array `EVENTS` esistente (stesso
+  `pickEvent()`/`showEvent()`): Proposta di Cambio Maglia (gated sulla finestra della pausa
+  invernale già esistente), Cena di Rappresentanza, Provino a Sorpresa in Eccellenza, Richiesta
+  Aumento Rimborso Spese, Articolo sul Giornale di Brescia, Offerta da una Rivale Storica, Sponsor
+  Tecnico Locale (aggiunto a `EVENTI_FINANZIARI` per il cooldown), Chiarimento a Fine Stagione
+  (`s.giornata===s.calendario.length`, con opzione "licenzia l'agente" → `state.agent=null`, dopo
+  la quale gli eventi smettono semplicemente di comparire via `condizione:s=>s.agent&&...`).
+- Verificato: tutti e 8 gli eventi senza errori, ciclo UI reale completo (evento→scelta→saldo/trust
+  aggiornati→esito→callback).
+
+## Sistema famiglia (state.family, FAMILY_EVENTS)
+
+Stesso pattern del procuratore/agente, stesso motore `EVENTS`/`pickEvent`/`showEvent`.
+
+- **`state.family`** (`{harmony:60, support:50, focus:'Tradizionale'}`), aggiuntivo rispetto alla
+  persona `FAMIGLIA` già esistente. Migrazione in `boot()`.
+- **8 `FAMILY_EVENTS`**: Pranzo della Domenica, Laurea/Compleanno di Venerdì, Padre "mister da
+  tribuna" (solo dopo una sconfitta, `ctx.risultato==='L'`), Auto di Famiglia (con costo reale sul
+  saldo se si sceglie un taxi), Pressioni per un Lavoro Vero (solo se `finanze.statoLavoro==='Nessuno'`
+  — la scelta di compromesso attiva davvero `statoLavoro='PartTime'`, riusando il sistema
+  economico esistente), Domenica coi Tifosi in Tribuna, Weekend Fuori con la Compagna (gated sulla
+  stessa finestra della pausa invernale usata per l'evento agente), Emergenza Familiare
+  Last-Minute.
+- Verificato: tutti e 8 senza errori, ciclo UI reale (scelta → `family.harmony`/`support`
+  aggiornati → esito → callback).
+
+## Rete sociale ed opportunità extracampo (SOCIAL_EVENTS)
+
+Richiesto con un task strutturato lean, con un'analisi preliminare che ha stabilito di **non**
+creare `state.relazioni.giocatori` come suggerito nel prompt, perché `state.persone` (Fase A del
+sistema "personaggi") è già esattamente quel registro (id stabile, affinità 0-100, storico eventi,
+`tratti[]` già riusabile come "opportunità sbloccate") — nessun secondo registro di persone.
+
+- Nuovi helper: `idConoscenza`/`registraConoscenza` (wrapper di `registraPersona` con
+  `ruolo:'conoscenza'`), `pescaGiocatoreCasuale(nomeSquadra)` (un giocatore reale a caso dalla rosa,
+  via `getRosaReale`/`rosaSenzaGiocatoreReale`), `contaConoscenze(s)`.
+- **10 eventi `social_*`** + 1 evento speciale `social_rete_consolidata` (soglia 6 conoscenze, flag
+  one-shot `reteConsolidataMostrata`), tutti in `EVENTS`: nuovo compagno, birra dopo la partita, il
+  veterano, "conosco uno" (allenatore/preparatore/osservatore/imprenditore o un giocatore reale,
+  pescato quando possibile), gruppo WhatsApp, torneo estivo, "ti ha visto giocare" (da
+  `squadraAppenaAffrontata`), vecchio allenatore, compagno che cambia squadra, telefonata
+  inaspettata.
+- **Cooldown**: nuovo Set `EVENTI_SOCIALI` con soglia dedicata (5 giornate, 2 dopo la rete
+  consolidata), stesso meccanismo già usato per `EVENTI_FINANZIARI` (esteso, non duplicato) in
+  `pickEvent()`.
+- **Bug trovato e corretto durante il testing**: un edit della richiesta precedente (aggiunta di
+  `reteConsolidataMostrata` allo stato di `startCareer()`) aveva rimosso per errore la parentesi di
+  chiusura `};` dell'oggetto stato, bloccando l'intero script (nessun errore in console perché il
+  parse falliva silenziosamente lato browser preview) — individuato con `node --check` sullo script
+  estratto dal file, corretto. Da quel momento in poi ogni modifica di questa sessione è stata
+  validata con `node --check` prima di aprire il browser.
+- Verificato: tutti e 10 gli eventi + lo speciale senza errori, ciclo UI reale (nuova conoscenza
+  registrata in `state.persone` con `ruolo:'conoscenza'`).
+
+## Gruppi sociali dello spogliatoio (GRUPPO_EVENTS)
+
+Estende la rete sociale appena costruita, stesso principio "nessun registro parallelo".
+
+- **`state.gruppoSociale`** (`{principale:null, secondari:[]}`) — unica struttura nuova, solo
+  l'appartenenza del protagonista; le persone che appartengono a un gruppo restano in
+  `state.persone` con un campo `.gruppo` aggiuntivo (stesso pattern di `squadraOrigine`/`fonte`).
+  Migrazione in `boot()`.
+- **`GRUPPI_SOCIALI`** (5 tipi: Veterani, Birra, Ambiziosi, Locali, Ex) + **`assegnaGruppoEmergente(s)`**:
+  pesi su età (`calcolaEta`), personalità dominante (`personalitaDistribuzione`) e ruolo — nessuna
+  formula complessa, idempotente (non ricalcola se già assegnato), chiamata lazy dentro l'`applica`
+  del primo evento di gruppo che capita invece che forzata a inizio carriera.
+- **10 eventi `gruppo_*`** aggiunti a `EVENTI_SOCIALI` (stesso cooldown): la birra, il veterano, il
+  torneo, un membro che cambia squadra, "il contatto" (allenatore/dirigente/imprenditore o un
+  giocatore reale), la cena, il gruppo si divide (litigio interno), nuovo compagno (con opzione
+  "presentalo a un altro gruppo" → ponte fra gruppi), gli ambiziosi/squadra che cerca, i
+  locali/attività extracampo (solo collegamento predisposto, nessuna nuova economia).
+- **Cambio squadra** (`accettaOfferta`): `state.persone` non si tocca mai; solo
+  `gruppoSociale.principale` si azzera e finisce in `secondari` — perdi l'accesso quotidiano al
+  gruppo ma mantieni i contatti già conosciuti.
+- Verificato: tutti e 10 gli eventi senza errori, assegnazione emergente del gruppo, reset al
+  cambio squadra (`principale:'veterani'`→`null`, `secondari:['veterani']`), ciclo UI reale.
+
+## Bug: partite da 50', subentro poco visibile, schieramento slegato dalle skill
+
+Tre richieste collegate:
+
+- **Bug reale trovato**: `finishMatch()` fissa sempre il fischio finale al **50'** (corretto, è la
+  durata regolamentare del calcio a 7, 2×25'), ma `beginMatchAsSub()` faceva entrare il giocatore
+  dalla panchina al minuto **65'** — dopo la fine della partita. Corretto a **28'** (con 2 momenti
+  residui, si arriva realisticamente vicino al 50' finale).
+- **Subentro più evidente**: nuovo badge dorato "Subentrato dalla panchina" (`#matchSubBadge`)
+  nell'header della partita, mostrato solo da `beginMatchAsSub()` e nascosto per le partite da
+  titolare (`beginMatch()`).
+- **Schieramento legato alle skill**: nuova `rischioPanchinaPerSkill(s)` confronta il proprio
+  overall (`overallPesato`, già usato da `simulaPartita()`) con gli altri giocatori reali dello
+  stesso ruolo nella rosa (`DB_SQUADRE`/`getRosaReale`): fra il 15% più scarso del ruolo → 50% di
+  rischio panchina; fra il 15-35% → 20%; altrimenti nessun rischio aggiuntivo. Riusa lo stesso
+  evento/flusso panchina→subentro già esistente (testo differenziato in base alla causa).
+- Verificato: overall minimo (20) → 50% rischio, overall massimo (95) → 0%; badge e minuto
+  verificati dal vivo con `beginMatchAsSub()`/`finishMatch()` (28'→38' dopo un momento→50' a fine
+  partita).
+
+## Database territoriale contemporaneo (Brescia) — sponsor, media, cultura locale
+
+Integrazione del file `database_brescia_contemporanea_gameplay.xlsx` (fogli "Database Brescia",
+95 righe reali: persone, aziende/brand, vino, musica, sport, media, gastronomia, dialetto, luoghi,
+eventi), riusando i sistemi esistenti invece di crearne di nuovi:
+
+- **`DB_BRESCIA`** (nuovo array dati, prima di `EVENTS`): 95 elementi `{id, nome, categoria,
+  ruoli[], modalita[], rarita}`, `ruoli`/`modalita` normalizzati dal `GAMEPLAY_ROLE`/`MODE` del
+  foglio originale (split su `+`/`/`). Pensato per essere esteso ad altri territori in futuro:
+  basta un secondo `DB_*` con lo stesso schema, i template sotto lavorano solo per ruoli/rarità,
+  mai per nome — nessun elemento è hardcoded in un evento.
+- **7 eventi-template generici** (`brescia_sponsor`, `brescia_media`, `brescia_musica`,
+  `brescia_networking`, `brescia_gastronomia`, `brescia_dialetto`, `brescia_flavor`), aggiunti a
+  `EVENTS` e gestiti dallo stesso motore `pickEvent()`/`showEvent()` di sempre: ognuno pesca un
+  elemento idoneo da `DB_BRESCIA` in base a un set di `GAMEPLAY_ROLE` (es. SPONSOR/INVESTOR/
+  CLUB_OWNER/HOSPITALITY → `brescia_sponsor`) e lo inserisce nel testo. Un evento per elemento
+  sarebbe stato impossibile da mantenere con 95+ righe; un template per cluster di ruoli invece sì.
+- **Rarità → frequenza reale**: `rarityWeightBrescia`/`rarityCooldownBrescia` traducono
+  Comune/Raro/Epico/Iconico in un peso di estrazione e in un cooldown per-elemento (Comune 4
+  giornate, Raro 10, Epico 24, Iconico 52) — verificato con 3000 estrazioni simulate: gli elementi
+  Epici tornano molto più raramente di quelli Comuni, e un elemento appena usato non ricompare
+  prima del suo cooldown.
+- **MODE rispettato**: `MODALITA_BRESCIA_CORRENTE='Player Career'` (l'unica modalità di carriera
+  giocabile oggi: "Coach Career" non esiste come modalità autonoma con eventi propri, solo la
+  simulazione di fine carriera già esistente). I 6 elementi taggati solo `Coach Career` (Beretta,
+  Germani Brescia, Brescia Rugby, Feralpisalò, Atlantide Pallavolo Brescia, Millenium Brescia)
+  restano nel dataset ma non vengono mai pescati — verificato (`eligibleIncludesCoachOnly=false`).
+  Se nascerà una vera Coach Career, sono già pronti senza toccare i dati.
+- **Effetti solo su stat già esistenti**: `finanze.saldo`, `reputazione`, `morale`, `energia`,
+  `relazioni.compagni`/`procuratore`, `personalita`. Nessuna nuova statistica: follower/fanbase non
+  esistono nel gioco, il proxy più vicino (già usato altrove per SOCIAL_PROMOTION/MEDIA/HYPE) è
+  `reputazione`.
+- **Epico → riusa il sistema investimenti esistente**: un `brescia_sponsor` con elemento Epico (es.
+  Franciacorta, Berlucchi, Ca' del Bosco) non dà soldi subito ma genera una voce in
+  `state.opportunitaInvestimento` (lo stesso meccanismo già usato dagli eventi territoriali POI),
+  visibile nella schermata Investimenti già esistente senza alcuna modifica — verificato che
+  `renderInvestimenti()` la mostra correttamente.
+- **LOCATION/TRAVEL/IDENTITY non duplicati**: gli elementi territoriali (Lago d'Iseo, Monte Isola,
+  Franciacorta, Val Camonica, Val Trompia, Val Sabbia) corrispondono 1:1 alle aree già esistenti in
+  `TERRITORIO_AREE`/`DB_POI` (Fase 7): restano nel dataset ma nessun template li pesca, per non
+  costruire un secondo sistema di luoghi/viaggi in parallelo.
+- **Cooldown a livello di template**: nuovo `EVENTI_BRESCIA` (Set) + `COOLDOWN_EVENTO_BRESCIA=3`,
+  stesso meccanismo già usato da `EVENTI_FINANZIARI`/`EVENTI_SOCIALI` dentro `pickEvent()` — la
+  varietà reale (quale elemento compare) è già affidata alla rarità, il cooldown di template serve
+  solo a non ripetere lo stesso tipo di evento troppo a ridosso.
+- **`state.brescia = { usato:{}, pending:{} }`**: unica struttura nuova in state (aggiunta a
+  `startCareer()` + migrazione in `boot()`), solo per il cooldown per-elemento e per ricordare —
+  nella stessa giornata — quale elemento è stato pescato per un template (necessario perché
+  `condizione`/`testo`/`scelte` dello stesso evento vengono valutati in momenti diversi).
+- Verificato in browser: sintassi (`node --check`), 95 id univoci, filtro MODE, pesi di rarità,
+  cooldown per-elemento, memoizzazione stesso-giorno, un ciclo UI reale completo (evento→scelta→
+  esito→continua) sia per il ramo normale che per il ramo Epico→opportunità di investimento, e 400
+  estrazioni simulate di `pickEvent()` che confermano tutti e 7 i template raggiungibili dal flusso
+  reale. Nessun errore in console.
+- Foglio "Calciatori" del file Excel **non toccato**, come richiesto: resta solo fonte dati per
+  eventuali sviluppi futuri, non collegato al motore eventi.
+
+## Bug: cartellino rosso/arbitro a caso, subentro sempre al minuto 28'
+
+Tre problemi collegati, segnalati dall'utente dopo aver visto il cartellino rosso e il fischio
+arbitrale apparire come notifiche isolate, senza nesso con le proprie scelte:
+
+- **Cartellino rosso**: prima poteva scattare (8%) dopo QUALSIASI scelta ad alto rischio fallita,
+  anche un tiro alto o un dribbling sbagliato — non aveva senso (non sono falli). Ora
+  (`applyChoiceOutcome`) scatta solo se la scelta fallita era un contrasto fisico
+  (`choice.out==='recupero'`, `risk:'high'`), l'unico tipo di scelta il cui testo di gioco parla
+  già esplicitamente di "rischiare il cartellino". Probabilità alzata a 15% per compensare il
+  numero minore di occasioni idonee. Verificato con 2000 tiri falliti simulati: mai un cartellino;
+  con tiri di contrasto falliti: cartellino possibile.
+- **Evento arbitrale** (`errore_arbitrale`, "L'arbitro fischia contro di te..."): prima aveva
+  `trigger:'team_losing'`, scattava cioè solo perché la squadra era sotto nel punteggio, a
+  prescindere da cosa avesse fatto il giocatore. Nuovo trigger dedicato `after_foul_risk`, pushato
+  in `resolveChoice()` solo dopo un contrasto fisico ad alto rischio fallito — stessa identica
+  condizione del cartellino rosso, così l'evento è sempre conseguenza diretta di una scelta.
+  Verificato con un ciclo UI reale (contrasto fallito → evento arbitro → scelta "Resti composto" →
+  rapporto col mister +2).
+- **Minuto d'ingresso dalla panchina**: `beginMatchAsSub()` aveva `minute:28` fisso. Ora
+  `rand(20,40)` variabile a ogni subentro, con il messaggio "entri al X'" aggiornato di
+  conseguenza. Verificato su 200 subentri simulati: minimo 20', massimo 40'.
+
+## Il gruppo sociale dello spogliatoio può cambiare nel tempo
+
+Richiesta dell'utente: prima l'appartenenza a un gruppo (`assegnaGruppoEmergente`, vedi sezione
+dedicata) restava fissa per sempre una volta assegnata (cambiava solo cambiando squadra). Ora può
+mutare in base a scelte ripetute, senza alcun nuovo registro parallelo:
+
+- **`state.gruppoSociale.affinita`**: un contatore per gruppo (`{veterani, birra, ambiziosi,
+  locali, ex}`, aggiunto a `startCareer()` + migrazione in `boot()`), alimentato dalle scelte già
+  esistenti negli eventi `gruppo_*` quando vanno chiaramente in una direzione precisa (es. "Chiedi
+  di essere presentato" a un'altra squadra → +1 Ambiziosi; "Resti fedele alla tua squadra" → +1
+  Locali; "Ascolti con attenzione" il veterano → +1 Veterani). Non tutte le scelte contano: quelle
+  neutre o senza una direzione chiara (es. `gruppo_si_divide`) restano invariate.
+- **`rinforzaAffinitaGruppo(s, gruppoId)`** (nuova funzione, subito dopo `assegnaGruppoEmergente`):
+  incrementa il contatore del gruppo indicato; se un gruppo diverso dal principale accumula un
+  vantaggio netto di **3 punti**, l'appartenenza cambia — il vecchio principale diventa secondario
+  (stesso meccanismo già usato per il cambio squadra in `accettaOfferta`), il nuovo prende il suo
+  posto, e viene registrato in `legacy` ("Con il tempo ti sei avvicinato a un altro giro...").
+  Serve quindi una direzione sostenuta nel tempo (più eventi nella stessa direzione, non uno solo)
+  per cambiare gruppo, esattamente come richiesto.
+- Verificato: affinità che cresce scelta dopo scelta senza cambiare gruppo finché non supera la
+  soglia, cambio effettivo esattamente al terzo punto di vantaggio con voce in `legacy`, nessun
+  duplicato quando il nuovo principale era già in `secondari`, un ciclo UI reale completo.
+
+## Espansione modalità Telefono
+
+Richiesta dell'utente ("mi sembra un po' piatta"): prima il Telefono era solo un log read-only
+(lista contatti + storico messaggi di `state.persone`, nessuna interazione). Tre aggiunte, tutte
+concordate in anticipo con l'utente, che riusano il motore EVENTS/persone esistente:
+
+- **Rispondere dal telefono**: gli eventi `agent_*`/`family_*` (sempre rivolti a una persona fissa
+  e precisa, PROCURATORE/FAMIGLIA) non compaiono più come popup immediato in `postGiornataFlow()`.
+  Finiscono invece in `state.telefonoPendenti` (array `{eventId, personaId}`, nuovo campo in
+  `startCareer()` + migrazione in `boot()`) e compaiono nella lista contatti come "In attesa di una
+  tua risposta" con badge. Aprendo la conversazione, `renderTelefono()` mostra il messaggio con le
+  sue scelte come vere choice-card dentro il thread; `risolviTelefonoPendente()` applica la scelta
+  esattamente come farebbe `showEvent()` (stesso `sc.applica`/diario) e trascrive l'esito nella
+  conversazione. Tutti gli altri EVENTS (gruppo_*, social_*, brescia_*, dialoghi) restano popup
+  immediati come sempre — nessuna modifica al loro comportamento.
+  `pulisciTelefonoPendenti()` scarta in silenzio i pendenti la cui `condizione` non regge più (es.
+  rimasti in sospeso troppo a lungo), invece di mostrare scelte ormai senza senso.
+- **Filtri per categoria**: tab bar (`TELEFONO_TAB_RUOLI`, riusa i `p.ruolo` già esistenti) — Tutti
+  / Squadra (mister, compagno, rivale) / Agente & Famiglia (procuratore, famiglia) / Rete
+  (conoscenza, mentore, gruppo). Stesso pattern già usato dai tab di Formazione/Shop.
+  Le persone con `nome` non impostato (raro, es. campo mai popolato) sarebbero comunque mostrate
+  senza rompere nulla: nessun filtro le esclude a priori.
+- **Chat di gruppo**: nuovo ruolo persona `'gruppo'` (`GRUPPO_<id gruppo>`, creato al volo la prima
+  volta che serve). Nessuna modifica ai 10 eventi `gruppo_*`: un unico punto d'aggancio dentro
+  `showEvent()` — se `ev.id` inizia per `gruppo_` e `state.gruppoSociale.principale` è impostato,
+  l'esito della scelta viene anche trascritto nel thread del gruppo (`impatto:0`, è solo
+  trascrizione: l'eventuale spostamento di affinità/gruppo lo fa già `rinforzaAffinitaGruppo`
+  dentro `sc.applica`). Se cambi gruppo principale nel tempo, i nuovi messaggi vanno nel thread del
+  nuovo gruppo — corretto, è come cambiare gruppo WhatsApp. Il thread di gruppo non mostra la riga
+  "Affinità X%" nell'intestazione (fuorviante: sarebbe il default di `registraPersona`, non il vero
+  contatore di appartenenza).
+- **Bug trovato e corretto durante il test**: le choice-card dei messaggi pendenti usavano
+  `JSON.stringify(p.id)` dentro un attributo HTML già fra doppi apici — l'id veniva racchiuso in
+  doppi apici e rompeva l'attributo `onclick`, rendendo i pulsanti inerti. Corretto con l'id fra
+  apici singoli, come nel resto del file.
+- Verificato in browser: stato iniziale corretto su carriera nuova, tab bar e filtri funzionanti,
+  evento agente instradato al Telefono invece che a popup, scelta risolta dal thread con effetti
+  reali (saldo, affinità, diario) identici a un evento normale, pendente scaduto scartato in
+  silenzio, chat di gruppo creata e popolata automaticamente al primo evento `gruppo_*` risolto.
+  Nessun errore in console.
+
+## Bot di test autonomo (tools/)
+
+Richiesta dell'utente: un modo di verificare il gioco senza consumare un giro di conversazione ad
+ogni controllo. Aggiunti due file, esterni al gioco (`index REV2.html` resta l'unico file caricato
+dal browser, nessun `<script src>` in più):
+
+- `tools/test-bot.js`: carica lo `<script>` del gioco in un contesto Node isolato (`vm`, nessuna
+  dipendenza esterna) con un DOM finto minimo, orchestra N carriere simulate e scrive un log in
+  `tools/test-logs/`.
+- `tools/bot-helpers.js`: eseguito nello stesso contesto del gioco, guida partite/eventi/telefono
+  chiamando le funzioni reali (`beginMatch`, `resolveChoice`, `pickEvent`/`showEvent`,
+  `risolviTelefonoPendente`, ecc.) cliccando sempre la prima scelta disponibile, e verifica
+  invarianti sullo stato dopo ogni settimana (range 0-100, numeri non NaN, array sempre array...).
+
+**Due bug reali trovati al primo utilizzo** (non ipotetici: crash effettivi riprodotti), **entrambi
+ora corretti**:
+1. `showEvent()` (riga con `ev.id.startsWith('gruppo_')`, aggiunta nella sessione di espansione
+   del Telefono) andava in `TypeError` non appena il giocatore veniva messo in panchina e cliccava
+   una risposta — l'evento panchina (`eventoPanchina` dentro `beginMatch()`) è un oggetto inline
+   senza `id`. Un vero crash della UI, non solo un problema del bot. Corretto con
+   `ev.id && ev.id.startsWith(...)`.
+2. `TRAININGS` (i 4 allenamenti settimanali in hub/mercato invernale/fuori-stagione/mercato
+   estivo, 4 punti di rendering) non era filtrato per ruolo — un Portiere che sceglieva
+   "Allenamento tecnico"/"Preparazione atletica"/"Lavoro tattico di squadra" scriveva `NaN` in
+   `state.attr.tecnica`/`fisico`/ecc. (attributi generici che un Portiere non ha mai avuto,
+   `clamp(undefined+1,...)` = NaN). Trovato su 7 carriere Portiere su 40 simulate. Corretto
+   rendendo `apply`/`desc` di ciascun allenamento consapevoli del ruolo: per il Portiere le stesse
+   3 sedute (tecnica/fisico/tattico) ora toccano le sue skill reali (Presa+Distribuzione,
+   Riflessi+Uno contro uno, Posizionamento+Comunicazione) invece degli attributi generici.
+
+**Estensione della copertura oltre fine-stagione** (richiesta esplicita dell'utente): nuova
+`__botPlayOffSeason()` in `bot-helpers.js`, che guida l'intero fuori-stagione riusando le funzioni
+reali del gioco (`iniziaFuoriStagione`/`avanzaSettimanaFuoriStagione`/`aggiornaFuoriStagione`),
+incluse eventuali partite di Coppa Leonessa in corso (stesso `beginMatch()` del campionato) e il
+mercato estivo — scelta deliberatamente semplice lì: resta sempre alla squadra attuale
+(`restaAllaSquadra())`, seguire le trattative/cambio squadra è rimandato a un'estensione futura
+(supererebbe di molto la superficie da coprire: nuova rosa, nuovo calendario, nuovi compagni). Il
+ciclo principale ora prosegue automaticamente da una stagione alla successiva finché non esaurisce
+il numero di settimane richiesto (`--weeks`).
+
+- Verificato: dopo i due fix, **60 carriere × 120 settimane simulate in ~21 secondi — 253
+  stagioni completate, oltre 8500 partite giocate, zero eccezioni, zero violazioni di
+  invarianti**. Dettagli/uso in `tools/README.md`.
+
+## Bug noti/limiti accettati
+
+- `GSO CAPRIOLOB` ha ancora `forza: 0.0` nei dati sorgente (piazzamento "riserva" nel file originale) —
+  ricade sul valore di default (`getForzaSquadra(...)||58`) per le partite. Ora ha però una rosa reale
+  propria (vedi sezione dedicata), quindi la modalità "giocatore esistente" funziona anche per questa
+  squadra.
+- I 4 momenti chiave "core" di un giocatore di movimento (`MOMENTS`) restano fissi (sempre gli stessi 4,
+  non pescati da un pool più ampio come ora fa il Portiere con `GK_MOMENTS_POOL`) — possibile
+  miglioramento futuro simmetrico (proposto nella roadmap 2026-08-07, non ancora avviato). I 12 eventi
+  trade-off + i 40 per ruolo + i 10 di colore aggiungono varietà come intermezzi, ma non sostituiscono
+  questo pool fisso di 4.
+- Rischio panchina per skill (`rischioPanchinaPerSkill`) confronta solo l'overall pesato con gli altri
+  giocatori reali del proprio ruolo — non tiene conto di anzianità, rapporto col mister o andamento
+  recente (stesso TODO della roadmap 2026-08-07, non ancora avviato).
+- Match Viewer 2D: nessuna vera decisione di passaggio/conduzione/tiro con ricevitore nominato e
+  geometria di intercetto — il "calcio" visibile nel viewer resta un layer di movimento plausibile
+  (heatmap + matrice comportamentale + marcatura/pressing, reattivo alla palla e al possesso) sopra il
+  motore a scelte esistente, non una simulazione autonoma di 22 giocatori. Costruirla richiederebbe un
+  secondo motore di simulazione, esplicitamente escluso su richiesta dell'utente (vedi aggiornamento
+  2026-08-10 "Fase 2"). Nessun sistema di metriche di partita (possessi/passaggi/intercetti) per lo
+  stesso motivo: richiederebbe eventi che il motore non modella.
+
+---
+*Nota di processo: l'utente ha chiesto di aggiornare questo file ogni 5 suoi messaggi. Aggiornamento
+più recente: 2026-08-10, sessione dedicata quasi interamente al Match Viewer 2D — collegamento della
+simulazione continua (orologio indipendente dagli eventi, palla sempre attiva, intervallo/cambio campo
+a 25'), fix del possesso alla fonte (`sincronizzaPossesso`), e "Fase 2" di comportamento emergente
+(baricentro di reparto che segue la palla, portatore che rallenta sotto pressione, portieri che si
+muovono) — vedi i relativi blocchi "Aggiornamento 2026-08-10" in cima al documento per il dettaglio
+completo di ciascuno. Il conteggio del ciclo dei 5 messaggi riparte da qui.*
