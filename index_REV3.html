@@ -4648,10 +4648,28 @@ function sincronizzaTargetCampo(){
   // ma slotId, assegnato una volta in calcolaPosizioniTattiche, sopravvive alla copia.
   const perSlot = {};
   desiderate.forEach(d=>{ if(d.slotId!==undefined) perSlot[d.slotId] = d; });
+  const mt = state.matchTemp;
+  // Esultanza (triggerEsultanzaGol): i compagni del marcatore convergono verso di lui invece che
+  // sulla posizione tattica normale, per la durata di goal_celebration. Nessun "rientro" a parte da
+  // scrivere: quando mt.esultanzaFino scade questo ramo smette di applicarsi da solo e il ramo
+  // normale sotto riprende — avanzaGiocatoriCampo (velocità limitata, mai un teletrasporto) li
+  // riporta in formazione con lo stesso movimento fluido di sempre.
+  const esultanzaAttiva = mt && mt.esultanzaFino!=null && tempoCampoMs < mt.esultanzaFino && mt.marcatore;
   campo.players.forEach(pl=>{
     const d = perSlot[pl.base.slotId];
     if(!d) return;
     if(!coordinataValida(d)){ segnalaCoordinataInvalida('target giocatore '+pl.id, d); return; }
+    if(esultanzaAttiva && pl.role!=='POR' && pl.team===mt.marcatore.team && pl.id!==mt.marcatore.id){
+      // Piccolo offset deterministico (stesso principio di offsetRespiroTattico, chiave diversa)
+      // così non si accalcano tutti sullo stesso identico pixel.
+      const j = offsetRespiroTattico('esulta_'+pl.base.slotId);
+      const t = limitiGiocatore({
+        x: mt.marcatore.x + (j.dxM*0.4)/CAMPO_LUNGHEZZA_M,
+        y: mt.marcatore.y + (j.dyM*0.4)/CAMPO_LARGHEZZA_M
+      });
+      pl.targetX = t.x; pl.targetY = t.y; pl.intent = 'ESULTA';
+      return;
+    }
     // Respiro tattico deterministico attorno al target deciso da heatmap/matrice: il portiere ne è
     // escluso (deve restare nella propria area, non "respirare" fuori dai pali).
     const r = pl.role==='POR' ? { dxM:0, dyM:0 } : offsetRespiroTattico(pl.base.slotId);
@@ -4709,6 +4727,42 @@ function muoviPallaEvento(xy, contesto){
   // creaStatoCampo): un evento vero sposta sempre il punto attorno a cui la palla può poi
   // continuare a vivere in attesa del prossimo evento.
   campo.ball.anchor = { x: xy.x, y: xy.y };
+}
+/* ---------- Effetti gol (flash / rete / overlay / esultanza) ----------
+   Puramente decorativi: nessuno di questi campi è letto dal motore (probabilità, possesso, esito
+   partita) — solo dal renderer (disegnaEffettiGol/FieldRenderer.drawPorte) e da sincronizzaTargetCampo
+   (per l'esultanza dei compagni). Tutti su tempoCampoMs, lo stesso orologio continuo già usato da
+   offsetRespiroTattico: nessun secondo clock, nessun setTimeout (che sopravviverebbe a un cambio
+   schermata/partita). Durate scelte da me (non fornite): brevi per non "rubare" tempo alla ripresa
+   del gioco, come richiesto esplicitamente ("overlay molto breve, senza bloccare il campo"). */
+const GOL_FLASH_DURATA_MS = 220;
+const GOL_OVERLAY_DURATA_MS = 900;
+const GOL_RETE_DURATA_MS = 500;
+// Chiamata una sola volta, quando la clip che porta la palla in rete finisce (vedi
+// AnimationManager.tick, unico varco 'goal_celebration' — copre gol del giocatore e autonomi).
+// xy = posizione reale a cui la palla è arrivata (bocca di porta), non una zona nominale.
+function triggerEsultanzaGol(evt, xy){
+  const m = state.matchTemp;
+  if(!m || !evt || !evt.actor) return;
+  const durataCelebrazione = (AnimationLibrary.get('goal_celebration')||{durationMs:1200}).durationMs;
+  m.golFlashFino = tempoCampoMs + GOL_FLASH_DURATA_MS;
+  m.golOverlayFino = tempoCampoMs + GOL_OVERLAY_DURATA_MS;
+  m.golReteFino = tempoCampoMs + GOL_RETE_DURATA_MS;
+  // Porta colpita = quella difesa dalla squadra AVVERSARIA a chi segna: 'home' attacca verso x=1 per
+  // convenzione (vedi ZONES/CameraManager), quindi se segna 'home' la rete che vibra è quella a x=1.
+  m.golReteX = evt.actor.team==='home' ? 1 : 0;
+  // Posizione del marcatore al momento del gol: i compagni convergono qui (sincronizzaTargetCampo),
+  // per la stessa durata della clip goal_celebration — a fine esultanza tornano da soli alla
+  // posizione tattica normale (nessun codice di "rientro" a parte: è lo stesso avanzaGiocatoriCampo
+  // a velocità limitata già esistente, che non teletrasporta mai).
+  m.esultanzaFino = tempoCampoMs + durataCelebrazione;
+  // id del marcatore (per escluderlo dalla convergenza dei compagni in sincronizzaTargetCampo, non
+  // deve inseguire se stesso): stesso identificativo di campo.players[].id, cercato per ruolo+nome
+  // invece di un confronto di coordinate (fragile, un pareggio esatto di float non è garantito).
+  const campo = statoCampoCorrente();
+  const marcatoreObj = campo && campo.players.find(p =>
+    p.team===evt.actor.team && (evt.actor.role==='self' ? p.self : p.nome===evt.actor.name));
+  m.marcatore = { x:xy.x, y:xy.y, team:evt.actor.team, nome:evt.actor.name||'', id: marcatoreObj ? marcatoreObj.id : null };
 }
 /* ---------- Animation Library (vedi MATCH_VIEWER_DESIGN.md sez.4) ----------
    Proprietaria di TUTTE le clip: ogni clip è un modulo indipendente con la propria durata e la
@@ -4997,6 +5051,15 @@ function creaAnimationManager(){
         // — gira dopo, non prima, di whenDrained().
         if(this.isIdle() && this.drainCallback){ const fn = this.drainCallback; this.drainCallback = null; fn(); }
         const followupId = cur.evt.animation && cur.evt.animation.followup;
+        // Effetti gol (flash/rete/overlay/esultanza dei compagni): innescati QUI, al termine esatto
+        // della clip che porta la palla in rete (tiro o passaggio vincente), prima ancora di
+        // accodare goal_celebration — è il momento in cui la palla è fisicamente arrivata (vedi
+        // muoviPallaEvento('fine clip') qualche riga sopra). Copre sia i gol del giocatore
+        // (resolveChoice) sia quelli autonomi (registraGolAutonomo/eseguiAzioneAutonoma): stesso
+        // unico varco 'goal_celebration' già usato per il ricalcio, nessun secondo punto di innesco.
+        if(followupId==='goal_celebration' && coordinataValida(this.entities.ball)){
+          triggerEsultanzaGol(cur.evt, this.entities.ball);
+        }
         if(followupId && AnimationLibrary.get(followupId)){
           const anim = cur.evt.animation;
           // Dopo l'esultanza la palla torna al centrocampo — ricalcio, come a inizio partita — per
@@ -5009,7 +5072,13 @@ function creaAnimationManager(){
                 // Chi ha subito il gol rimette in gioco: senza questo, avanzaPallaLibera() farebbe
                 // ripartire subito il portatore verso la porta appena segnata, direzione sbagliata.
                 // sincronizzaPossesso allinea nello stesso istante anche ball.owner/possessionTeam.
-                if(state.matchTemp) sincronizzaPossesso('away');
+                // Team-aware (era hardcoded 'away'): sbagliato per un gol autonomo dell'avversario,
+                // dove a rimettere in gioco deve essere 'home', non sempre 'away' — bug preesistente,
+                // scoperto unificando qui anche registraGolAutonomo (vedi commento lì).
+                if(state.matchTemp){
+                  const squadraCheHaSegnato = cur.evt.actor && cur.evt.actor.team;
+                  sincronizzaPossesso(squadraCheHaSegnato==='home' ? 'away' : 'home');
+                }
               }
             // Fase 6: quando la clip 'save' finisce, due esiti possibili (decisi in emettiTiroParato
             // via anim.reboundXY, non qui): se c'è un punto di rimbalzo la palla vi è già fisicamente
@@ -5087,6 +5156,37 @@ const FieldRenderer = {
     const boxW = (w-2*m)*0.16, boxH = (h-2*m)*0.6, boxY = m + (h-2*m-boxH)/2;
     ctx.strokeRect(m, boxY, boxW, boxH);
     ctx.strokeRect(w-m-boxW, boxY, boxW, boxH);
+    this.drawPorte(ctx, w, h, m, boxY, boxH);
+  },
+  // Bocca di porta + rete, sui due bordi fisici del canvas (SEMPRE entrambi disegnati, nessuna
+  // inversione: il cambio campo al secondo tempo mescola già quale squadra attacca quale bordo,
+  // ma le due porte ci sono comunque su entrambi i lati per tutta la partita). yRange dalla
+  // porzione centrale del box, stessa proporzione già usata da ZONES.goal_line/six_yard — nessuna
+  // nuova geometria. Wobble breve sul lato colpito quando state.matchTemp.golReteFino è attivo
+  // (impostato da triggerEsultanzaGol): confrontato con golReteX in coordinate LOGICHE, specchiato
+  // con lo stesso latoInvertito usato da CameraManager.toPixel per ogni altra entità sul campo.
+  drawPorte(ctx, w, h, m, boxY, boxH){
+    const yTop = boxY + boxH*0.3, yBot = boxY + boxH*0.7;
+    const mt = state.matchTemp;
+    const wobbleAttivo = mt && mt.golReteFino!=null && tempoCampoMs < mt.golReteFino;
+    const logicoColpito = wobbleAttivo ? (mt.latoInvertito ? 1-mt.golReteX : mt.golReteX) : null;
+    [0,1].forEach(logicoX=>{
+      const xBordo = logicoX===0 ? m : w-m;
+      const verso = logicoX===0 ? 1 : -1;
+      let profondita = 9;
+      if(logicoColpito===logicoX){
+        const progressione = clamp01(1 - (mt.golReteFino - tempoCampoMs) / GOL_RETE_DURATA_MS);
+        profondita += Math.sin(progressione*Math.PI*3) * 7 * (1-progressione);
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      for(let i=0;i<=4;i++){
+        const y = yTop + (yBot-yTop)*(i/4);
+        ctx.moveTo(xBordo, y); ctx.lineTo(xBordo+verso*profondita, y);
+      }
+      ctx.moveTo(xBordo+verso*profondita, yTop); ctx.lineTo(xBordo+verso*profondita, yBot);
+      ctx.stroke();
+    });
   }
 };
 function disegnaPallino(ctx, xy, w, h, colore, raggio, etichetta){
@@ -6332,8 +6432,16 @@ function registraGolAutonomo(marcatore){
   emitMatchEvent({ type:'shot', outcome:'goal', success:true, origin:'box',
     actor:{role: marcatore.self?'self':(marcatore.team==='home'?'teammate':'opponent'), name:marcatore.nome||marcatore.id, team:marcatore.team},
     text: (marcatore.nome||marcatore.id)+' segna! (azione autonoma)' , source:'autonomous' });
-  muoviPallaEvento({x:0.5,y:0.5}, 'ricalcio dopo gol autonomo');
-  sincronizzaPossesso(marcatore.team==='home' ? 'away' : 'home');
+  // Niente ricalcio/cambio possesso immediati qui: stesso bug-pattern già corretto per i passaggi
+  // autonomi (muoviPallaEvento prima della clip = teletrasporto, la palla salta al centrocampo
+  // ancora prima che il tiro/l'esultanza siano animati). Il followup 'goal_celebration' (unico varco,
+  // vedi AnimationManager.tick) fa già il ricalcio e il cambio possesso, in modo team-aware, quando
+  // la clip+esultanza finiscono davvero. In headless (matchAnimMgr mai istanziato) nessuna clip parte
+  // mai, quindi lì il ricalcio immediato resta necessario com'era.
+  if(!matchAnimMgr){
+    muoviPallaEvento({x:0.5,y:0.5}, 'ricalcio dopo gol autonomo (headless)');
+    sincronizzaPossesso(marcatore.team==='home' ? 'away' : 'home');
+  }
 }
 
 function eseguiAzioneAutonoma(player, decisione, campo){
@@ -6460,21 +6568,32 @@ function eseguiAzioneAutonoma(player, decisione, campo){
     const success = rand(1,100) <= chance;
     if(success){
       m.rinviAutomaticiCompletati = (m.rinviAutomaticiCompletati||0)+1;
-      muoviPallaEvento({x:ricevitore.x, y:ricevitore.y}, 'rinvio portiere autonomo riuscito');
+      // Niente muoviPallaEvento() qui: farlo PRIMA di emitMatchEvent sposta subito campo.ball, e
+      // interpretMatchEvent legge l'origine della clip dalla posizione ATTUALE della palla — già
+      // alla destinazione. Origine=destinazione, clip lunga zero, teletrasporto (bug segnalato
+      // dall'utente su ogni passaggio). destinationXY esplicito fa viaggiare la clip fino al vero
+      // ricevitore; il fine-clip (Fase 8, AnimationManager.tick) persiste la posizione finale da
+      // solo, stesso meccanismo già usato da resolveChoice per l'assist del giocatore. In headless
+      // (bot Node, matchAnimMgr mai istanziato: avviaCanvasPartita esce subito senza requestAnimationFrame)
+      // non esiste nessuna clip che possa persistere la posizione dopo: lì il salto immediato resta
+      // necessario, comportamento invariato per il bot.
+      if(!matchAnimMgr) muoviPallaEvento({x:ricevitore.x, y:ricevitore.y}, 'rinvio portiere autonomo riuscito (headless)');
       sincronizzaPossesso(player.team, ricevitore);
       emitMatchEvent({ type:'pass_short', outcome:'complete', success:true, origin:'goal_line',
+        destinationXY:{x:ricevitore.x, y:ricevitore.y},
         actor:{role:player.self?'self':(player.team==='home'?'teammate':'opponent'), name:player.nome||player.id, team:player.team},
         target:{role:player.team==='home'?'teammate':'opponent', name:ricevitore.nome||ricevitore.id, team:ricevitore.team},
         text:'Rinvio autonomo del portiere', source:'autonomous' });
     } else {
       const intercettore = trovaIntercettoreReale(campo, player.team==='home'?'away':'home', player, ricevitore);
       if(intercettore){
-        muoviPallaEvento({x:intercettore.x, y:intercettore.y}, 'intercetto reale su rinvio portiere');
+        if(!matchAnimMgr) muoviPallaEvento({x:intercettore.x, y:intercettore.y}, 'intercetto reale su rinvio portiere (headless)');
         sincronizzaPossesso(intercettore.team, intercettore);
       } else if(coordinataValida(campo.ball)){
         avviaPallaLibera({x:campo.ball.x,y:campo.ball.y}, 'palla libera dopo rinvio portiere intercettato');
       }
       emitMatchEvent({ type:'pass_short', outcome:'intercepted', success:false, origin:'goal_line',
+        destinationXY: intercettore ? {x:intercettore.x, y:intercettore.y} : null,
         actor:{role:player.self?'self':(player.team==='home'?'teammate':'opponent'), name:player.nome||player.id, team:player.team},
         text:'Rinvio autonomo del portiere intercettato', source:'autonomous' });
     }
@@ -6494,9 +6613,12 @@ function eseguiAzioneAutonoma(player, decisione, campo){
     const success = Math.random() < pPass; // stesso principio-dado di resolveChoice, probabilità già esistente
     if(success){
       m.passaggiAutomaticiCompletati = (m.passaggiAutomaticiCompletati||0)+1;
-      muoviPallaEvento({x:ricevitore.x,y:ricevitore.y}, 'passaggio autonomo riuscito');
+      // Vedi commento gemello in RINVIO_POR sopra: muoviPallaEvento() rimosso da qui per la stessa
+      // ragione, stesso fix. Stesso fallback headless (nessuna clip che persista dopo in Node).
+      if(!matchAnimMgr) muoviPallaEvento({x:ricevitore.x,y:ricevitore.y}, 'passaggio autonomo riuscito (headless)');
       sincronizzaPossesso(player.team, ricevitore);
       emitMatchEvent({ type:'pass_short', outcome:'complete', success:true, origin:'midfield_center',
+        destinationXY:{x:ricevitore.x, y:ricevitore.y},
         actor:{role:player.self?'self':(player.team==='home'?'teammate':'opponent'), name:player.nome||player.id, team:player.team},
         target:{role:player.team==='home'?'teammate':'opponent', name:ricevitore.nome||ricevitore.id, team:ricevitore.team},
         text:'Passaggio autonomo', source:'autonomous' });
@@ -6504,12 +6626,13 @@ function eseguiAzioneAutonoma(player, decisione, campo){
       m.passaggiAutomaticiIntercettati = (m.passaggiAutomaticiIntercettati||0)+1;
       const intercettore = trovaIntercettoreReale(campo, player.team==='home'?'away':'home', player, ricevitore);
       if(intercettore){
-        muoviPallaEvento({x:intercettore.x,y:intercettore.y}, 'intercetto reale');
+        if(!matchAnimMgr) muoviPallaEvento({x:intercettore.x,y:intercettore.y}, 'intercetto reale (headless)');
         sincronizzaPossesso(intercettore.team, intercettore);
       } else if(coordinataValida(campo.ball)){
         avviaPallaLibera({x:campo.ball.x,y:campo.ball.y}, 'palla libera dopo passaggio intercettato');
       }
       emitMatchEvent({ type:'pass_short', outcome:'intercepted', success:false, origin:'midfield_center',
+        destinationXY: intercettore ? {x:intercettore.x, y:intercettore.y} : null,
         actor:{role:player.self?'self':(player.team==='home'?'teammate':'opponent'), name:player.nome||player.id, team:player.team},
         text:'Passaggio autonomo intercettato', source:'autonomous' });
     }
@@ -6651,11 +6774,34 @@ function contaSceltePendenti(){
   if(!box) return 0;
   return [...box.children].filter(c=>typeof c.onclick==='function').length;
 }
+// Solo le VERE choice-card (decisione ancora da prendere), non il bottone "Continua ▸" post-scelta
+// (classe 'btn ghost', mai 'choice-card') che resta a schermo mentre una clip (passaggio/tiro) sta
+// animando. contaSceltePendenti() sopra confondeva i due casi: usarlo per bloccare avanzaStatoCampo
+// congelava anche sincronizzaPallaCampo() durante l'intera durata del passaggio (matchAnimMgr.tick
+// continuava a girare ma il suo buffer non veniva mai travasato in campo.ball, letto dal renderer) —
+// la palla restava ferma per tutta la clip e poi scattava di colpo alla fine: il vero teletrasporto
+// segnalato dall'utente durante un passaggio, non solo durante l'attesa di scelta.
+function sceltaVeraPendente(){
+  const box = typeof document!=='undefined' && document.getElementById('matchAction');
+  return !!(box && box.querySelector('.choice-card'));
+}
 /* Un frame di simulazione del campo: aggiorna lo STATO, non disegna nulla. Separato dal rendering
    di proposito — il render diventa una pura lettura dello stato (requisito centrale dell'audit) e
    questa funzione resta invocabile anche senza canvas (test headless a passi fissi). */
 function avanzaStatoCampo(deltaMs){
   if(!statoCampoCorrente()) return;
+  // Freeze vero durante una scelta aperta: richiesto esplicitamente dall'utente ("il pallone si
+  // teletrasporta e mentre sono in attesa di fare una scelta il sistema non si freezza"). Prima
+  // solo l'orologio si fermava (vedi avanzaOrologioContinuo) ma giocatori/palla continuavano a
+  // simulare (Fase 7 sez.27 lo misurava apposta, msSimulazioneConSceltaPendente>0 era "atteso") —
+  // quel tempo simulato "nascosto" mentre l'utente decideva è la causa dei salti bruschi della
+  // palla al reveal del momento successivo (muoviPallaEvento parte da una posizione già derivata
+  // molto lontano da dove l'utente l'aveva vista l'ultima volta). Gate su sceltaVeraPendente(): SOLO
+  // una vera choice-card ferma il campo. Il bottone "Continua ▸" post-scelta NON deve fermarlo — in
+  // quella fase sta girando la clip del passaggio/tiro appena scelto, e sincronizzaPallaCampo() deve
+  // continuare a travasare la posizione interpolata altrimenti la palla resta ferma per tutta la clip
+  // e poi salta di colpo alla fine (vedi commento su sceltaVeraPendente()).
+  if(sceltaVeraPendente()) return;
   tempoCampoMs += deltaMs;
   avanzaOrologioContinuo(deltaMs); // minutaggio partita: continuo, non dipende da eventi/click
   sincronizzaTargetCampo();   // heatmap + matrice + MovementDecisionEngine → targetX/targetY
@@ -6666,15 +6812,8 @@ function avanzaStatoCampo(deltaMs){
   valutaAzioniAutonome(deltaMs); // Fase 10: decisione + outcome per i 13 NPC, self invariato
   verificaCoerenzaPossesso(); // diagnostica: mai una correzione, solo un warning se qualcosa diverge
   verificaCoerenzaCampo();    // idem, per coordinate/limiti dei 14 giocatori e area dei portieri
-  // Fase 7, sez.27: misura DAVVERO se questo frame di simulazione dipende da un momento narrativo,
-  // invece di assumerlo. msSimulazioneConSceltaPendente è il tempo simulato durante cui l'utente
-  // aveva una scelta aperta davanti E la simulazione ha comunque eseguito questo stesso frame — la
-  // prova, non l'ipotesi, che la simulazione non si ferma per un momento (msSimulazioneConSceltaPendente
-  // può quindi essere anche >0 senza che sia un problema: è tempo simulato che continua NONOSTANTE
-  // un momento aperto, non tempo "controllato" dal momento).
   if(state.matchTemp){
     state.matchTemp.msSimulazioneTotali = (state.matchTemp.msSimulazioneTotali||0) + deltaMs;
-    if(contaSceltePendenti()>0) state.matchTemp.msSimulazioneConSceltaPendente = (state.matchTemp.msSimulazioneConSceltaPendente||0) + deltaMs;
   }
 }
 function renderMatchCanvas(){
@@ -6690,6 +6829,37 @@ function renderMatchCanvas(){
   const campo = statoCampoCorrente();
   const ballPos = campo && coordinataValida(campo.ball) ? campo.ball : { x:0.5, y:0.5 };
   if(!campo || campo.ball.visible !== false) BallRenderer.draw(ctx, ballPos, w, h);
+  disegnaEffettiGol(ctx, w, h);
+}
+// Flash + overlay "GOAL!": ultimo layer, sopra tutto il resto. Puramente additivo — non tocca
+// #matchAction, non ferma nessuna simulazione (il freeze vero resta solo sceltaVeraPendente()),
+// "molto breve, senza bloccare il campo" come richiesto. golFlashFino/golOverlayFino impostati una
+// volta sola da triggerEsultanzaGol, confrontati ad ogni frame con tempoCampoMs.
+function disegnaEffettiGol(ctx, w, h){
+  const mt = state.matchTemp;
+  if(!mt) return;
+  if(mt.golFlashFino!=null && tempoCampoMs < mt.golFlashFino){
+    const progressione = clamp01(1 - (mt.golFlashFino - tempoCampoMs) / GOL_FLASH_DURATA_MS);
+    ctx.fillStyle = `rgba(255,255,255,${(1-progressione)*0.55})`;
+    ctx.fillRect(0, 0, w, h);
+  }
+  if(mt.golOverlayFino!=null && tempoCampoMs < mt.golOverlayFino){
+    const progressione = clamp01(1 - (mt.golOverlayFino - tempoCampoMs) / GOL_OVERLAY_DURATA_MS);
+    // Pop-in veloce (15%), stabile, pop-out veloce (ultimo 20%): niente da inventare in easing
+    // dedicato, riuso clamp01 già esistente su tre segmenti lineari.
+    const scala = progressione<0.15 ? progressione/0.15 : (progressione>0.8 ? Math.max(0,1-(progressione-0.8)/0.2) : 1);
+    ctx.save();
+    ctx.globalAlpha = scala;
+    ctx.translate(w/2, h*0.38);
+    ctx.scale(0.7+0.3*scala, 0.7+0.3*scala);
+    ctx.font = 'bold 30px Oswald, Inter, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.strokeStyle = 'rgba(4,11,23,0.85)'; ctx.lineWidth = 5;
+    ctx.strokeText('GOAL!', 0, 0);
+    ctx.fillStyle = '#f2c94c';
+    ctx.fillText('GOAL!', 0, 0);
+    ctx.restore();
+  }
 }
 function avviaCanvasPartita(){
   if(typeof requestAnimationFrame !== 'function') return; // Node/bot: nessun canvas, mai toccato
@@ -7657,6 +7827,15 @@ function avanzaOrologioContinuo(deltaMs){
   // secondo tempo" era ancora sullo schermo (bug osservato: minutaggio già a 31' quando il secondo
   // tempo veniva effettivamente avviato, invece di restare fermo esattamente a 25').
   if(!m || m.finita || m.inIntervallo) return;
+  // Scelta/bottone "Continua" a schermo (choice-card di un momento, evento ◆, o post-scelta): il
+  // giocatore sta decidendo, l'orologio deve fermarsi anche qui, non solo durante l'intervallo. Senza
+  // questa guardia il minuto correva fino al cancello duro (25'/50') mentre la scelta era ancora
+  // visibile — bug segnalato dall'utente ("mentre sono in attesa di fare una scelta... scorre il
+  // tempo"). #matchAction è il contenitore unico di ogni scelta/bottone in attesa (vedi tutti i
+  // punti che ci scrivono: nextMoment/rivelaMomentoCorrente/showMatchEvent/resolveChoice), quindi
+  // basta controllare se ha figli invece di introdurre un flag duplicato da tenere sincronizzato.
+  const azione = document.getElementById('matchAction');
+  if(azione && azione.children.length) return;
   const sogliaDura = m.primoTempoFinito ? 50 : 25;
   if(m.minute >= sogliaDura){ provaRivelaMomento(); return; }
   m.minute = Math.min(sogliaDura, m.minute + deltaMs/1000);
